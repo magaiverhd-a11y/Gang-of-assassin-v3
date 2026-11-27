@@ -4,7 +4,12 @@ import {
   ArtifactDef,
   ArtifactId,
   BaseElementId,
+  BossTuning,
   CharacterDef,
+  CharacterTuning,
+  EnemyTuning,
+  EnemyType,
+  KillFreezeTuning,
   CharacterId,
   CombinedElementId,
   CraftRecipe,
@@ -20,6 +25,7 @@ import {
   WeaponDef,
   WeaponId,
 } from './types';
+import { ENEMY_SPECS } from './level';
 
 export const STANDARD_RAID_ORDER: RaidId[] = [
   'nocturne_castle',
@@ -1115,6 +1121,83 @@ export const ARTIFACTS: Record<ArtifactId, ArtifactDef> = {
   },
 };
 
+// ===== Tuning v2 defaults (values mirror the original hard-coded constants) =====
+export const DEFAULT_KILL_FREEZE: KillFreezeTuning = {
+  enabled: true,
+  freezeMs: 260,
+  bossFreezeMult: 1.0,
+  slowMoScale: 0.35,
+  slowMoMs: 320,
+  zoomPunch: 0.14,
+  flash: true,
+  flashAlpha: 0.68,
+  impactFrameMs: 95,
+  shake: 16.5,
+  shakeMs: 380,
+  holdUntilKey: false,
+};
+
+const CHARACTER_SPECIAL_DEFAULTS = {
+  backdashSec: 0.2,
+  hammerMeteorDamage: 4,
+  katanaMegaBonus: 1,
+  zipSlowMo: 0.42,
+  zipDurationSec: 0.78,
+};
+
+export function buildDefaultCharacterTuning(): Record<CharacterId, CharacterTuning> {
+  const out = {} as Record<CharacterId, CharacterTuning>;
+  for (const id of CHARACTER_ORDER) {
+    const c = CHARACTERS[id];
+    out[id] = {
+      baseHp: c.baseHp,
+      baseMp: c.baseMp,
+      speedMult: c.speedMult,
+      jumpMult: c.jumpMult,
+      airJumps: c.airJumps,
+      canWallCling: c.canWallCling,
+      bonusBaseDamage: c.bonusBaseDamage,
+      bonusWeaponDamage: c.bonusWeaponDamage,
+      attackTimeMult: 1.0,
+      attackRangeMult: 1.0,
+      spellCostMult: 1.0,
+      spellCooldownMult: 1.0,
+      assassinDamageMult: 1.0,
+      assassinMpReward: 2,
+      assassinIFramesSec: 0.42,
+      shadowChainSec: 2.8,
+      ...CHARACTER_SPECIAL_DEFAULTS,
+    };
+  }
+  return out;
+}
+
+export const REGULAR_ENEMY_ORDER: EnemyType[] = (Object.keys(ENEMY_SPECS) as EnemyType[]).filter(
+  (t) => !ENEMY_SPECS[t].isBoss
+);
+export const BOSS_ORDER: EnemyType[] = (Object.keys(ENEMY_SPECS) as EnemyType[]).filter(
+  (t) => ENEMY_SPECS[t].isBoss
+);
+
+export function buildDefaultEnemyTuning(bosses: boolean): Record<string, EnemyTuning | BossTuning> {
+  const out: Record<string, EnemyTuning | BossTuning> = {};
+  for (const t of bosses ? BOSS_ORDER : REGULAR_ENEMY_ORDER) {
+    const base: EnemyTuning = {
+      hpMult: 1.0,
+      damageMult: 1.0,
+      speedMult: 1.0,
+      visionMult: 1.0,
+      reactionSec: 0.5,
+      windupMult: 1.0,
+      cooldownMult: 1.0,
+    };
+    out[t] = bosses
+      ? { ...base, phase2At: 0.52, phase2OnMiniBoss: false, enrageSpeed: 1.24, invulnMult: 1.0 }
+      : base;
+  }
+  return out;
+}
+
 export const DEFAULT_TUNING: TuningConfig = {
   zoom: 1.08,
   playerScale: 1.0,
@@ -1159,4 +1242,27 @@ export const DEFAULT_TUNING: TuningConfig = {
   cameraSmoothing: 0.14,
   critShakeIntensity: 10,
   showCameraGuide: false,
+
+  gameSpeed: 1.0,
+  shakeMult: 1.0,
+  zoomPunchMult: 1.0,
+  flashMult: 1.0,
+  playerDamageMult: 1.0,
+  enemyDamageMult: 1.0,
+  bossDamageMult: 1.0,
+  playerInvulnSec: 1.25,
+  stealthVisionMult: 1.0,
+  crouchStealthMult: 0.52,
+  chainStealthMult: 0.35,
+  closeSenseNormal: 95,
+  closeSenseCrouch: 44,
+  closeSenseChain: 34,
+  visionHeight: 110,
+  hideBreakDistance: 42,
+
+  killFreeze: DEFAULT_KILL_FREEZE,
+  characters: buildDefaultCharacterTuning(),
+  enemies: buildDefaultEnemyTuning(false) as Record<string, EnemyTuning>,
+  bosses: buildDefaultEnemyTuning(true) as Record<string, BossTuning>,
 };
+

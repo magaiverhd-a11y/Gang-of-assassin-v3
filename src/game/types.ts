@@ -318,6 +318,117 @@ export interface TuningConfig {
   cameraSmoothing: number;
   critShakeIntensity: number;
   showCameraGuide: boolean;
+
+  // ===== Tuning v2: General =====
+  /** Global world time scale (1 = normal). */
+  gameSpeed: number;
+  /** Multiplies every camera shake. */
+  shakeMult: number;
+  /** Multiplies every camera zoom punch. */
+  zoomPunchMult: number;
+  /** Multiplies every screen / impact flash alpha. */
+  flashMult: number;
+  /** Multiplies all damage the player deals to enemies. */
+  playerDamageMult: number;
+  /** Multiplies all damage regular enemies deal to the player. */
+  enemyDamageMult: number;
+  /** Multiplies all damage bosses deal to the player. */
+  bossDamageMult: number;
+  /** Seconds of invulnerability after the player is hit. */
+  playerInvulnSec: number;
+  /** Global multiplier on every enemy's detection range. */
+  stealthVisionMult: number;
+  /** Detection range multiplier while crouch-walking. */
+  crouchStealthMult: number;
+  /** Detection range multiplier during Shadow Chain. */
+  chainStealthMult: number;
+  /** "Sixth sense" distance an enemy notices you behind its back (normal / crouching / chain). */
+  closeSenseNormal: number;
+  closeSenseCrouch: number;
+  closeSenseChain: number;
+  /** Max vertical distance a ground enemy can spot you. */
+  visionHeight: number;
+  /** Enemies that lose you while you hide stop chasing beyond this distance. */
+  hideBreakDistance: number;
+
+  killFreeze: KillFreezeTuning;
+  characters: Record<CharacterId, CharacterTuning>;
+  enemies: Record<string, EnemyTuning>;
+  bosses: Record<string, BossTuning>;
+}
+
+export interface KillFreezeTuning {
+  /** Master toggle for the assassination freeze/impact package. */
+  enabled: boolean;
+  /** Full world freeze (hit-stop) on assassination, ms. */
+  freezeMs: number;
+  /** Bosses: freeze duration multiplier. */
+  bossFreezeMult: number;
+  /** Slow-motion after the freeze. 1 = off. */
+  slowMoScale: number;
+  slowMoMs: number;
+  /** Camera zoom punch (0 = none). */
+  zoomPunch: number;
+  /** Screen flash on/off + strength + impact-frame length. */
+  flash: boolean;
+  flashAlpha: number;
+  impactFrameMs: number;
+  /** Camera shake strength. */
+  shake: number;
+  shakeMs: number;
+  /** Freeze the game after every assassination until a key / tap (screenshots & tuning). */
+  holdUntilKey: boolean;
+}
+
+export interface CharacterTuning {
+  baseHp: number;
+  baseMp: number;
+  speedMult: number;
+  jumpMult: number;
+  airJumps: number;
+  canWallCling: boolean;
+  bonusBaseDamage: number;
+  bonusWeaponDamage: number;
+  /** Multiplies attack startup / active / recovery times (lower = faster swings). */
+  attackTimeMult: number;
+  attackRangeMult: number;
+  spellCostMult: number;
+  spellCooldownMult: number;
+  assassinDamageMult: number;
+  assassinMpReward: number;
+  assassinIFramesSec: number;
+  shadowChainSec: number;
+  // Character specials (only used by the owning hero)
+  backdashSec: number; // hunter
+  hammerMeteorDamage: number; // brute
+  katanaMegaBonus: number; // ronin
+  zipSlowMo: number; // minstrel
+  zipDurationSec: number; // minstrel
+}
+
+export interface EnemyTuning {
+  hpMult: number;
+  damageMult: number;
+  /** Time scale of this enemy's whole AI (movement, cooldowns, windups). */
+  speedMult: number;
+  visionMult: number;
+  /** Seconds from spotting you to first attack. */
+  reactionSec: number;
+  /** Multiplies telegraph / windup time (higher = easier to dodge). */
+  windupMult: number;
+  /** Multiplies time between attacks (lower = more aggressive). */
+  cooldownMult: number;
+}
+
+export interface BossTuning extends EnemyTuning {
+  /** HP fraction that triggers Phase II enrage (big bosses). */
+  phase2At: number;
+  /** Allow Phase II on mini-boss rooms too. */
+  phase2OnMiniBoss: boolean;
+  /** Pace boost while enraged. */
+  enrageSpeed: number;
+  /** Post-hit invulnerability multiplier (anti-combo). */
+  invulnMult: number;
 }
 
 export interface Rect {
@@ -471,6 +582,8 @@ export interface Projectile {
   radius: number;
   fromEnemy: boolean;
   damage: number;
+  /** Set by the tuning layer so per-type damage multipliers only apply once. */
+  tuned?: boolean;
   life: number;
   rotation: number;
   kind:
@@ -534,6 +647,7 @@ export interface GroundHazard {
   damage: number;
   kind: 'flame_pillar' | 'hex_pillar' | 'eclipse_pillar' | 'bone_spike';
   hitPlayer: boolean;
+  tuned?: boolean;
 }
 
 export interface GrappleState {
