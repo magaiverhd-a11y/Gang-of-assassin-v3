@@ -217,6 +217,14 @@ export function setFxRenderContext(fx: FxTuning | undefined, time: number, mobil
   RC.mobile = mobile;
 }
 
+export function getRenderFx(): FxTuning | null {
+  return RC.fx;
+}
+
+export function isMobileRender(): boolean {
+  return RC.mobile;
+}
+
 export function fxTime(): number {
   return RC.time;
 }
