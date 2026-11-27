@@ -1,3 +1,4 @@
+import { getActiveElementDef } from './defaults';
 import { CharacterId, Facing, Player, WeaponId } from './types';
 
 interface LimbPose {
@@ -293,6 +294,63 @@ function computePose(
     return pose;
   }
 
+  // 0K. MONK PYRE DASH (Key 3: low forward charge, lead fist thrust)
+  if (player.monkDashTimer > 0) {
+    pose.torsoTilt = 0.58;
+    pose.headTilt = -0.24;
+    pose.bodyOffsetY = 4 * scale;
+    pose.leftHipAngle = 1.0;
+    pose.leftKneeAngle = 0.95;
+    pose.rightHipAngle = -1.0;
+    pose.rightKneeAngle = 0.25;
+    pose.frontShoulderAngle = 1.6;
+    pose.frontElbowAngle = 0.0;
+    pose.backShoulderAngle = -1.35;
+    pose.backElbowAngle = -0.5;
+    pose.coatSweep = -1.2;
+    pose.hairLift = -0.9;
+    pose.squashX = 1.08;
+    pose.squashY = 0.94;
+    return pose;
+  }
+
+  // 0L. MONK CINDER PALM (Spell: wide-stance open-palm thrust)
+  if (player.monkPalmTimer > 0) {
+    pose.torsoTilt = 0.32;
+    pose.headTilt = -0.12;
+    pose.bodyOffsetY = 4.5 * scale;
+    pose.leftHipAngle = 0.82;
+    pose.leftKneeAngle = 0.9;
+    pose.rightHipAngle = -0.78;
+    pose.rightKneeAngle = 0.3;
+    pose.frontShoulderAngle = 1.52;
+    pose.frontElbowAngle = 0.05;
+    pose.backShoulderAngle = -0.6;
+    pose.backElbowAngle = -1.5;
+    pose.coatSweep = -0.9;
+    pose.hairLift = -0.6;
+    return pose;
+  }
+
+  // 0M. WIZARD REPULSION NOVA (Key 3: arms flung wide and up, robe flaring)
+  if (player.wizardNovaTimer > 0) {
+    const prog = 1 - player.wizardNovaTimer / 0.34;
+    pose.torsoTilt = -0.12;
+    pose.headTilt = -0.2;
+    pose.bodyOffsetY = (prog < 0.3 ? 3 : -1) * scale;
+    pose.leftHipAngle = 0.35;
+    pose.leftKneeAngle = 0.3;
+    pose.rightHipAngle = -0.35;
+    pose.rightKneeAngle = 0.3;
+    pose.frontShoulderAngle = prog < 0.3 ? 0.4 : 2.45;
+    pose.frontElbowAngle = prog < 0.3 ? -1.4 : 0.15;
+    pose.backShoulderAngle = prog < 0.3 ? -0.4 : -2.45;
+    pose.backElbowAngle = prog < 0.3 ? -1.2 : -0.15;
+    pose.coatSweep = 0.65;
+    pose.hairLift = 0.55;
+    return pose;
+  }
+
   // 1. TAKING DAMAGE IN AIR (dramatic tumble recoil!)
   if (player.hitStunTimer > 0 && player.isAirKnockback) {
     pose.torsoTilt = -0.58;
@@ -514,6 +572,62 @@ function computePose(
         pose.backShoulderAngle = 0.45;
         pose.backElbowAngle = -0.45;
       }
+    } else if (weapon === 'ash_wraps') {
+      // Monk chain: lead jab, rear jab, then a deep open-palm strike.
+      const step = player.monkComboStep;
+      const st = player.attackState;
+      if (step === 2) {
+        pose.torsoTilt = st === 'startup' ? -0.08 : 0.4;
+        pose.bodyOffsetY += (st === 'startup' ? 2 : 4.5) * scale;
+        pose.leftHipAngle = 0.8;
+        pose.leftKneeAngle = 0.85;
+        pose.rightHipAngle = -0.75;
+        pose.rightKneeAngle = 0.3;
+        pose.frontShoulderAngle = st === 'startup' ? 0.2 : st === 'active' ? 1.55 : 1.2;
+        pose.frontElbowAngle = st === 'startup' ? -1.7 : 0.02;
+        pose.backShoulderAngle = -0.7;
+        pose.backElbowAngle = -1.4;
+        pose.coatSweep = -0.85;
+      } else {
+        const lead = step === 0;
+        const extended = st === 'active' ? 1.58 : st === 'recovery' ? 1.0 : 0.55;
+        const elbow = st === 'active' ? 0.0 : st === 'recovery' ? -0.5 : -1.6;
+        pose.torsoTilt = 0.22 + (st === 'active' ? 0.12 : 0);
+        pose.leftHipAngle = 0.45;
+        pose.leftKneeAngle = 0.5;
+        pose.rightHipAngle = -0.4;
+        pose.rightKneeAngle = 0.35;
+        if (lead) {
+          pose.frontShoulderAngle = extended;
+          pose.frontElbowAngle = elbow;
+          pose.backShoulderAngle = 0.5;
+          pose.backElbowAngle = -1.7;
+        } else {
+          pose.backShoulderAngle = extended;
+          pose.backElbowAngle = elbow;
+          pose.frontShoulderAngle = 0.5;
+          pose.frontElbowAngle = -1.7;
+        }
+        pose.coatSweep = -0.6;
+      }
+    } else if (weapon === 'spire_staff') {
+      if (player.attackState === 'startup') {
+        pose.torsoTilt = -0.08;
+        pose.frontShoulderAngle = 0.15;
+        pose.frontElbowAngle = -1.2;
+        pose.backShoulderAngle = 0.9;
+        pose.backElbowAngle = -0.6;
+      } else if (player.attackState === 'active') {
+        pose.torsoTilt = 0.22;
+        pose.frontShoulderAngle = 1.35;
+        pose.frontElbowAngle = -0.1;
+        pose.backShoulderAngle = -0.6;
+        pose.coatSweep = -0.55;
+      } else {
+        pose.torsoTilt = 0.12;
+        pose.frontShoulderAngle = 0.95;
+        pose.frontElbowAngle = -0.35;
+      }
     } else if (weapon === 'rapier') {
       if (player.attackState === 'startup') {
         pose.torsoTilt = -0.14;
@@ -566,6 +680,13 @@ function computePose(
         pose.frontElbowAngle = -0.38;
       }
     }
+  } else if (player.wizardCastTimer > 0 && player.characterId === 'wizard') {
+    // Wizard spell cast (Chain of Storms): staff thrust forward
+    pose.torsoTilt = 0.18;
+    pose.frontShoulderAngle = 1.3;
+    pose.frontElbowAngle = -0.15;
+    pose.backShoulderAngle = -0.7;
+    pose.coatSweep = -0.5;
   }
 
   return pose;
@@ -1410,6 +1531,450 @@ function drawMinstrel(
   }
 }
 
+// ============================================================================
+// 5. THE ASH MONK (Charcoal Robes, Ash-Grey Sash, Bone Wraps & Prayer Beads)
+// ============================================================================
+function drawAshMonk(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+  scale: number,
+  pose: LimbPose,
+  flash: boolean,
+  isHurt: boolean,
+  weapon: WeaponId,
+  attackState: Player['attackState'],
+  emberGlow: number
+): void {
+  const hipY = -h * 0.43 + pose.bodyOffsetY;
+  const shoulderY = -h * 0.74 + pose.bodyOffsetY;
+  const thighLen = h * 0.22;
+  const shinLen = h * 0.22;
+  const upperArmLen = h * 0.165;
+  const foreArmLen = h * 0.16;
+
+  ctx.scale(pose.squashX, pose.squashY);
+
+  const robeDark = flash ? '#ffffff' : '#1c1917';
+  const robe = flash ? '#ffffff' : '#292524';
+  const robeEdge = flash ? '#ffffff' : '#44403c';
+  const sash = flash ? '#ffffff' : '#78716c';
+  const wraps = flash ? '#ffffff' : '#d6d3d1';
+  const wrapShade = flash ? '#ffffff' : '#a8a29e';
+  const skin = flash ? '#ffffff' : '#c9b49a';
+  const skinShade = flash ? '#ffffff' : '#a38f77';
+  const bone = flash ? '#ffffff' : '#e7e0cf';
+  const ashMark = flash ? '#ffffff' : '#57534e';
+
+  // Long robe tail / sash ends trailing behind
+  ctx.save();
+  ctx.translate(-w * 0.1, hipY - 2 * scale);
+  ctx.rotate(pose.torsoTilt + pose.coatSweep * 0.7);
+  ctx.fillStyle = robeDark;
+  ctx.beginPath();
+  ctx.moveTo(-w * 0.18, 0);
+  ctx.quadraticCurveTo(-w * 0.62, h * 0.18, -w * 0.78, h * 0.36 + pose.hairLift * 6 * scale);
+  ctx.lineTo(-w * 0.32, h * 0.38);
+  ctx.lineTo(w * 0.1, h * 0.06);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = sash;
+  ctx.beginPath();
+  ctx.moveTo(-w * 0.12, -1 * scale);
+  ctx.quadraticCurveTo(-w * 0.6, h * 0.08 + pose.hairLift * 8 * scale, -w * 0.82, h * 0.22 + pose.hairLift * 10 * scale);
+  ctx.lineTo(-w * 0.7, h * 0.26 + pose.hairLift * 10 * scale);
+  ctx.quadraticCurveTo(-w * 0.45, h * 0.12, -w * 0.02, h * 0.04);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+
+  // Back arm (bare shoulder, wrapped forearm)
+  const backShoulderX = -w * 0.1 + Math.sin(pose.torsoTilt) * 3 * scale;
+  const backElbow = drawLimbSegment(ctx, backShoulderX, shoulderY, pose.backShoulderAngle, upperArmLen, 5.6 * scale, skinShade);
+  const backHand = drawLimbSegment(ctx, backElbow.x, backElbow.y, pose.backShoulderAngle + pose.backElbowAngle, foreArmLen, 5.0 * scale, wrapShade);
+  ctx.fillStyle = wrapShade;
+  ctx.beginPath();
+  ctx.arc(backHand.x, backHand.y, 3.1 * scale, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Back leg (loose dark trousers, bone shin wraps)
+  const backKnee = drawLimbSegment(ctx, -w * 0.06, hipY, pose.rightHipAngle, thighLen, 7.4 * scale, robeDark);
+  const backFoot = drawLimbSegment(ctx, backKnee.x, backKnee.y, pose.rightHipAngle - pose.rightKneeAngle, shinLen, 4.6 * scale, wrapShade);
+  ctx.fillStyle = skinShade;
+  ctx.fillRect(backFoot.x - 1.5 * scale, backFoot.y - 2 * scale, 7 * scale, 2.6 * scale);
+
+  // Front leg
+  const frontKnee = drawLimbSegment(ctx, w * 0.06, hipY, pose.leftHipAngle, thighLen, 7.8 * scale, robe);
+  const frontFoot = drawLimbSegment(ctx, frontKnee.x, frontKnee.y, pose.leftHipAngle - pose.leftKneeAngle, shinLen, 4.8 * scale, wraps);
+  ctx.fillStyle = skin;
+  ctx.fillRect(frontFoot.x - 1.5 * scale, frontFoot.y - 2 * scale, 7.5 * scale, 2.6 * scale);
+
+  // Torso: robe crossed over one shoulder, sash, prayer beads
+  ctx.save();
+  ctx.translate(0, hipY);
+  ctx.rotate(pose.torsoTilt);
+  const torsoH = h * 0.33;
+
+  // Bare chest underneath
+  ctx.fillStyle = skinShade;
+  ctx.beginPath();
+  ctx.moveTo(-w * 0.34, -torsoH);
+  ctx.lineTo(w * 0.34, -torsoH);
+  ctx.lineTo(w * 0.28, 3 * scale);
+  ctx.lineTo(-w * 0.3, 3 * scale);
+  ctx.closePath();
+  ctx.fill();
+  // Robe wrapping diagonally (leaves front shoulder bare)
+  ctx.fillStyle = robe;
+  ctx.beginPath();
+  ctx.moveTo(-w * 0.36, -torsoH);
+  ctx.lineTo(-w * 0.02, -torsoH);
+  ctx.lineTo(w * 0.32, -torsoH * 0.18);
+  ctx.lineTo(w * 0.3, 4 * scale);
+  ctx.lineTo(-w * 0.32, 4 * scale);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = robeEdge;
+  ctx.lineWidth = 1.4 * scale;
+  ctx.beginPath();
+  ctx.moveTo(-w * 0.02, -torsoH);
+  ctx.lineTo(w * 0.32, -torsoH * 0.18);
+  ctx.stroke();
+  // Ash-grey sash
+  ctx.fillStyle = sash;
+  ctx.fillRect(-w * 0.33, -3.5 * scale, w * 0.64, 4.6 * scale);
+  // Prayer beads (bone)
+  ctx.fillStyle = bone;
+  for (let i = 0; i < 7; i++) {
+    const t = i / 6;
+    const bx = -w * 0.2 + t * w * 0.42;
+    const by = -torsoH + 3 * scale + Math.sin(t * Math.PI) * 6 * scale;
+    ctx.beginPath();
+    ctx.arc(bx, by, (i === 3 ? 1.9 : 1.3) * scale, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Head: shaved, ash marks, stern brow
+  ctx.save();
+  ctx.translate(w * 0.05, -torsoH - 4 * scale);
+  ctx.rotate(pose.headTilt);
+  const hr = w * 0.27;
+  ctx.fillStyle = skin;
+  ctx.beginPath();
+  ctx.ellipse(hr * 0.1, -hr * 0.55, hr * 0.92, hr * 1.02, 0, 0, Math.PI * 2);
+  ctx.fill();
+  // Jaw shadow
+  ctx.fillStyle = skinShade;
+  ctx.beginPath();
+  ctx.moveTo(-hr * 0.5, hr * 0.0);
+  ctx.lineTo(hr * 0.9, -hr * 0.1);
+  ctx.lineTo(hr * 0.55, hr * 0.38);
+  ctx.lineTo(-hr * 0.3, hr * 0.32);
+  ctx.closePath();
+  ctx.fill();
+  // Three ash stripes across the scalp
+  ctx.strokeStyle = ashMark;
+  ctx.lineWidth = 1.2 * scale;
+  for (let i = 0; i < 3; i++) {
+    ctx.beginPath();
+    ctx.moveTo(-hr * 0.55 + i * hr * 0.35, -hr * 1.42);
+    ctx.lineTo(-hr * 0.35 + i * hr * 0.35, -hr * 0.95);
+    ctx.stroke();
+  }
+  if (!flash) {
+    if (isHurt) {
+      ctx.strokeStyle = '#1c1917';
+      ctx.lineWidth = 1.4 * scale;
+      ctx.beginPath();
+      ctx.moveTo(hr * 0.25, -hr * 0.55);
+      ctx.lineTo(hr * 0.75, -hr * 0.42);
+      ctx.stroke();
+    } else {
+      ctx.fillStyle = '#1c1917';
+      ctx.fillRect(hr * 0.22, -hr * 0.72, hr * 0.62, hr * 0.14);
+      ctx.fillStyle = emberGlow > 0 ? '#f59e0b' : '#e7e5e4';
+      ctx.fillRect(hr * 0.42, -hr * 0.6, hr * 0.26, hr * 0.14);
+    }
+  }
+  ctx.restore();
+  ctx.restore();
+
+  // Front arm: bare shoulder, bone-wrapped forearm and fist
+  const fShoulderX = w * 0.1 + Math.sin(pose.torsoTilt) * 4 * scale;
+  const fElbow = drawLimbSegment(ctx, fShoulderX, shoulderY + 1 * scale, pose.frontShoulderAngle, upperArmLen, 5.8 * scale, skin);
+  const fHand = drawLimbSegment(ctx, fElbow.x, fElbow.y, pose.frontShoulderAngle + pose.frontElbowAngle, foreArmLen, 5.2 * scale, wraps, '#f5f5f4');
+  ctx.fillStyle = wraps;
+  ctx.beginPath();
+  ctx.arc(fHand.x, fHand.y, 3.4 * scale, 0, Math.PI * 2);
+  ctx.fill();
+  // Ember glow on the knuckles (evolution / Pyre Dash)
+  if (emberGlow > 0 && !flash) {
+    const g = ctx.createRadialGradient(fHand.x, fHand.y, 0.5, fHand.x, fHand.y, 9 * scale * emberGlow);
+    g.addColorStop(0, 'rgba(251, 146, 60, 0.75)');
+    g.addColorStop(1, 'rgba(234, 88, 12, 0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(fHand.x, fHand.y, 9 * scale * emberGlow, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  if (attackState === 'idle' && weapon !== 'ash_wraps') {
+    ctx.save();
+    ctx.translate(fHand.x, fHand.y);
+    ctx.rotate(pose.frontShoulderAngle + pose.frontElbowAngle + 0.42);
+    drawIdleHeldWeapon(ctx, weapon, scale, '#a8a29e');
+    ctx.restore();
+  }
+}
+
+// ============================================================================
+// 6. THE SABLE WIZARD (Deep Blue-Black Hooded Robe, Spire Staff, Element Glow)
+// ============================================================================
+function drawSableWizard(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+  scale: number,
+  pose: LimbPose,
+  flash: boolean,
+  isHurt: boolean,
+  weapon: WeaponId,
+  attackState: Player['attackState'],
+  glow: string,
+  glowPower: number
+): void {
+  const hipY = -h * 0.42 + pose.bodyOffsetY;
+  const shoulderY = -h * 0.75 + pose.bodyOffsetY;
+  const thighLen = h * 0.21;
+  const shinLen = h * 0.21;
+  const upperArmLen = h * 0.16;
+  const foreArmLen = h * 0.15;
+
+  ctx.scale(pose.squashX, pose.squashY);
+
+  const robeBlack = flash ? '#ffffff' : '#0b1020';
+  const robeBlue = flash ? '#ffffff' : '#172554';
+  const robeMid = flash ? '#ffffff' : '#1e3a8a';
+  const trim = flash ? '#ffffff' : '#94a3b8';
+  const skin = flash ? '#ffffff' : '#b9a48e';
+  const beard = flash ? '#ffffff' : '#9ca3af';
+  const wood = flash ? '#ffffff' : '#2b1d14';
+  const glowCol = flash ? '#ffffff' : glow;
+
+  // Back cape / cloak panel
+  ctx.save();
+  ctx.translate(-w * 0.08, shoulderY + 2 * scale);
+  ctx.rotate(pose.torsoTilt + pose.coatSweep * 0.6);
+  ctx.fillStyle = robeBlack;
+  ctx.beginPath();
+  ctx.moveTo(-w * 0.2, 0);
+  ctx.quadraticCurveTo(-w * 0.7, h * 0.3, -w * 0.72 + pose.hairLift * 6 * scale, h * 0.74);
+  ctx.lineTo(w * 0.05, h * 0.72);
+  ctx.lineTo(w * 0.2, h * 0.04);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+
+  // Back arm (wide sleeve)
+  const backShoulderX = -w * 0.08 + Math.sin(pose.torsoTilt) * 3 * scale;
+  const backElbow = drawLimbSegment(ctx, backShoulderX, shoulderY, pose.backShoulderAngle, upperArmLen, 6.2 * scale, robeBlack);
+  const backHand = drawLimbSegment(ctx, backElbow.x, backElbow.y, pose.backShoulderAngle + pose.backElbowAngle, foreArmLen, 6.8 * scale, robeBlue);
+  ctx.fillStyle = skin;
+  ctx.beginPath();
+  ctx.arc(backHand.x, backHand.y, 2.4 * scale, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Legs mostly hidden by the long robe: dark boots peeking out
+  const backKnee = drawLimbSegment(ctx, -w * 0.05, hipY, pose.rightHipAngle, thighLen, 6.4 * scale, robeBlack);
+  const backFoot = drawLimbSegment(ctx, backKnee.x, backKnee.y, pose.rightHipAngle - pose.rightKneeAngle, shinLen, 5.0 * scale, robeBlack);
+  ctx.fillStyle = '#0f0f12';
+  ctx.fillRect(backFoot.x - 1.5 * scale, backFoot.y - 2.4 * scale, 7.5 * scale, 3 * scale);
+  const frontKnee = drawLimbSegment(ctx, w * 0.05, hipY, pose.leftHipAngle, thighLen, 6.8 * scale, robeBlue);
+  const frontFoot = drawLimbSegment(ctx, frontKnee.x, frontKnee.y, pose.leftHipAngle - pose.leftKneeAngle, shinLen, 5.2 * scale, robeBlue);
+  ctx.fillStyle = '#0f0f12';
+  ctx.fillRect(frontFoot.x - 1.5 * scale, frontFoot.y - 2.4 * scale, 8 * scale, 3 * scale);
+
+  // Robe skirt: flared trapezoid over the thighs, swept by motion
+  ctx.save();
+  ctx.translate(0, hipY);
+  ctx.rotate(pose.torsoTilt * 0.6);
+  const sweep = pose.coatSweep * 7 * scale;
+  ctx.fillStyle = robeBlue;
+  ctx.beginPath();
+  ctx.moveTo(-w * 0.32, -2 * scale);
+  ctx.lineTo(w * 0.3, -2 * scale);
+  ctx.lineTo(w * 0.44 + sweep * 0.3, h * 0.33);
+  ctx.lineTo(-w * 0.5 + sweep, h * 0.35);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = trim;
+  ctx.lineWidth = 1.1 * scale;
+  ctx.beginPath();
+  ctx.moveTo(w * 0.44 + sweep * 0.3, h * 0.33);
+  ctx.lineTo(-w * 0.5 + sweep, h * 0.35);
+  ctx.stroke();
+  // Front opening seam
+  ctx.strokeStyle = robeMid;
+  ctx.lineWidth = 1.6 * scale;
+  ctx.beginPath();
+  ctx.moveTo(w * 0.08, 0);
+  ctx.lineTo(w * 0.14 + sweep * 0.2, h * 0.33);
+  ctx.stroke();
+  ctx.restore();
+
+  // Torso + hood
+  ctx.save();
+  ctx.translate(0, hipY);
+  ctx.rotate(pose.torsoTilt);
+  const torsoH = h * 0.34;
+  ctx.fillStyle = robeBlue;
+  ctx.beginPath();
+  ctx.moveTo(-w * 0.36, -torsoH);
+  ctx.lineTo(w * 0.34, -torsoH);
+  ctx.lineTo(w * 0.3, 2 * scale);
+  ctx.lineTo(-w * 0.32, 2 * scale);
+  ctx.closePath();
+  ctx.fill();
+  // Silver-thread rune sash
+  ctx.fillStyle = robeBlack;
+  ctx.fillRect(-w * 0.32, -4 * scale, w * 0.62, 4.2 * scale);
+  ctx.fillStyle = glowCol;
+  ctx.globalAlpha = 0.6 + glowPower * 0.4;
+  ctx.fillRect(-1.5 * scale, -3.4 * scale, 3 * scale, 3 * scale);
+  ctx.globalAlpha = 1;
+  // Mantle collar
+  ctx.fillStyle = robeBlack;
+  ctx.beginPath();
+  ctx.moveTo(-w * 0.42, -torsoH + 1 * scale);
+  ctx.quadraticCurveTo(0, -torsoH + 9 * scale, w * 0.4, -torsoH + 1 * scale);
+  ctx.lineTo(w * 0.3, -torsoH - 2 * scale);
+  ctx.lineTo(-w * 0.32, -torsoH - 2 * scale);
+  ctx.closePath();
+  ctx.fill();
+
+  // Head in a tall pointed hood: shadowed face, glowing eyes, short grey beard
+  ctx.save();
+  ctx.translate(w * 0.04, -torsoH - 4 * scale);
+  ctx.rotate(pose.headTilt);
+  const hr = w * 0.3;
+  // Hood back & tip (sways with motion)
+  ctx.fillStyle = robeBlack;
+  ctx.beginPath();
+  ctx.moveTo(-hr * 1.05, hr * 0.35);
+  ctx.quadraticCurveTo(-hr * 1.25, -hr * 1.1, -hr * 0.4 + pose.hairLift * 4 * scale, -hr * 2.35);
+  ctx.quadraticCurveTo(hr * 0.6, -hr * 1.6, hr * 1.1, -hr * 0.6);
+  ctx.lineTo(hr * 1.0, hr * 0.4);
+  ctx.closePath();
+  ctx.fill();
+  // Face opening (deep shadow)
+  ctx.fillStyle = flash ? '#ffffff' : '#05070d';
+  ctx.beginPath();
+  ctx.ellipse(hr * 0.35, -hr * 0.35, hr * 0.62, hr * 0.72, 0.15, 0, Math.PI * 2);
+  ctx.fill();
+  // Lower face & beard
+  ctx.fillStyle = skin;
+  ctx.beginPath();
+  ctx.ellipse(hr * 0.45, -hr * 0.02, hr * 0.38, hr * 0.26, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = beard;
+  ctx.beginPath();
+  ctx.moveTo(hr * 0.05, hr * 0.05);
+  ctx.lineTo(hr * 0.85, hr * 0.0);
+  ctx.lineTo(hr * 0.5, hr * 0.75);
+  ctx.closePath();
+  ctx.fill();
+  // Glowing eyes in the dark of the hood
+  if (!flash) {
+    if (isHurt) {
+      ctx.strokeStyle = glowCol;
+      ctx.lineWidth = 1.2 * scale;
+      ctx.beginPath();
+      ctx.moveTo(hr * 0.3, -hr * 0.45);
+      ctx.lineTo(hr * 0.75, -hr * 0.35);
+      ctx.stroke();
+    } else {
+      ctx.fillStyle = glowCol;
+      ctx.fillRect(hr * 0.32, -hr * 0.5, hr * 0.18, hr * 0.12);
+      ctx.fillRect(hr * 0.62, -hr * 0.48, hr * 0.16, hr * 0.11);
+    }
+  }
+  // Hood rim trim
+  ctx.strokeStyle = robeMid;
+  ctx.lineWidth = 1.4 * scale;
+  ctx.beginPath();
+  ctx.ellipse(hr * 0.35, -hr * 0.35, hr * 0.66, hr * 0.76, 0.15, -Math.PI * 0.6, Math.PI * 0.55);
+  ctx.stroke();
+  ctx.restore();
+  ctx.restore();
+
+  // Front arm (wide sleeve) + staff
+  const fShoulderX = w * 0.08 + Math.sin(pose.torsoTilt) * 4 * scale;
+  const fElbow = drawLimbSegment(ctx, fShoulderX, shoulderY + 1 * scale, pose.frontShoulderAngle, upperArmLen, 6.4 * scale, robeMid);
+  const fHand = drawLimbSegment(ctx, fElbow.x, fElbow.y, pose.frontShoulderAngle + pose.frontElbowAngle, foreArmLen, 7.0 * scale, robeBlue, '#3b82f6');
+
+  if (weapon === 'spire_staff') {
+    // Staff stays mostly upright and tilts forward as the arm thrusts.
+    const tilt = Math.max(-0.35, Math.min(1.15, (pose.frontShoulderAngle - 0.25) * 0.7));
+    const up = { x: Math.sin(tilt), y: -Math.cos(tilt) };
+    const topLen = h * 0.6;
+    const botLen = h * 0.4;
+    const topX = fHand.x + up.x * topLen;
+    const topY = fHand.y + up.y * topLen;
+    ctx.strokeStyle = wood;
+    ctx.lineWidth = 2.6 * scale;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(fHand.x - up.x * botLen, fHand.y - up.y * botLen);
+    ctx.lineTo(topX, topY);
+    ctx.stroke();
+    // Iron ferrule bands
+    ctx.strokeStyle = trim;
+    ctx.lineWidth = 3.4 * scale;
+    ctx.beginPath();
+    ctx.moveTo(fHand.x + up.x * topLen * 0.82, fHand.y + up.y * topLen * 0.82);
+    ctx.lineTo(fHand.x + up.x * topLen * 0.86, fHand.y + up.y * topLen * 0.86);
+    ctx.stroke();
+    // Twisted spire head cradling the element crystal
+    ctx.strokeStyle = wood;
+    ctx.lineWidth = 1.8 * scale;
+    ctx.beginPath();
+    ctx.arc(topX + up.x * 4 * scale, topY + up.y * 4 * scale, 5 * scale, 0, Math.PI * 2);
+    ctx.stroke();
+    const cx = topX + up.x * 4 * scale;
+    const cy = topY + up.y * 4 * scale;
+    if (!flash) {
+      const gr = (9 + glowPower * 8) * scale;
+      const g = ctx.createRadialGradient(cx, cy, 0.5, cx, cy, gr);
+      g.addColorStop(0, '#f8fafc');
+      g.addColorStop(0.3, glowCol);
+      g.addColorStop(1, 'rgba(15, 23, 42, 0)');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(cx, cy, gr, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.fillStyle = flash ? '#ffffff' : glowCol;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - 3.6 * scale);
+    ctx.lineTo(cx + 2.4 * scale, cy);
+    ctx.lineTo(cx, cy + 3.6 * scale);
+    ctx.lineTo(cx - 2.4 * scale, cy);
+    ctx.closePath();
+    ctx.fill();
+  } else if (attackState === 'idle') {
+    ctx.save();
+    ctx.translate(fHand.x, fHand.y);
+    ctx.rotate(pose.frontShoulderAngle + pose.frontElbowAngle + 0.42);
+    drawIdleHeldWeapon(ctx, weapon, scale, '#94a3b8');
+    ctx.restore();
+  }
+  // Hand over the staff
+  ctx.fillStyle = skin;
+  ctx.beginPath();
+  ctx.arc(fHand.x, fHand.y, 2.5 * scale, 0, Math.PI * 2);
+  ctx.fill();
+}
+
 export function drawAnimatedPlayer(
   ctx: CanvasRenderingContext2D,
   player: Player,
@@ -1427,6 +1992,7 @@ export function drawAnimatedPlayer(
     player.backdashTimer <= 0 &&
     player.dashAttackTimer <= 0 &&
     player.rapierLungeTimer <= 0 &&
+    player.monkDashTimer <= 0 &&
     player.hammerLeapState === 'none' &&
     !player.minstrelZipActive &&
     player.minstrelDanceTimer <= 0 &&
@@ -1529,6 +2095,16 @@ export function drawAnimatedPlayer(
     drawRoninSwordsman(ctx, w, h, scale, pose, flash, isHurt, player.weapon, player.attackState);
   } else if (player.characterId === 'minstrel') {
     drawMinstrel(ctx, w, h, scale, pose, flash, isHurt, player.weapon, player.attackState);
+  } else if (player.characterId === 'monk') {
+    const evo = Math.floor(Math.max(0, player.weaponDamageBonus) / 5);
+    const emberGlow = player.monkDashTimer > 0 || player.monkPalmTimer > 0 ? 1.2 : evo >= 1 ? 0.6 + evo * 0.2 : 0;
+    drawAshMonk(ctx, w, h, scale, pose, flash, isHurt, player.weapon, player.attackState, emberGlow);
+  } else if (player.characterId === 'wizard') {
+    const el = getActiveElementDef(player.baseElements, player.combinedElement);
+    const evo = Math.floor(Math.max(0, player.weaponDamageBonus) / 5);
+    const power =
+      player.wizardNovaTimer > 0 || player.wizardCastTimer > 0 || player.attackState === 'active' ? 1 : 0.25 + evo * 0.25;
+    drawSableWizard(ctx, w, h, scale, pose, flash, isHurt, player.weapon, player.attackState, el ? el.primaryColor : '#a5b4fc', power);
   } else {
     drawAnimeVampireBoy(ctx, w, h, scale, pose, flash, isHurt, player.weapon, player.attackState);
   }
@@ -1559,10 +2135,20 @@ export function drawCampHeroFigure(
   isSelected: boolean
 ): void {
   const t30 = snap30fps(time);
-  const w = (characterId === 'brute' ? 36 : characterId === 'minstrel' ? 26 : 28) * scale;
-  const h = (characterId === 'brute' ? 60 : characterId === 'minstrel' ? 50 : 52) * scale;
+  const w = (characterId === 'brute' ? 36 : characterId === 'minstrel' || characterId === 'wizard' ? 26 : 28) * scale;
+  const h = (characterId === 'brute' ? 60 : characterId === 'minstrel' ? 50 : characterId === 'wizard' ? 54 : 52) * scale;
   const phaseOffset =
-    characterId === 'brute' ? 1.4 : characterId === 'ronin' ? 2.8 : characterId === 'minstrel' ? 4.2 : 0;
+    characterId === 'brute'
+      ? 1.4
+      : characterId === 'ronin'
+        ? 2.8
+        : characterId === 'minstrel'
+          ? 4.2
+          : characterId === 'monk'
+            ? 5.1
+            : characterId === 'wizard'
+              ? 0.7
+              : 0;
   const breath = Math.sin(t30 * 3.0 + phaseOffset);
 
   const pose: LimbPose = {
@@ -1594,6 +2180,11 @@ export function drawCampHeroFigure(
       drawRoninSwordsman(ctx, w, h, scale, pose, false, false, 'katana', 'idle');
     } else if (characterId === 'minstrel') {
       drawMinstrel(ctx, w, h, scale, pose, false, false, 'ribbon_whip', 'idle');
+    } else if (characterId === 'monk') {
+      // Meditative guard: fists low, chin down
+      drawAshMonk(ctx, w, h, scale, { ...pose, frontShoulderAngle: 0.55, frontElbowAngle: -1.55, backShoulderAngle: 0.3, backElbowAngle: -1.6 }, false, false, 'ash_wraps', 'idle', 0);
+    } else if (characterId === 'wizard') {
+      drawSableWizard(ctx, w, h, scale, pose, false, false, 'spire_staff', 'idle', '#a5b4fc', 0.3 + Math.max(0, Math.sin(t30 * 2.2)) * 0.3);
     } else {
       drawAnimeVampireBoy(ctx, w, h, scale, pose, false, false, 'whip', 'idle');
     }
