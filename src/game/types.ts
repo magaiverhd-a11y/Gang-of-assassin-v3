@@ -397,6 +397,8 @@ export interface TuningConfig {
   ledgeShoveAssist: boolean;
 
   killFreeze: KillFreezeTuning;
+  /** Affinity & weapon-evolution visual effects (affinity-v1). Visual only — no power changes. */
+  fx: FxTuning;
   characters: Record<CharacterId, CharacterTuning>;
   enemies: Record<string, EnemyTuning>;
   bosses: Record<string, BossTuning>;
@@ -942,6 +944,39 @@ export interface Enemy {
   attackSwingTimer?: number;
   telegraphTargetX?: number;
   telegraphTargetY?: number;
+}
+
+export interface FxTuning {
+  /** Master switch for the elemental affinity effects (movement, attacks, status). */
+  affinityFx: boolean;
+  /** Overall amount of affinity particles / effects on desktop (1 = default). */
+  intensity: number;
+  /** Same, used on the phone layout. */
+  mobileIntensity: number;
+  movementFx: boolean;
+  attackFx: boolean;
+  statusFx: boolean;
+  /** Low ground aura + body motes while running / idle. */
+  runAura: boolean;
+  /** Length of the elemental wake behind the hero when sprinting / dashing (0 = off). */
+  trailLength: number;
+  /** Hard cap on affinity particles alive at once (desktop / phone). */
+  particleCap: number;
+  mobileParticleCap: number;
+  /** Per-element impact shake (earth heavy, air light…) — multiplier on top of Screen Shake (All). */
+  elementShakeMult: number;
+  /** Per-element extra hit-stop (earth/shadow longer, air none) — multiplier. */
+  elementHitstopMult: number;
+  /** Weapon evolution visuals (every 5 weapon upgrades). */
+  weaponEvoFx: boolean;
+  /** Glow strength on evolved weapons and their attack trails. */
+  weaponEvoGlow: number;
+  /** Flash / rune circle / text / sound moment when a weapon evolves. */
+  tierUpMoment: boolean;
+  /** Visual-only preview: 0 = off, 1.. = element index (see list in the Tune panel). */
+  previewElement: number;
+  /** Visual-only preview: 0 = off, 1 = Base, 2 = Awakened, 3 = Mythic, 4 = Transcendent. */
+  previewEvoTier: number;
 }
 
 export interface Particle {
