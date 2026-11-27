@@ -103,6 +103,25 @@ export function AbilityIcon({
           />
         </svg>
       );
+    case 'cinder_palm':
+      return (
+        <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
+          <path
+            d="M7 20V11.5C7 10.7 7.7 10 8.5 10C9.3 10 10 10.7 10 11.5V8C10 7.2 10.7 6.5 11.5 6.5C12.3 6.5 13 7.2 13 8V10.5V7.5C13 6.7 13.7 6 14.5 6C15.3 6 16 6.7 16 7.5V12L17.2 10.8C17.8 10.2 18.8 10.2 19.3 10.8C19.8 11.3 19.8 12.1 19.4 12.7L15.5 20H7Z"
+            fill={color || '#a8a29e'}
+          />
+          <path d="M3 6.5L6 8M2.5 11H5.5M3.5 15.5L6 14.5" stroke="#ea580c" strokeWidth="1.6" strokeLinecap="round" />
+        </svg>
+      );
+    case 'chain_storm':
+      return (
+        <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
+          <path d="M3 5L9 10L7 12L13 17L11 19L20 21" stroke={color || '#60a5fa'} strokeWidth="2" strokeLinejoin="round" />
+          <circle cx="9" cy="10" r="1.8" fill="#e0e7ff" />
+          <circle cx="13" cy="17" r="1.8" fill="#e0e7ff" />
+          <circle cx="20" cy="21" r="1.4" fill="#e0e7ff" />
+        </svg>
+      );
   }
 }
 
@@ -265,6 +284,24 @@ export function WeaponIcon({
           <circle cx="17.6" cy="8.2" r="1.5" fill="#fef08a" />
         </svg>
       );
+    case 'ash_wraps':
+      return (
+        <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
+          <rect x="6" y="8" width="11" height="9" rx="2.5" fill={color || '#d6d3d1'} />
+          <path d="M6.5 10.5H16.5M6.5 13H16.5M6.5 15.5H16.5" stroke="#78716c" strokeWidth="1.1" />
+          <path d="M9 17V21M14 17V21" stroke="#a8a29e" strokeWidth="2" />
+          <path d="M8 8V5.5M11 8V5M14 8V5.5" stroke="#e7e5e4" strokeWidth="1.8" strokeLinecap="round" />
+        </svg>
+      );
+    case 'spire_staff':
+      return (
+        <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
+          <path d="M6 21L15.5 8.5" stroke="#5b3a24" strokeWidth="2.2" strokeLinecap="round" />
+          <circle cx="17" cy="6.5" r="3.2" stroke="#5b3a24" strokeWidth="1.4" />
+          <path d="M17 3.8L18.6 6.5L17 9.2L15.4 6.5Z" fill={color || '#60a5fa'} />
+          <circle cx="17" cy="6.5" r="5" fill={color || '#60a5fa'} opacity="0.18" />
+        </svg>
+      );
   }
 }
 
@@ -405,6 +442,27 @@ export function WeaponSkillIcon({
           />
           <circle cx="9.5" cy="15.2" r="2" fill="#f9a8d4" />
           <circle cx="15" cy="13" r="1.8" fill="#fde68a" />
+        </svg>
+      );
+    case 'ash_wraps':
+      // Pyre Dash: ash streaks behind a forward fist
+      return (
+        <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
+          <path d="M2.5 8H10M1.5 12H9M2.5 16H10" stroke="#a8a29e" strokeWidth="1.8" strokeLinecap="round" />
+          <path d="M11 7.5H18C19.7 7.5 21 8.8 21 10.5V13.5C21 15.2 19.7 16.5 18 16.5H11Z" fill="#d6d3d1" />
+          <path d="M14 7.5V16.5M17 7.5V16.5" stroke="#78716c" strokeWidth="1" />
+          <circle cx="7" cy="19.5" r="1" fill="#ea580c" />
+          <circle cx="4.5" cy="5" r="0.9" fill="#ea580c" />
+        </svg>
+      );
+    case 'spire_staff':
+      // Repulsion Nova: rings pushing outward
+      return (
+        <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
+          <circle cx="12" cy="12" r="3" fill="#e0e7ff" />
+          <circle cx="12" cy="12" r="6.2" stroke="#60a5fa" strokeWidth="1.8" />
+          <circle cx="12" cy="12" r="9.5" stroke="#818cf8" strokeWidth="1.4" opacity="0.7" />
+          <path d="M12 1.5V4M12 20V22.5M1.5 12H4M20 12H22.5" stroke="#e0e7ff" strokeWidth="1.5" />
         </svg>
       );
   }

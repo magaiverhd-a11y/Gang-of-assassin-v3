@@ -1,4 +1,5 @@
 import { Check, Crown, Flame, Lock, ShieldAlert, Skull, Swords, X } from 'lucide-react';
+import { HeroPortrait } from './HeroPortrait';
 import {
   CHARACTERS,
   CHARACTER_ORDER,
@@ -295,7 +296,7 @@ export function RaidSelectModal({
             </span>
             <span>Swap hero before deploying</span>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
             {CHARACTER_ORDER.map((charId) => {
               const c = CHARACTERS[charId];
               const selected = hud.characterId === charId;
@@ -310,13 +311,18 @@ export function RaidSelectModal({
                       : 'bg-[#121622] border-[#252c42] hover:border-[#3d4869]'
                   }`}
                 >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-xs font-bold text-[#f3efe6]">{c.name}</span>
-                    {selected && (
-                      <span className="font-mono text-[9px] font-bold text-[#fde68a]">ACTIVE</span>
-                    )}
+                  <div className="flex items-center gap-2.5">
+                    <HeroPortrait id={charId} size={52} accent={c.accent} animate={selected} />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs font-bold text-[#f3efe6]">{c.name}</span>
+                        {selected && (
+                          <span className="font-mono text-[9px] font-bold text-[#fde68a]">ACTIVE</span>
+                        )}
+                      </div>
+                      <div className="text-[10px] text-[#9aa2b8] mt-0.5">{c.traitSummary}</div>
+                    </div>
                   </div>
-                  <div className="text-[10px] text-[#9aa2b8] mt-0.5">{c.traitSummary}</div>
                 </button>
               );
             })}
