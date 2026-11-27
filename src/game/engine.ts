@@ -171,6 +171,7 @@ export class GameEngine {
   public hitstopTimer = 0;
   public assassinations = 0;
   /** Foes killed by falling into pits (all heroes). */
+  private latchedPresses = { attack: false, skill: false, spell: false, item: false, special: false, jump: false, interact: false };
   public fallKills = 0;
   public crits = 0;
   public parries = 0;
@@ -709,7 +710,7 @@ export class GameEngine {
         this.selectedCharacter === 'monk'
           ? 1080
           : this.selectedCharacter === 'wizard'
-            ? 445
+            ? 398
             : this.selectedCharacter === 'minstrel'
           ? 700
           : this.selectedCharacter === 'ronin'
@@ -2606,8 +2607,17 @@ export class GameEngine {
       return;
     }
 
-    // TRUE HIT-FREEZE: World, enemies, particles, slash lines & animations freeze completely while camera trembles!
+    // Presses made during hit-freeze are latched and replayed on the first live frame (otherwise a
+    // tap of [3]/[4] landing inside a freeze was silently dropped — very noticeable with rapid wizard bolts).
+    const latch = this.latchedPresses;
     if (this.hitstopTimer > 0) {
+      latch.attack ||= input.attackJustPressed;
+      latch.skill ||= input.backdashJustPressed;
+      latch.spell ||= input.spellJustPressed;
+      latch.item ||= input.itemJustPressed;
+      latch.special ||= input.specialItemJustPressed;
+      latch.jump ||= input.jumpJustPressed;
+      latch.interact ||= input.interactJustPressed;
       this.hitstopTimer = Math.max(0, this.hitstopTimer - safeDt);
       if (this.impactFrameTimer > 0) {
         this.impactFrameTimer = Math.max(0, this.impactFrameTimer - safeDt);
@@ -2619,6 +2629,20 @@ export class GameEngine {
         this.impactBurstTimer = Math.max(0, this.impactBurstTimer - safeDt * 0.2);
       }
       return;
+    }
+
+    if (latch.attack || latch.skill || latch.spell || latch.item || latch.special || latch.jump || latch.interact) {
+      input = {
+        ...input,
+        attackJustPressed: input.attackJustPressed || latch.attack,
+        backdashJustPressed: input.backdashJustPressed || latch.skill,
+        spellJustPressed: input.spellJustPressed || latch.spell,
+        itemJustPressed: input.itemJustPressed || latch.item,
+        specialItemJustPressed: input.specialItemJustPressed || latch.special,
+        jumpJustPressed: input.jumpJustPressed || latch.jump,
+        interactJustPressed: input.interactJustPressed || latch.interact,
+      };
+      latch.attack = latch.skill = latch.spell = latch.item = latch.special = latch.jump = latch.interact = false;
     }
 
     // Hit-stop is over: engage the "freeze until key" hold on a clean frame (flash cleared, particles kept).
@@ -5157,6 +5181,13 @@ export class GameEngine {
   }
 
   /** True when a regular enemy stands within `dist` px of a ledge in direction `dir` (no floor beyond). */
+  /** True when nothing solid lies beneath (x, y) — i.e. the point hangs over a pit / bottomless gap. */
+  private isOverVoid(x: number, y: number): boolean {
+    return !this.platforms.some(
+      (plat) => this.isPlatformSolid(plat) && x >= plat.x && x <= plat.x + plat.w && plat.y >= y - 10 && plat.w >= 40
+    );
+  }
+
   private isNearLedge(enemy: Enemy, dir: number, dist: number, tuning: TuningConfig): boolean {
     const halfW = (enemy.baseW * tuning.enemyScale) / 2;
     let under: Platform | null = null;
@@ -6271,7 +6302,10 @@ export class GameEngine {
         // and stay helpless until they land.
         const airborneLaunch = !isFlying && !enemy.onGround && !enemy.isBoss;
         if (airborneLaunch) enemy.hurtStunTimer = Math.max(enemy.hurtStunTimer, 0.04);
-        enemy.vx *= Math.pow(airborneLaunch ? 0.5 : 0.04, dt);
+        // Ledge Shove assist: once a launched foe is over open void (nothing solid below it), its carry
+        // bleeds off fast so it drops into the pit instead of sailing across narrow gaps.
+        const overVoid = airborneLaunch && tuning.ledgeShoveAssist !== false && this.isOverVoid(enemy.x, enemy.y);
+        enemy.vx *= Math.pow(overVoid ? 0.004 : airborneLaunch ? 0.5 : 0.04, dt);
         if (isFlying) {
           enemy.x = Math.max(20, Math.min(this.currentStage.worldWidth - 20, enemy.x + enemy.vx * dt));
         }

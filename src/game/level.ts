@@ -393,7 +393,7 @@ export const CAMP_STAGE: StageDef = {
     {
       id: 'camp-hero-wizard',
       kind: 'camp_hero_wizard',
-      x: 445,
+      x: 398,
       y: CAMP_FLOOR,
       label: 'Play The Sable Wizard (Elemental Bolt · Repulsion Nova)',
       used: false,

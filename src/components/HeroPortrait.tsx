@@ -41,5 +41,5 @@ export function HeroPortrait({
     draw();
     return () => cancelAnimationFrame(raf);
   }, [id, size, accent, animate]);
-  return <canvas ref={ref} style={{ width: size, height: size }} className="shrink-0" aria-hidden="true" />;
+  return <canvas ref={ref} style={{ width: size, height: size }} className="shrink-0" data-hero-portrait={id} aria-hidden="true" />;
 }

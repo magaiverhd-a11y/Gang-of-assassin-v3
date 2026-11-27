@@ -1250,7 +1250,7 @@ const CHARACTER_SPECIAL_DEFAULTS = {
   wizardBoltDamage: 1,
   wizardNovaRadius: 150,
   wizardNovaForce: 560,
-  wizardNovaLift: 260,
+  wizardNovaLift: 150,
   wizardNovaDamage: 2,
   wizardNovaCooldown: 2.0,
 };
