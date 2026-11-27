@@ -391,6 +391,22 @@ export const CAMP_STAGE: StageDef = {
       used: false,
     },
     {
+      id: 'camp-hero-wizard',
+      kind: 'camp_hero_wizard',
+      x: 445,
+      y: CAMP_FLOOR,
+      label: 'Play The Sable Wizard (Elemental Bolt · Repulsion Nova)',
+      used: false,
+    },
+    {
+      id: 'camp-hero-monk',
+      kind: 'camp_hero_monk',
+      x: 1100,
+      y: CAMP_FLOOR,
+      label: 'Play The Ash Monk (Fists · Pyre Dash)',
+      used: false,
+    },
+    {
       id: 'camp-weapon-rack',
       kind: 'camp_weapon_rack',
       x: 845,

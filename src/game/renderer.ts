@@ -241,7 +241,7 @@ export function renderGame(
     drawPhantomAlly(ctx, ally, tuning.playerScale, engine.time);
   }
   drawPlayerSprite(ctx, engine.player, tuning.playerScale);
-  drawWeaponAttack(ctx, engine.player, tuning.playerScale, tuning.attackRange);
+  drawWeaponAttack(ctx, engine.player, tuning.playerScale, engine.effectiveTuning?.attackRange ?? tuning.attackRange);
 
   for (const spot of stage.hidingSpots) {
     const inside =

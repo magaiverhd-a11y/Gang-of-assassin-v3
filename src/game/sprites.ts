@@ -927,6 +927,29 @@ export function drawInteractable(
       break;
     }
 
+    case 'camp_hero_monk': {
+      const isSelected = activeCharacterId === 'monk';
+      if (!isSelected) {
+        drawCampHeroFigure(ctx, 'monk', 0, 0, -1, playerScale, time, false);
+      } else {
+        // Prayer mat where the Monk kneels when not active
+        ctx.fillStyle = '#3f3a36';
+        ctx.fillRect(-18, -4, 36, 4);
+      }
+      break;
+    }
+
+    case 'camp_hero_wizard': {
+      const isSelected = activeCharacterId === 'wizard';
+      if (!isSelected) {
+        drawCampHeroFigure(ctx, 'wizard', 0, 0, 1, playerScale, time, false);
+      } else {
+        ctx.fillStyle = '#1e1b4b';
+        ctx.fillRect(-14, -8, 28, 8);
+      }
+      break;
+    }
+
     case 'camp_weapon_rack': {
       // Gothic timber weapon rack displaying Whip, Sword, Katana, and War Hammer
       ctx.fillStyle = '#3b2820';
@@ -1093,7 +1116,10 @@ export function drawInteractable(
     item.used ||
     (item.kind === 'camp_hero_hunter' && activeCharacterId === 'hunter') ||
     (item.kind === 'camp_hero_brute' && activeCharacterId === 'brute') ||
-    (item.kind === 'camp_hero_ronin' && activeCharacterId === 'ronin');
+    (item.kind === 'camp_hero_ronin' && activeCharacterId === 'ronin') ||
+    (item.kind === 'camp_hero_minstrel' && activeCharacterId === 'minstrel') ||
+    (item.kind === 'camp_hero_monk' && activeCharacterId === 'monk') ||
+    (item.kind === 'camp_hero_wizard' && activeCharacterId === 'wizard');
 
   if (isNearby && !hidePrompt) {
     const bob = Math.sin(time * 6) * 2.5;
@@ -1410,7 +1436,7 @@ export function drawWeaponAttack(
   const activeEl = getActiveElementDef(player.baseElements, player.combinedElement);
 
   // Dramatic Every-5-Upgrades Weapon Evolution & Elemental Infusion Slash Overlay!
-  if (player.attackState === 'active' && (evoTier >= 1 || activeEl)) {
+  if (player.attackState === 'active' && player.attackWeapon !== 'spire_staff' && (evoTier >= 1 || activeEl)) {
     const ah = (player.attackWasCrouching ? player.crouchBaseH : player.baseH) * scale;
     const acx = player.x + player.facing * 18 * scale;
     const acy = player.y - ah * 0.55;
@@ -1569,6 +1595,79 @@ export function drawWeaponAttack(
     ctx.restore();
   }
 
+  // 0C-2. MONK KEY [3] — Pyre Dash: tall ash-and-ember wake with a pale chi spearhead.
+  if (player.monkDashTimer > 0) {
+    const h = player.baseH * scale;
+    const cy = player.y - h * 0.55;
+    const f = player.facing;
+    const len = 150 * scale;
+    ctx.save();
+    const grad = ctx.createLinearGradient(player.x - f * len, cy, player.x + f * 30 * scale, cy);
+    grad.addColorStop(0, 'rgba(41, 37, 36, 0)');
+    grad.addColorStop(0.45, evoTier >= 1 ? 'rgba(194, 65, 12, 0.28)' : 'rgba(87, 83, 78, 0.32)');
+    grad.addColorStop(1, evoTier >= 2 ? 'rgba(253, 230, 138, 0.55)' : 'rgba(214, 211, 209, 0.5)');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.ellipse(player.x - f * len * 0.4, cy, len * 0.75, h * 0.72, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Wind streaks
+    ctx.strokeStyle = evoTier >= 2 ? 'rgba(253, 230, 138, 0.7)' : 'rgba(231, 229, 228, 0.55)';
+    ctx.lineWidth = Math.max(1.5, 2 * scale);
+    ctx.lineCap = 'round';
+    for (let i = -2; i <= 2; i++) {
+      const yy = cy + i * h * 0.22;
+      const jitter = ((player.animTime * 37 + i * 13) % 1) * 30 * scale;
+      ctx.beginPath();
+      ctx.moveTo(player.x - f * (len - jitter), yy);
+      ctx.lineTo(player.x - f * (20 * scale + jitter * 0.3), yy);
+      ctx.stroke();
+    }
+    // Chi spearhead in front of the fist
+    ctx.fillStyle = evoTier >= 1 ? 'rgba(234, 88, 12, 0.55)' : 'rgba(231, 229, 228, 0.5)';
+    ctx.beginPath();
+    ctx.moveTo(player.x + f * 52 * scale, cy);
+    ctx.quadraticCurveTo(player.x + f * 18 * scale, cy - h * 0.62, player.x - f * 6 * scale, cy - h * 0.66);
+    ctx.lineTo(player.x - f * 6 * scale, cy + h * 0.5);
+    ctx.quadraticCurveTo(player.x + f * 18 * scale, cy + h * 0.46, player.x + f * 52 * scale, cy);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // 0C-3. WIZARD KEY [3] — Repulsion Nova: rune circle flaring under and around the Wizard.
+  if (player.wizardNovaTimer > 0) {
+    const h = player.baseH * scale;
+    const prog = 1 - player.wizardNovaTimer / 0.34;
+    const col = activeEl ? activeEl.primaryColor : '#a5b4fc';
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = 0.85 * (1 - prog);
+    ctx.strokeStyle = col;
+    ctx.lineWidth = Math.max(2, 3 * scale);
+    const rr = (30 + prog * 70) * scale;
+    ctx.beginPath();
+    ctx.ellipse(player.x, player.y - 2, rr * 1.6, rr * 0.35, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.ellipse(player.x, player.y - 2, rr * 1.1, rr * 0.24, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    // Glyph ticks around the floor circle
+    for (let i = 0; i < 12; i++) {
+      const a = (Math.PI * 2 * i) / 12 + prog * 1.5;
+      const gx = player.x + Math.cos(a) * rr * 1.35;
+      const gy = player.y - 2 + Math.sin(a) * rr * 0.3;
+      ctx.fillRect(gx - 1.5 * scale, gy - 3 * scale, 3 * scale, 6 * scale);
+    }
+    // Inner pressure sphere
+    const g2 = ctx.createRadialGradient(player.x, player.y - h * 0.5, 2, player.x, player.y - h * 0.5, (40 + prog * 60) * scale);
+    g2.addColorStop(0, 'rgba(224, 231, 255, 0.55)');
+    g2.addColorStop(1, 'rgba(49, 46, 129, 0)');
+    ctx.fillStyle = g2;
+    ctx.beginPath();
+    ctx.arc(player.x, player.y - h * 0.5, (40 + prog * 60) * scale, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
   // 0D. OBSIDIAN GREATAXE KEY [3] — 360° Spinning Molten Cyclone Cleave!
   if (player.axeSpinTimer > 0) {
     const h = (player.crouching ? player.crouchBaseH : player.baseH) * scale;
@@ -1644,6 +1743,86 @@ export function drawWeaponAttack(
   const weapon = player.attackWeapon;
 
   ctx.save();
+
+  // 0M. MONK ASHEN FIST-WRAPS — short knuckle streaks; the 3rd strike is an open-palm shock.
+  if (weapon === 'ash_wraps') {
+    const palm = player.monkComboStep === 2;
+    const fy = originY - h * 0.04 + (player.monkComboStep === 1 ? -4 * scale : 0);
+    const fistReach = reach * (palm ? 1.25 : 1);
+    const startX = player.x + player.facing * 8 * scale;
+    const endX = startX + player.facing * fistReach;
+    const ember = evoTier >= 1 || isFlaming;
+    if (player.attackState === 'startup') {
+      ctx.fillStyle = palm ? 'rgba(214, 211, 209, 0.35)' : 'rgba(168, 162, 158, 0.25)';
+      ctx.beginPath();
+      ctx.arc(player.x - player.facing * 4 * scale, fy, (palm ? 10 : 6) * scale, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (player.attackState === 'active') {
+      ctx.lineCap = 'round';
+      ctx.strokeStyle = ember ? 'rgba(234, 88, 12, 0.45)' : 'rgba(168, 162, 158, 0.42)';
+      ctx.lineWidth = Math.max(6, (palm ? 16 : 9) * scale);
+      ctx.beginPath();
+      ctx.moveTo(startX, fy);
+      ctx.lineTo(endX, fy);
+      ctx.stroke();
+      ctx.strokeStyle = evoTier >= 2 ? '#fde68a' : '#f5f5f4';
+      ctx.lineWidth = Math.max(2, (palm ? 4 : 2.6) * scale);
+      ctx.beginPath();
+      ctx.moveTo(startX + player.facing * fistReach * 0.35, fy);
+      ctx.lineTo(endX, fy);
+      ctx.stroke();
+      if (palm) {
+        // Open-palm shock: a short cone of pressure
+        ctx.fillStyle = ember ? 'rgba(234, 88, 12, 0.32)' : 'rgba(231, 229, 228, 0.3)';
+        ctx.beginPath();
+        ctx.moveTo(endX - player.facing * 6 * scale, fy);
+        ctx.lineTo(endX + player.facing * 30 * scale, fy - 26 * scale);
+        ctx.quadraticCurveTo(endX + player.facing * 42 * scale, fy, endX + player.facing * 30 * scale, fy + 26 * scale);
+        ctx.closePath();
+        ctx.fill();
+      }
+      // Knuckle impact star
+      ctx.fillStyle = ember ? '#fdba74' : '#e7e5e4';
+      const st = (palm ? 9 : 5.5) * scale;
+      ctx.beginPath();
+      ctx.moveTo(endX + player.facing * st, fy);
+      ctx.lineTo(endX, fy - st * 0.7);
+      ctx.lineTo(endX - player.facing * st * 0.5, fy);
+      ctx.lineTo(endX, fy + st * 0.7);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.restore();
+    return;
+  }
+
+  // 0W. WIZARD SPIRE STAFF — gathering rune at the staff head, then a muzzle flare as the bolt leaves.
+  if (weapon === 'spire_staff') {
+    const col = activeEl ? activeEl.primaryColor : '#a5b4fc';
+    const tipX = player.x + player.facing * 20 * scale;
+    const tipY = player.y - h * 0.66;
+    ctx.globalCompositeOperation = 'lighter';
+    if (player.attackState === 'startup') {
+      const prog = player.attackTotalStartup > 0 ? 1 - player.attackTimer / player.attackTotalStartup : 1;
+      ctx.strokeStyle = col;
+      ctx.globalAlpha = 0.5 + prog * 0.4;
+      ctx.lineWidth = Math.max(1.5, 2 * scale);
+      ctx.beginPath();
+      ctx.arc(tipX, tipY, (14 - prog * 8) * scale, 0, Math.PI * 2);
+      ctx.stroke();
+    } else {
+      const fade = player.attackState === 'active' ? 1 : 0.45;
+      const g = ctx.createRadialGradient(tipX, tipY, 1, tipX, tipY, 22 * scale);
+      g.addColorStop(0, `rgba(224, 231, 255, ${0.8 * fade})`);
+      g.addColorStop(1, 'rgba(49, 46, 129, 0)');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(tipX, tipY, 22 * scale, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+    return;
+  }
 
   // 1A. KATANA — Swift Wide Iaido Crimson-Silver Slash (Tier 4+: Phantom Reach)
   if (weapon === 'katana') {
@@ -2219,6 +2398,46 @@ export function drawProjectile(ctx: CanvasRenderingContext2D, proj: Projectile):
     ctx.arc(7, -2.5, 3, 0, Math.PI * 2);
     ctx.arc(7, 2.5, 3, 0, Math.PI * 2);
     ctx.fill();
+  } else if (proj.kind === 'arcane_bolt') {
+    // Element-tinted bolt: dark halo, comet tail, bright core.
+    const c1 = proj.color ?? '#a5b4fc';
+    const c2 = proj.color2 ?? '#312e81';
+    const dir = proj.vx >= 0 ? 1 : -1;
+    const r = proj.radius;
+    ctx.rotate(-proj.rotation);
+    ctx.globalCompositeOperation = 'lighter';
+    const tail = ctx.createLinearGradient(-dir * r * 6, 0, 0, 0);
+    tail.addColorStop(0, 'rgba(0,0,0,0)');
+    tail.addColorStop(1, c1);
+    ctx.globalAlpha = 0.55;
+    ctx.fillStyle = tail;
+    ctx.beginPath();
+    ctx.moveTo(-dir * r * 6, 0);
+    ctx.quadraticCurveTo(-dir * r * 2, -r * 0.9, 0, -r * 0.8);
+    ctx.lineTo(0, r * 0.8);
+    ctx.quadraticCurveTo(-dir * r * 2, r * 0.9, -dir * r * 6, 0);
+    ctx.fill();
+    ctx.globalAlpha = 0.4;
+    ctx.fillStyle = c2;
+    ctx.beginPath();
+    ctx.arc(0, 0, r * 2.1, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 0.9;
+    ctx.fillStyle = c1;
+    ctx.beginPath();
+    ctx.arc(0, 0, r * 1.1, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#f8fafc';
+    ctx.beginPath();
+    ctx.arc(dir * r * 0.2, 0, r * 0.5, 0, Math.PI * 2);
+    ctx.fill();
+    if (proj.overcharged) {
+      ctx.strokeStyle = '#e0e7ff';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(0, 0, r * 1.7 + Math.sin(proj.life * 40) * 2, 0, Math.PI * 2);
+      ctx.stroke();
+    }
   } else if (proj.kind === 'fireball') {
     ctx.fillStyle = 'rgba(249, 115, 22, 0.42)';
     ctx.beginPath();
