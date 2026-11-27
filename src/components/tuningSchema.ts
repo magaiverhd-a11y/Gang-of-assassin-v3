@@ -174,7 +174,7 @@ const generalTab: TabDef = {
     {
       id: 'g-mobile',
       title: 'Mobile (Portrait Phone)',
-      subtitle: 'Only used in the portrait phone layout (touch device held upright, or ?mobile in the URL)',
+      subtitle: 'Portrait phone layout only (or ?mobile in the URL)',
       items: [
         S('mobileZoom', 'Mobile Zoom', 'Camera zoom in portrait at a 390 px wide phone (scales with screen width). Higher = closer, bigger hero; lower = see more of the room.', 0.45, 1.4, 0.01, 'x'),
         S('mobileLookAhead', 'Mobile Look-Ahead', 'How far the camera leads in the direction the hero faces, so you can see foes coming.', 0, 220, 5, 'px'),

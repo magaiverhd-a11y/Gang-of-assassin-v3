@@ -5018,7 +5018,7 @@ export class GameEngine {
       if (absDx > reach || dy > Math.max(76, eh * 0.72)) continue;
 
       // Stealth guard
-      if (!enemy.alerted && !(p.ambushTimer > 0 && !enemy.isBoss)) {
+      if (!enemy.alerted) {
         if (!tuning.mobileAutoAssassinate || !this.isAssassinationPosition(enemy, tuning)) continue;
       }
 

@@ -1247,7 +1247,7 @@ export const DEFAULT_TUNING: TuningConfig = {
   mobileZoom: 0.8,
   mobileLookAhead: 70,
   mobileCameraOffsetY: -80,
-  mobileDeckPct: 35,
+  mobileDeckPct: 29,
   mobileAutoAttack: true,
   mobileAutoAttackRange: 1.0,
   mobileAutoAttackPriority: 0,

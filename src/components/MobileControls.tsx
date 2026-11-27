@@ -78,7 +78,7 @@ function describeAction(action: MobileAction, hud: HudSnapshot): ButtonVisual {
     }
     case 'interact': {
       if (hud.assassinationReady) {
-        return { label: 'Assassinate', sub: 'Strike now', icon: <Skull className="w-7 h-7" />, ready: true, color: '#ff2d46', alert: true };
+        return { label: 'Execute', sub: 'Assassinate', icon: <Skull className="w-7 h-7" />, ready: true, color: '#ff2d46', alert: true };
       }
       const near = hud.nearbyInteractableLabel;
       return {
@@ -143,7 +143,7 @@ function DeckButton({
     onAction(action, false);
   };
 
-  const size = mini ? 50 : big ? 92 : 82;
+  const size = mini ? 46 : big ? 88 : 78;
   const active = v.ready || held;
   return (
     <button
@@ -271,7 +271,7 @@ export function MobileControls({ hud, tuning, onDirectionChange, onAction, onAny
   const tr = mobileActionAt(tuning.mobileBtnTopRight);
   const bl = mobileActionAt(tuning.mobileBtnBottomLeft);
   const br = mobileActionAt(tuning.mobileBtnBottomRight);
-  const pad = 12;
+  const pad = 10;
   const common = { hud, haptics, onAction, onAnyTouch };
 
   const arrow = (on: boolean) => (on ? '#ffd166' : '#4a5270');
@@ -282,7 +282,7 @@ export function MobileControls({ hud, tuning, onDirectionChange, onAction, onAny
       data-mobile-deck
       className="relative w-full shrink-0 select-none touch-none overflow-hidden"
       style={{
-        height: `calc(${Math.max(20, Math.min(50, tuning.mobileDeckPct || 35))}dvh + env(safe-area-inset-bottom, 0px))`,
+        height: `calc(${Math.max(20, Math.min(50, tuning.mobileDeckPct || 29))}dvh + env(safe-area-inset-bottom, 0px))`,
         paddingBottom: 'env(safe-area-inset-bottom, 0px)',
         background:
           'radial-gradient(ellipse at 50% 45%, rgba(120,24,38,0.16) 0%, rgba(11,13,19,0) 60%), linear-gradient(180deg, #0f111a 0%, #090a10 100%)',
@@ -305,8 +305,8 @@ export function MobileControls({ hud, tuning, onDirectionChange, onAction, onAny
 
         {tuning.mobileMiniButtons !== false && (
           <>
-            <DeckButton action="item" mini style={{ top: '50%', left: pad + 16, marginTop: -25 }} {...common} />
-            <DeckButton action="special" mini style={{ top: '50%', right: pad + 16, marginTop: -25 }} {...common} />
+            <DeckButton action="item" mini style={{ top: '50%', left: pad + 16, marginTop: -23 }} {...common} />
+            <DeckButton action="special" mini style={{ top: '50%', right: pad + 16, marginTop: -23 }} {...common} />
           </>
         )}
 
