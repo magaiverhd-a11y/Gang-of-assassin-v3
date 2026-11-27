@@ -397,6 +397,64 @@ class SoundBank {
   }
 
   // ===========================================================================
+  // MONK & WIZARD FOLEY (dark, physical: wrapped knuckles, ash wind, force & arcane hum)
+  // ===========================================================================
+  /** Monk fist: dull wrapped-knuckle thud; step 2 = heavy palm with a chest-deep punch. */
+  public playMonkFist(step = 0, evoTier = 0): void {
+    const ctx = this.ensure();
+    if (!ctx || this.tryPlayCustom('monk_fist', 0.8)) return;
+    const now = ctx.currentTime;
+    const heavy = step >= 2;
+    this.playNoiseBurst(now, heavy ? 0.1 : 0.06, 'bandpass', heavy ? 900 : 1300, heavy ? 260 : 420, 1.6, heavy ? 0.24 : 0.17, 0.16, 0.003);
+    this.playSubPunch(now + 0.005, heavy ? 150 : 210, heavy ? 40 : 70, heavy ? 0.14 : 0.07, heavy ? 0.3 : 0.18, true, 0.1);
+    if (heavy) this.playEvolutionOvertones(now + 0.02, evoTier, 392);
+  }
+
+  /** Monk Pyre Dash: rushing ash wind + low rolling rumble. */
+  public playMonkDash(evoTier = 0): void {
+    const ctx = this.ensure();
+    if (!ctx || this.tryPlayCustom('monk_dash', 0.85)) return;
+    const now = ctx.currentTime;
+    this.playNoiseBurst(now, 0.32 + evoTier * 0.05, 'bandpass', 380, 1900, 0.9, 0.3, 0.34, 0.01, true);
+    this.playSubPunch(now, 120, 36, 0.3, 0.32, true, 0.22);
+    this.playNoiseBurst(now + 0.04, 0.26, 'lowpass', 900, 200, 0.8, 0.16, 0.4, 0.02);
+    this.playEvolutionOvertones(now + 0.02, evoTier, 293.66);
+  }
+
+  /** Wizard bolt: soft arcane hiss + glassy hum. */
+  public playWizardBolt(evoTier = 0, overcharged = false): void {
+    const ctx = this.ensure();
+    if (!ctx || this.tryPlayCustom('wizard_bolt', 0.7)) return;
+    const now = ctx.currentTime;
+    this.playNoiseBurst(now, 0.12, 'bandpass', 2600, 900, 2.4, overcharged ? 0.2 : 0.14, 0.4, 0.004);
+    this.playMetallicRing(now, overcharged ? 330 : 440, 0.2, overcharged ? 0.07 : 0.045, [1, 1.5, 2.01], 0.6);
+    if (overcharged) this.playSubPunch(now, 160, 50, 0.12, 0.18, true, 0.2);
+    this.playEvolutionOvertones(now + 0.02, evoTier, 523.25);
+  }
+
+  /** Wizard Repulsion Nova: imploding inhale then a heavy pressure boom. */
+  public playWizardNova(evoTier = 0): void {
+    const ctx = this.ensure();
+    if (!ctx || this.tryPlayCustom('wizard_nova', 0.9)) return;
+    const now = ctx.currentTime;
+    this.playNoiseBurst(now, 0.1, 'bandpass', 600, 2400, 1.2, 0.12, 0.3, 0.05);
+    this.playSubPunch(now + 0.07, 110, 26, 0.42, 0.46, true, 0.32);
+    this.playNoiseBurst(now + 0.07, 0.36, 'lowpass', 1600, 140, 0.8, 0.3, 0.48, 0.003, true);
+    this.playMetallicRing(now + 0.07, 174.6, 0.5, 0.06, [1, 1.5, 2.25], 0.7);
+    this.playEvolutionOvertones(now + 0.07, evoTier, 261.63);
+  }
+
+  /** Foe falling into a pit: dropping wail that fades into the dark + distant thud. */
+  public playPitFall(isBoss = false): void {
+    const ctx = this.ensure();
+    if (!ctx || this.tryPlayCustom('pit_fall', 0.8)) return;
+    const now = ctx.currentTime;
+    this.playNoiseBurst(now, 0.55, 'bandpass', isBoss ? 700 : 1100, isBoss ? 160 : 240, 4.5, 0.2, 0.6, 0.02);
+    this.playSubPunch(now, isBoss ? 300 : 420, isBoss ? 60 : 90, 0.6, 0.12, false, 0.5);
+    this.playSubPunch(now + 0.5, 90, 30, 0.2, 0.2, true, 0.6);
+  }
+
+  // ===========================================================================
   // SPELLS, ITEMS, LEVEL-UP & WORLD INTERACTIONS
   // ===========================================================================
   public playUpgradePick(): void {

@@ -133,7 +133,7 @@ export function getRaidOrderScaling(tier: number): {
   };
 }
 
-export const CHARACTER_ORDER: CharacterId[] = ['hunter', 'brute', 'ronin', 'minstrel'];
+export const CHARACTER_ORDER: CharacterId[] = ['hunter', 'brute', 'ronin', 'minstrel', 'monk', 'wizard'];
 
 export const CHARACTERS: Record<CharacterId, CharacterDef> = {
   hunter: {
@@ -224,6 +224,50 @@ export const CHARACTERS: Record<CharacterId, CharacterDef> = {
     bonusWeaponDamage: 0,
     accent: '#ec4899',
   },
+  monk: {
+    id: 'monk',
+    name: 'The Ash Monk',
+    title: 'Bone-Wrapped Pilgrim of the Pyre',
+    description:
+      'Barehanded zealot in ash-grey robes. Very short reach but lightning-fast 3-hit fist chains that hit hard. [3] Pyre Dash: a long, wide, invulnerable charge that hurls everything aside. Starts with Cinder Palm.',
+    traitSummary: 'Fists · 3-Hit Chain · Pyre Dash · Starts w/ Cinder Palm',
+    defaultWeapon: 'ash_wraps',
+    defaultAbility: 'cinder_palm',
+    baseHp: 11,
+    baseMp: 9,
+    baseW: 28,
+    baseH: 52,
+    crouchBaseH: 31,
+    speedMult: 1.1,
+    jumpMult: 1.04,
+    airJumps: 0,
+    canWallCling: false,
+    bonusBaseDamage: 1,
+    bonusWeaponDamage: 0,
+    accent: '#d6d3d1',
+  },
+  wizard: {
+    id: 'wizard',
+    name: 'The Sable Wizard',
+    title: 'Elementalist of the Drowned Spire',
+    description:
+      'Robed spellcaster with a spire staff. [1] fires a mid-range elemental bolt that takes the colour and effect of your Affinity. [3] Repulsion Nova blasts every foe around him away — into pits, they die. Starts with Chain of Storms.',
+    traitSummary: 'Ranged Bolt · Repulsion Nova · Starts w/ Chain of Storms',
+    defaultWeapon: 'spire_staff',
+    defaultAbility: 'chain_storm',
+    baseHp: 8,
+    baseMp: 13,
+    baseW: 26,
+    baseH: 54,
+    crouchBaseH: 32,
+    speedMult: 1.0,
+    jumpMult: 1.0,
+    airJumps: 0,
+    canWallCling: false,
+    bonusBaseDamage: 0,
+    bonusWeaponDamage: 0,
+    accent: '#3b82f6',
+  },
 };
 
 export const WEAPON_ORDER: WeaponId[] = [
@@ -235,6 +279,8 @@ export const WEAPON_ORDER: WeaponId[] = [
   'naginata',
   'ribbon_whip',
   'silk_whip',
+  'ash_wraps',
+  'spire_staff',
   'sword',
 ];
 
@@ -340,6 +386,34 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     skillCooldown: 1.15,
     accent: '#f472b6',
     ownerChar: 'minstrel',
+  },
+  ash_wraps: {
+    id: 'ash_wraps',
+    name: 'Ashen Fist-Wraps',
+    shortName: 'Fist-Wraps',
+    description:
+      'Monk exclusive. Bone-bound linen wraps. Very short reach, very fast 3-hit chain: jab, jab, then a heavy palm that hurls the foe back.',
+    skillName: 'Pyre Dash',
+    skillDescription:
+      'A long, wide, invulnerable power dash wreathed in ash and embers that strikes and hurls aside everything it passes. Awakened: ends in an Ash Burst. Mythic: twin bursts.',
+    skillCooldown: 1.3,
+    accent: '#d6d3d1',
+    ownerChar: 'monk',
+    isMainWeapon: true,
+  },
+  spire_staff: {
+    id: 'spire_staff',
+    name: 'Drowned Spire Staff',
+    shortName: 'Spire Staff',
+    description:
+      'Wizard exclusive. Fires a mid-range elemental bolt that follows your Affinity (fire burns, water chills, air pierces, earth staggers, light smites, shadow rends). Every 4th bolt is Overcharged.',
+    skillName: 'Repulsion Nova',
+    skillDescription:
+      'Detonates a ring of force around the Wizard that hurls every nearby foe away and up, shattering projectiles. Foes pushed into pits die.',
+    skillCooldown: 2.0,
+    accent: '#3b82f6',
+    ownerChar: 'wizard',
+    isMainWeapon: true,
   },
   sword: {
     id: 'sword',
@@ -821,6 +895,8 @@ export const ABILITY_ORDER: AbilityId[] = [
   'grapple',
   'gas_bomb',
   'fire_weapon',
+  'cinder_palm',
+  'chain_storm',
 ];
 
 export const ABILITIES: Record<AbilityId, AbilityDef> = {
@@ -868,6 +944,24 @@ export const ABILITIES: Record<AbilityId, AbilityDef> = {
     cooldown: 4.0,
     description: 'Ignites your weapon for fire damage & +20% crit. Evolves with Cinder Burn (Lv3) & Flame Surge (Lv4).',
     accent: '#f59e0b',
+  },
+  cinder_palm: {
+    id: 'cinder_palm',
+    name: 'Cinder Palm',
+    shortName: 'Cinder Palm',
+    manaCost: 2,
+    cooldown: 1.6,
+    description: 'A thrust of the open palm releases a cone of ash and embers: heavy damage, stun and a huge shove. Evolves with Burn (Lv3) and a wider cone (every 5 levels).',
+    accent: '#a8a29e',
+  },
+  chain_storm: {
+    id: 'chain_storm',
+    name: 'Chain of Storms',
+    shortName: 'Chain Storm',
+    manaCost: 3,
+    cooldown: 2.2,
+    description: 'Calls lightning that leaps between up to 3 nearby foes (more every 5 levels), stunning them. Takes your Affinity colour.',
+    accent: '#60a5fa',
   },
 };
 
@@ -1143,6 +1237,22 @@ const CHARACTER_SPECIAL_DEFAULTS = {
   katanaMegaBonus: 1,
   zipSlowMo: 0.42,
   zipDurationSec: 0.78,
+  monkDashLength: 340,
+  monkDashSec: 0.3,
+  monkDashWidth: 96,
+  monkDashHeightMult: 1.35,
+  monkDashDamage: 3,
+  monkDashKnockback: 430,
+  monkDashCooldown: 1.3,
+  monkComboBonus: 1,
+  wizardBoltSpeed: 760,
+  wizardBoltRange: 360,
+  wizardBoltDamage: 1,
+  wizardNovaRadius: 150,
+  wizardNovaForce: 560,
+  wizardNovaLift: 260,
+  wizardNovaDamage: 2,
+  wizardNovaCooldown: 2.0,
 };
 
 export function buildDefaultCharacterTuning(): Record<CharacterId, CharacterTuning> {
@@ -1158,8 +1268,9 @@ export function buildDefaultCharacterTuning(): Record<CharacterId, CharacterTuni
       canWallCling: c.canWallCling,
       bonusBaseDamage: c.bonusBaseDamage,
       bonusWeaponDamage: c.bonusWeaponDamage,
-      attackTimeMult: 1.0,
-      attackRangeMult: 1.0,
+      // Monk: very short reach, very fast fists. Wizard: bolt range lives in its own sliders.
+      attackTimeMult: id === 'monk' ? 0.7 : id === 'wizard' ? 1.1 : 1.0,
+      attackRangeMult: id === 'monk' ? 0.6 : 1.0,
       spellCostMult: 1.0,
       spellCooldownMult: 1.0,
       assassinDamageMult: 1.0,
@@ -1275,6 +1386,12 @@ export const DEFAULT_TUNING: TuningConfig = {
   closeSenseChain: 34,
   visionHeight: 110,
   hideBreakDistance: 42,
+
+  fallDeathEnabled: true,
+  fallDeathBossMode: 0,
+  fallDeathBossDamagePct: 25,
+  knockbackMult: 1.0,
+  ledgeShoveAssist: true,
 
   killFreeze: DEFAULT_KILL_FREEZE,
   characters: buildDefaultCharacterTuning(),

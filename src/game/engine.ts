@@ -68,6 +68,17 @@ import {
   WeaponId,
 } from './types';
 
+/** Optional per-hit overrides (knockback, bonus damage, assassination guard) used by the Monk & Wizard kits. */
+interface HitOpts {
+  kbX?: number;
+  kbY?: number;
+  dirX?: number;
+  bonusDamage?: number;
+  noAssassinate?: boolean;
+  guardBreak?: boolean;
+  stun?: number;
+}
+
 function rectsOverlap(a: Rect, b: Rect): boolean {
   return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
 }
@@ -159,6 +170,8 @@ export class GameEngine {
   public time = 0;
   public hitstopTimer = 0;
   public assassinations = 0;
+  /** Foes killed by falling into pits (all heroes). */
+  public fallKills = 0;
   public crits = 0;
   public parries = 0;
   public secretsFound = 0;
@@ -533,6 +546,15 @@ export class GameEngine {
       minstrelDanceTimer: 0,
       minstrelDanceTickTimer: 0,
 
+      monkDashTimer: 0,
+      monkDashHitIds: new Set<number>(),
+      monkComboStep: 0,
+      monkComboTimer: 0,
+      monkPalmTimer: 0,
+      wizardNovaTimer: 0,
+      wizardBoltCount: 0,
+      wizardCastTimer: 0,
+
       isHidden: false,
       ambushTimer: 0,
       shadowChainTimer: 0,
@@ -576,6 +598,8 @@ export class GameEngine {
         grapple: 0,
         gas_bomb: 0,
         fire_weapon: 0,
+        cinder_palm: 0,
+        chain_storm: 0,
       },
 
       // Single Equipped Item Slot (Key 5) + Single Special Item Slot (Key 6)
@@ -682,7 +706,11 @@ export class GameEngine {
       this.levelUpDelayTimer = 0;
 
       const campSpawnX =
-        this.selectedCharacter === 'minstrel'
+        this.selectedCharacter === 'monk'
+          ? 1080
+          : this.selectedCharacter === 'wizard'
+            ? 445
+            : this.selectedCharacter === 'minstrel'
           ? 700
           : this.selectedCharacter === 'ronin'
             ? 615
@@ -2304,6 +2332,25 @@ export class GameEngine {
     const reach = tuning.attackRange * scale;
     const weaponLv = 1 + p.weaponDamageBonus;
 
+    if (p.attackWeapon === 'spire_staff') {
+      // Wizard attacks with a projectile (arcane bolt), no melee hitbox.
+      return null;
+    }
+
+    if (p.attackWeapon === 'ash_wraps') {
+      // Monk fists: very short, fast; the 3rd (palm) strike reaches a little further and taller.
+      const palm = p.monkComboStep === 2;
+      const fistReach = reach * (palm ? 1.25 : 1.0) * (weaponLv >= 4 ? 1.12 : 1.0);
+      const hitH = Math.max(24, h * (palm ? 0.78 : 0.52));
+      const originX = p.x + p.facing * (p.baseW * scale * 0.1);
+      return {
+        x: p.facing === 1 ? originX : originX - fistReach,
+        y: p.y - h * 0.6 - hitH / 2,
+        w: fistReach,
+        h: hitH,
+      };
+    }
+
     if (p.attackWeapon === 'katana') {
       // Wide sweeping iaijutsu slash — wider & faster than broadsword!
       const slashW = reach * (weaponLv >= 4 ? 1.5 : 1.28);
@@ -2420,6 +2467,8 @@ export class GameEngine {
       if (item.kind === 'camp_hero_brute' && p.characterId === 'brute') continue;
       if (item.kind === 'camp_hero_ronin' && p.characterId === 'ronin') continue;
       if (item.kind === 'camp_hero_minstrel' && p.characterId === 'minstrel') continue;
+      if (item.kind === 'camp_hero_monk' && p.characterId === 'monk') continue;
+      if (item.kind === 'camp_hero_wizard' && p.characterId === 'wizard') continue;
       const d = Math.hypot(p.x - item.x, p.y - item.y);
       if (d < bestDist) {
         bestDist = d;
@@ -2707,6 +2756,13 @@ export class GameEngine {
     if (p.ledgeCooldown > 0) p.ledgeCooldown = Math.max(0, p.ledgeCooldown - dt);
     if (p.wallJumpLockTimer > 0) p.wallJumpLockTimer = Math.max(0, p.wallJumpLockTimer - dt);
     if (p.katanaMegaSlashTimer > 0) p.katanaMegaSlashTimer = Math.max(0, p.katanaMegaSlashTimer - dt);
+    if (p.monkComboTimer > 0) {
+      p.monkComboTimer = Math.max(0, p.monkComboTimer - dt);
+      if (p.monkComboTimer === 0) p.monkComboStep = 0;
+    }
+    if (p.monkPalmTimer > 0) p.monkPalmTimer = Math.max(0, p.monkPalmTimer - dt);
+    if (p.wizardNovaTimer > 0) p.wizardNovaTimer = Math.max(0, p.wizardNovaTimer - dt);
+    if (p.wizardCastTimer > 0) p.wizardCastTimer = Math.max(0, p.wizardCastTimer - dt);
 
     // Cooldowns & Buff timers
     if (p.invulnTimer > 0) p.invulnTimer = Math.max(0, p.invulnTimer - dt);
@@ -2809,6 +2865,7 @@ export class GameEngine {
       p.minstrelZipActive = false;
       p.minstrelVaultTimer = 0;
       p.minstrelDanceTimer = 0;
+      p.monkDashTimer = 0;
       p.wallClingDir = 0;
       p.hitStunTimer = Math.max(0, p.hitStunTimer - dt);
       if (!p.isAirKnockback) {
@@ -2984,6 +3041,12 @@ export class GameEngine {
           }
         }
       }
+      return;
+    }
+
+    // Active MONK KEY [3] — Pyre Dash (long, wide, invulnerable power dash that hurls foes aside)
+    if (p.monkDashTimer > 0) {
+      this.updateMonkPyreDash(dt, tuning);
       return;
     }
 
@@ -3306,6 +3369,16 @@ export class GameEngine {
         p.attackTotalStartup = (tuning.attackStartupMs / 1000) * 0.85;
         p.attackTimer = p.attackTotalStartup;
         sound.playSwordSlash(wepEvoTier);
+      } else if (p.weapon === 'ash_wraps') {
+        // Monk 3-hit chain: jab -> jab -> heavy palm, chained while inside the combo window.
+        p.monkComboStep = p.monkComboTimer > 0 ? (p.monkComboStep + 1) % 3 : 0;
+        p.monkComboTimer = 0.7;
+        p.attackTotalStartup = (tuning.attackStartupMs / 1000) * (p.monkComboStep === 2 ? 1.0 : 0.5);
+        p.attackTimer = p.attackTotalStartup;
+        sound.playMonkFist(p.monkComboStep, wepEvoTier);
+      } else if (p.weapon === 'spire_staff') {
+        p.attackTotalStartup = (tuning.attackStartupMs / 1000) * 1.15;
+        p.attackTimer = p.attackTotalStartup;
       } else {
         p.attackTotalStartup = tuning.attackStartupMs / 1000;
         p.attackTimer = p.attackTotalStartup;
@@ -3600,6 +3673,7 @@ export class GameEngine {
       p.attackState === 'idle' &&
       p.dashAttackTimer <= 0 &&
       p.rapierLungeTimer <= 0 &&
+      p.monkDashTimer <= 0 &&
       p.axeSpinTimer <= 0 &&
       p.naginataVaultTimer <= 0 &&
       p.hammerLeapState === 'none' &&
@@ -3925,6 +3999,55 @@ export class GameEngine {
             slotLevel: weaponLv,
           });
         }
+        return true;
+      }
+
+      case 'ash_wraps': {
+        // Monk Weapon Skill [3]: PYRE DASH — long, wide, invulnerable power dash.
+        const ct = this.charTune('monk');
+        p.monkDashTimer = Math.max(0.08, ct.monkDashSec) * (1 + evoTier * 0.08);
+        p.monkDashHitIds.clear();
+        p.weaponSkillCooldown = ct.monkDashCooldown;
+        p.invulnTimer = Math.max(p.invulnTimer, p.monkDashTimer + 0.14);
+        p.crouching = false;
+        p.monkComboStep = 0;
+        p.monkComboTimer = 0;
+        this.afterimageAccum = 0;
+        sound.playMonkDash(evoTier);
+        this.triggerShake(5 + evoTier * 2, 0.16);
+        this.cameraZoomPunch = Math.max(this.cameraZoomPunch, 0.025);
+        this.shockwaves.push({
+          x: p.x - p.facing * 10 * scale,
+          y: p.y - h * 0.45,
+          radius: 8,
+          maxRadius: 70 + evoTier * 24,
+          color: evoTier >= 2 ? '#fde68a' : evoTier >= 1 ? '#ea580c' : '#a8a29e',
+          life: 0.22,
+          maxLife: 0.22,
+        });
+        // Kick-off ash plume from the floor
+        for (let i = 0; i < 14 + evoTier * 6; i++) {
+          this.particles.push({
+            x: p.x - p.facing * (6 + Math.random() * 20),
+            y: p.y - Math.random() * 10,
+            vx: -p.facing * (60 + Math.random() * 160),
+            vy: -20 - Math.random() * 90,
+            size: 3 + Math.random() * 3,
+            color: Math.random() < 0.7 ? '#57534e' : '#a8a29e',
+            life: 0.45,
+            maxLife: 0.45,
+            kind: 'dust',
+            rotation: 0,
+          });
+        }
+        return true;
+      }
+
+      case 'spire_staff': {
+        // Wizard Weapon Skill [3]: REPULSION NOVA — radial force blast that hurls foes away.
+        const ct = this.charTune('wizard');
+        p.weaponSkillCooldown = ct.wizardNovaCooldown;
+        this.executeWizardNova(tuning);
         return true;
       }
 
@@ -4635,7 +4758,479 @@ export class GameEngine {
         );
         return false;
       }
+
+      case 'cinder_palm': {
+        // Open-palm thrust: a cone of ash and embers with a huge shove (great for pit kills).
+        p.monkPalmTimer = 0.26;
+        p.attackState = 'idle';
+        p.crouching = false;
+        const coneW = (118 + spellEvo * 34 + Math.min(40, flatBonus * 6)) * scale;
+        const coneH = p.baseH * scale * (1.25 + spellEvo * 0.15);
+        const box: Rect = {
+          x: p.facing === 1 ? p.x : p.x - coneW,
+          y: p.y - coneH * 0.92,
+          w: coneW,
+          h: coneH,
+        };
+        const palmX = p.x + p.facing * 22 * scale;
+        const palmY = p.y - h * 0.58;
+        sound.playMonkFist(2, spellEvo);
+        sound.playBackdash(spellEvo);
+        this.triggerShake(7 + spellEvo * 2, 0.18);
+        this.hitstopTimer = Math.max(this.hitstopTimer, 0.045);
+        this.shockwaves.push({ x: palmX, y: palmY, radius: 6, maxRadius: 58 + spellEvo * 20, color: '#a8a29e', life: 0.2, maxLife: 0.2 });
+        for (let i = 0; i < 26 + spellEvo * 12; i++) {
+          const spread = (Math.random() - 0.5) * 0.9;
+          const spd = 260 + Math.random() * 360;
+          const ember = Math.random() < 0.35;
+          this.particles.push({
+            x: palmX,
+            y: palmY + (Math.random() - 0.5) * 14,
+            vx: p.facing * Math.cos(spread) * spd,
+            vy: Math.sin(spread) * spd * 0.7,
+            size: ember ? 2.5 : 3 + Math.random() * 3,
+            color: ember ? '#ea580c' : Math.random() < 0.5 ? '#78716c' : '#d6d3d1',
+            life: 0.32,
+            maxLife: 0.32,
+            kind: ember ? 'ember' : 'dust',
+            rotation: 0,
+          });
+        }
+        for (const enemy of this.enemies) {
+          if (enemy.dead) continue;
+          if (rectsOverlap(box, this.getEnemyRect(enemy, tuning.enemyScale))) {
+            this.handlePlayerHitEnemy(enemy, tuning, 'fireball', slotLevel, {
+              kbX: 470,
+              kbY: 190,
+              dirX: p.facing,
+              stun: 0.7,
+              guardBreak: true,
+            });
+          }
+        }
+        for (let i = this.projectiles.length - 1; i >= 0; i--) {
+          const proj = this.projectiles[i];
+          if (proj.fromEnemy && proj.x >= box.x && proj.x <= box.x + box.w && proj.y >= box.y && proj.y <= box.y + box.h) {
+            this.spawnSparkles(proj.x, proj.y, 6, '#a8a29e', '#ffffff', 0.7);
+            this.projectiles.splice(i, 1);
+          }
+        }
+        return false;
+      }
+
+      case 'chain_storm': {
+        // Lightning leaps between nearby foes, in the colour of the active Affinity.
+        const el = this.getWizardElement();
+        const maxTargets = 3 + spellEvo + (slotLevel >= 4 ? 1 : 0);
+        const firstRange = 360 * scale;
+        const hopRange = 230 * scale;
+        const eScale = tuning.enemyScale;
+        const hit: Enemy[] = [];
+        let px = p.x + p.facing * 20 * scale;
+        let py = p.y - h * 0.82;
+        for (let n = 0; n < maxTargets; n++) {
+          let best: Enemy | null = null;
+          let bestD = Infinity;
+          for (const enemy of this.enemies) {
+            if (enemy.dead || hit.includes(enemy)) continue;
+            const ey = enemy.y - (enemy.baseH * eScale) / 2;
+            const d = Math.hypot(enemy.x - px, ey - py);
+            const lim = n === 0 ? firstRange : hopRange;
+            if (d <= lim && d < bestD) {
+              bestD = d;
+              best = enemy;
+            }
+          }
+          if (!best) break;
+          const by = best.y - (best.baseH * eScale) / 2;
+          this.elementalArcs.push({
+            kind: 'lightning',
+            x1: px,
+            y1: py,
+            x2: best.x,
+            y2: by,
+            color: el.c1,
+            secondaryColor: el.c2,
+            life: 0.34,
+            maxLife: 0.34,
+            seed: Math.random() * 100,
+          });
+          hit.push(best);
+          px = best.x;
+          py = by;
+        }
+        if (hit.length === 0) {
+          // Nothing in reach: refund and fizzle so the cast is never wasted.
+          p.mp += def.manaCost;
+          p.abilityCooldowns[abilityId] = 0.2;
+          this.spawnSparkles(p.x + p.facing * 20 * scale, p.y - h * 0.82, 8, el.c1, '#e0e7ff', 0.6);
+          this.spawnDamageNumber(p.x, p.y - h - 12, 'NO TARGET', el.c1, 0.8);
+          return false;
+        }
+        p.wizardCastTimer = 0.3;
+        sound.playElementalProc('lightning');
+        sound.playWizardBolt(spellEvo, true);
+        this.triggerShake(5 + spellEvo * 2, 0.16);
+        this.triggerImpactFlash(el.c1, 0.16, p.x, p.y - h * 0.6, 1.0, 0.14);
+        for (const enemy of hit) {
+          this.handlePlayerHitEnemy(enemy, tuning, 'fireball', slotLevel, { kbX: 80, stun: 0.6, dirX: enemy.x >= p.x ? 1 : -1 });
+        }
+        return false;
+      }
     }
+  }
+
+  // ===========================================================================
+  // MONK & WIZARD KITS
+  // ===========================================================================
+
+  /** Element the Wizard's bolt / spells take: the active Affinity, or pale arcane when none. */
+  private getWizardElement(): { id: string; name: string; c1: string; c2: string; root: BaseElementId | null } {
+    const p = this.player;
+    const def = getActiveElementDef(p.baseElements, p.combinedElement);
+    if (!def) return { id: 'arcane', name: 'Arcane', c1: '#a5b4fc', c2: '#312e81', root: null };
+    const root: BaseElementId | null = def.isCombined ? (def.parents?.[0] ?? null) : (def.id as BaseElementId);
+    return { id: def.id, name: def.name, c1: def.primaryColor, c2: def.secondaryColor, root };
+  }
+
+  private updateMonkPyreDash(dt: number, tuning: TuningConfig): void {
+    const p = this.player;
+    const ct = this.charTune('monk');
+    const scale = tuning.playerScale;
+    const evoTier = this.getWeaponEvoTier();
+    const weaponLv = 1 + p.weaponDamageBonus;
+    p.monkDashTimer = Math.max(0, p.monkDashTimer - dt);
+    p.wallClingDir = 0;
+    const speed = ct.monkDashLength / Math.max(0.08, ct.monkDashSec);
+    p.vx = p.facing * speed;
+    p.vy = 0;
+    this.applyPlayerPhysics(dt, tuning, false);
+
+    // Ash / ember / pale-chi trail
+    const trailColor = evoTier >= 2 ? '#fde68a' : evoTier >= 1 ? '#c2410c' : '#a8a29e';
+    this.afterimageAccum += dt;
+    if (this.afterimageAccum >= 0.022) {
+      this.afterimageAccum = 0;
+      this.afterimages.push({ x: p.x, y: p.y, facing: p.facing, crouching: false, color: trailColor, life: 0.28, maxLife: 0.28 });
+    }
+    const bodyH = p.baseH * scale;
+    for (let i = 0; i < 3 + evoTier; i++) {
+      const ember = Math.random() < 0.3 + evoTier * 0.15;
+      this.particles.push({
+        x: p.x - p.facing * (Math.random() * 26),
+        y: p.y - Math.random() * bodyH * 1.1,
+        vx: -p.facing * (40 + Math.random() * 90),
+        vy: -30 - Math.random() * 70,
+        size: ember ? 2.2 : 3 + Math.random() * 3.5,
+        color: ember ? (evoTier >= 2 ? '#fde68a' : '#ea580c') : Math.random() < 0.6 ? '#57534e' : '#d6d3d1',
+        life: ember ? 0.5 : 0.42,
+        maxLife: ember ? 0.5 : 0.42,
+        kind: ember ? 'ember' : 'dust',
+        rotation: 0,
+      });
+    }
+
+    // Tall, wide hitbox that strikes and hurls everything it passes
+    const boxH = bodyH * ct.monkDashHeightMult;
+    const boxW = ct.monkDashWidth * scale;
+    const box: Rect = {
+      x: p.x - boxW / 2 + p.facing * boxW * 0.2,
+      y: p.y - boxH,
+      w: boxW,
+      h: boxH,
+    };
+    for (const enemy of this.enemies) {
+      if (enemy.dead || p.monkDashHitIds.has(enemy.id)) continue;
+      if (rectsOverlap(box, this.getEnemyRect(enemy, tuning.enemyScale))) {
+        p.monkDashHitIds.add(enemy.id);
+        this.handlePlayerHitEnemy(enemy, tuning, 'weapon', weaponLv, {
+          kbX: ct.monkDashKnockback,
+          kbY: 170,
+          dirX: p.facing,
+          bonusDamage: Math.max(0, ct.monkDashDamage - 1),
+          stun: 0.55,
+          guardBreak: true,
+        });
+      }
+    }
+    for (const sw of this.secretWalls) {
+      if (sw.broken) continue;
+      const hitId = -9500 - this.secretWalls.indexOf(sw);
+      if (!p.monkDashHitIds.has(hitId) && rectsOverlap(box, sw)) {
+        p.monkDashHitIds.add(hitId);
+        this.damageSecretWall(sw, 1);
+      }
+    }
+    for (let i = this.projectiles.length - 1; i >= 0; i--) {
+      const proj = this.projectiles[i];
+      if (proj.fromEnemy && proj.x >= box.x && proj.x <= box.x + box.w && proj.y >= box.y && proj.y <= box.y + box.h) {
+        this.spawnSparkles(proj.x, proj.y, 6, '#d6d3d1', '#ffffff', 0.7);
+        this.projectiles.splice(i, 1);
+      }
+    }
+
+    // Awakened (5 upgrades): ends in an Ash Burst. Mythic (10): a second, larger burst.
+    if (p.monkDashTimer === 0) {
+      p.vx = p.facing * 90;
+      if (evoTier >= 1) {
+        const bursts = evoTier >= 2 ? 2 : 1;
+        for (let b = 0; b < bursts; b++) {
+          const bx = p.x + p.facing * (20 + b * 40) * scale;
+          const by = p.y - bodyH * 0.5;
+          const r = (105 + b * 40) * scale;
+          this.shockwaves.push({ x: bx, y: by, radius: 10, maxRadius: r, color: b === 0 ? '#ea580c' : '#fde68a', life: 0.28, maxLife: 0.28 });
+          this.spawnSparkles(bx, by, 16, '#ea580c', '#d6d3d1', 1.2);
+          for (const enemy of this.enemies) {
+            if (enemy.dead) continue;
+            const ey = enemy.y - (enemy.baseH * tuning.enemyScale) / 2;
+            if (Math.hypot(enemy.x - bx, ey - by) <= r + 12) {
+              this.handlePlayerHitEnemy(enemy, tuning, 'weapon', weaponLv, {
+                kbX: 360,
+                kbY: 200,
+                dirX: enemy.x >= p.x ? 1 : -1,
+                stun: 0.5,
+                guardBreak: true,
+                noAssassinate: true,
+              });
+            }
+          }
+        }
+        sound.playHammerBoom(evoTier);
+        this.triggerShake(9 + evoTier * 2, 0.22);
+      }
+    }
+  }
+
+  private executeWizardNova(tuning: TuningConfig): void {
+    const p = this.player;
+    const ct = this.charTune('wizard');
+    const scale = tuning.playerScale;
+    const evoTier = this.getWeaponEvoTier();
+    const weaponLv = 1 + p.weaponDamageBonus;
+    const el = this.getWizardElement();
+    const h = (p.crouching ? p.crouchBaseH : p.baseH) * scale;
+    const cx = p.x;
+    const cy = p.y - h * 0.5;
+    const R = ct.wizardNovaRadius * scale * (1 + evoTier * 0.15);
+    p.wizardNovaTimer = 0.34;
+    p.attackState = 'idle';
+    p.invulnTimer = Math.max(p.invulnTimer, 0.3);
+    if (!p.onGround) p.vy = Math.min(p.vy, -80);
+
+    sound.playWizardNova(evoTier);
+    this.hitstopTimer = Math.max(this.hitstopTimer, 0.05);
+    this.triggerShake(9 + evoTier * 3, 0.24);
+    this.cameraZoomPunch = Math.max(this.cameraZoomPunch, 0.04);
+    this.triggerImpactFlash(el.c1, 0.22, cx, cy, 1.4, 0.2);
+    this.shockwaves.push({ x: cx, y: cy, radius: 12, maxRadius: R, color: el.c1, life: 0.34, maxLife: 0.34 });
+    this.shockwaves.push({ x: cx, y: cy, radius: 8, maxRadius: R * 0.68, color: '#e0e7ff', life: 0.22, maxLife: 0.22 });
+    if (evoTier >= 1) {
+      this.shockwaves.push({ x: cx, y: cy, radius: 20, maxRadius: R * 1.22, color: el.c2, life: 0.42, maxLife: 0.42 });
+    }
+    // Dust skirt kicked out along the floor + arcane motes flung outward
+    for (let i = 0; i < 28 + evoTier * 10; i++) {
+      const a = (Math.PI * 2 * i) / (28 + evoTier * 10);
+      const spd = 320 + Math.random() * 220;
+      this.particles.push({
+        x: cx + Math.cos(a) * 10,
+        y: cy + Math.sin(a) * 10,
+        vx: Math.cos(a) * spd,
+        vy: Math.sin(a) * spd * 0.75,
+        size: 2.5 + Math.random() * 2,
+        color: i % 3 === 0 ? '#e0e7ff' : el.c1,
+        life: 0.34,
+        maxLife: 0.34,
+        kind: 'energy_wisp',
+        rotation: 0,
+      });
+    }
+    for (let i = 0; i < 14; i++) {
+      const dir = i % 2 === 0 ? 1 : -1;
+      this.particles.push({
+        x: p.x + dir * Math.random() * 12,
+        y: p.y - 2,
+        vx: dir * (180 + Math.random() * 220),
+        vy: -20 - Math.random() * 50,
+        size: 3 + Math.random() * 3,
+        color: '#57534e',
+        life: 0.4,
+        maxLife: 0.4,
+        kind: 'dust',
+        rotation: 0,
+      });
+    }
+
+    for (const enemy of this.enemies) {
+      if (enemy.dead) continue;
+      const ey = enemy.y - (enemy.baseH * tuning.enemyScale) / 2;
+      const d = Math.hypot(enemy.x - cx, ey - cy);
+      if (d > R + enemy.baseW * tuning.enemyScale * 0.5) continue;
+      const falloff = 1 - 0.35 * Math.min(1, d / Math.max(1, R));
+      this.handlePlayerHitEnemy(enemy, tuning, 'weapon', weaponLv, {
+        kbX: ct.wizardNovaForce * falloff * (1 + evoTier * 0.1),
+        kbY: ct.wizardNovaLift * falloff,
+        dirX: enemy.x >= p.x ? 1 : -1,
+        bonusDamage: Math.max(0, ct.wizardNovaDamage - 1),
+        stun: 0.6,
+        guardBreak: true,
+        noAssassinate: true,
+      });
+    }
+    for (let i = this.projectiles.length - 1; i >= 0; i--) {
+      const proj = this.projectiles[i];
+      if (proj.fromEnemy && Math.hypot(proj.x - cx, proj.y - cy) <= R) {
+        this.spawnSparkles(proj.x, proj.y, 6, el.c1, '#ffffff', 0.8);
+        this.projectiles.splice(i, 1);
+      }
+    }
+  }
+
+  private spawnWizardBolt(tuning: TuningConfig): void {
+    const p = this.player;
+    const ct = this.charTune('wizard');
+    const scale = tuning.playerScale;
+    const evoTier = this.getWeaponEvoTier();
+    const el = this.getWizardElement();
+    const h = (p.attackWasCrouching ? p.crouchBaseH : p.baseH) * scale;
+    p.wizardBoltCount += 1;
+    const overcharged = p.wizardBoltCount % 4 === 0;
+    const speed = Math.max(120, ct.wizardBoltSpeed) * (overcharged ? 1.12 : 1);
+    const range = ct.wizardBoltRange * scale * (1 + evoTier * 0.1);
+    const x = p.x + p.facing * 20 * scale;
+    const y = p.y - h * 0.66;
+    this.projectiles.push({
+      id: this.nextProjectileId++,
+      x,
+      y,
+      vx: p.facing * speed,
+      vy: 0,
+      radius: (overcharged ? 11 : 7) + evoTier * 1.5,
+      fromEnemy: false,
+      damage: 0,
+      life: range / speed,
+      rotation: 0,
+      kind: 'arcane_bolt',
+      slotLevel: 1 + p.weaponDamageBonus,
+      color: el.c1,
+      color2: el.c2,
+      pierce: overcharged || el.root === 'air',
+      overcharged,
+      hitIds: [],
+      startX: x,
+    });
+    p.wizardCastTimer = 0.18;
+    sound.playWizardBolt(evoTier, overcharged);
+    this.spawnSparkles(x, y, overcharged ? 10 : 5, el.c1, '#e0e7ff', overcharged ? 0.9 : 0.55);
+    if (overcharged) {
+      this.shockwaves.push({ x, y, radius: 4, maxRadius: 34, color: el.c1, life: 0.16, maxLife: 0.16 });
+    }
+  }
+
+  private wizardBoltHit(proj: Projectile, target: Enemy, tuning: TuningConfig): void {
+    const p = this.player;
+    const ct = this.charTune('wizard');
+    const root = this.getWizardElement().root;
+    const over = Boolean(proj.overcharged);
+    let bonus = Math.max(0, ct.wizardBoltDamage - 1) + (over ? 1 : 0);
+    if (root === 'light' && target.isBoss) bonus += 1;
+    if (root === 'shadow' && !target.alerted) bonus += 1;
+    const kb = (over ? 260 : 150) * (root === 'earth' ? 1.6 : 1);
+    const dist = Math.abs(target.x - p.x);
+    this.handlePlayerHitEnemy(target, tuning, 'weapon', 1 + p.weaponDamageBonus, {
+      kbX: kb,
+      kbY: over || root === 'earth' ? 130 : 0,
+      dirX: proj.vx >= 0 ? 1 : -1,
+      bonusDamage: bonus,
+      noAssassinate: dist > 95 * tuning.playerScale,
+      guardBreak: over || root === 'earth',
+    });
+    const c1 = proj.color ?? '#a5b4fc';
+    this.shockwaves.push({ x: proj.x, y: proj.y, radius: 4, maxRadius: over ? 60 : 32, color: c1, life: 0.18, maxLife: 0.18 });
+    this.spawnSparkles(proj.x, proj.y, over ? 12 : 7, c1, proj.color2 ?? '#312e81', over ? 1.0 : 0.7);
+    if (root === 'fire') {
+      for (const other of this.enemies) {
+        if (other.dead || other === target) continue;
+        const oy = other.y - (other.baseH * tuning.enemyScale) / 2;
+        if (Math.hypot(other.x - proj.x, oy - proj.y) <= 52) this.applyBurn(other, 2.4);
+      }
+    }
+  }
+
+  /** True when a regular enemy stands within `dist` px of a ledge in direction `dir` (no floor beyond). */
+  private isNearLedge(enemy: Enemy, dir: number, dist: number, tuning: TuningConfig): boolean {
+    const halfW = (enemy.baseW * tuning.enemyScale) / 2;
+    let under: Platform | null = null;
+    for (const plat of this.platforms) {
+      if (!this.isPlatformSolid(plat)) continue;
+      if (enemy.x >= plat.x && enemy.x <= plat.x + plat.w && Math.abs(plat.y - enemy.y) <= 12) {
+        under = plat;
+        break;
+      }
+    }
+    if (!under) return false;
+    const edgeX = dir > 0 ? under.x + under.w : under.x;
+    const toEdge = (edgeX - enemy.x) * dir - halfW;
+    if (toEdge > dist) return false;
+    const beyondX = edgeX + dir * 14;
+    return !this.platforms.some(
+      (plat) => this.isPlatformSolid(plat) && beyondX >= plat.x && beyondX <= plat.x + plat.w && plat.y <= enemy.y + 40 && plat.y + plat.h >= enemy.y - 4
+    );
+  }
+
+  /** An enemy fell below the level (pit / bottomless gap). Regular foes die; bosses follow General → Fall Death. */
+  private handleEnemyFell(enemy: Enemy, tuning: TuningConfig): void {
+    const stage = this.currentStage;
+    const pitX = enemy.x;
+    const pitTopY = stage.floorY + 12;
+    // Ash plume rising from the pit mouth
+    for (let i = 0; i < 18; i++) {
+      this.particles.push({
+        x: pitX + (Math.random() - 0.5) * 40,
+        y: pitTopY + Math.random() * 30,
+        vx: (Math.random() - 0.5) * 60,
+        vy: -60 - Math.random() * 120,
+        size: 3 + Math.random() * 4,
+        color: Math.random() < 0.5 ? '#44403c' : '#78716c',
+        life: 0.7,
+        maxLife: 0.7,
+        kind: 'dust',
+        rotation: 0,
+      });
+    }
+    sound.playPitFall(enemy.isBoss);
+
+    if (enemy.isBoss) {
+      const mode = Math.round(tuning.fallDeathBossMode ?? 0);
+      const dmg =
+        mode === 1 ? enemy.hp : mode === 0 ? Math.max(1, Math.round((enemy.maxHp * (tuning.fallDeathBossDamagePct ?? 25)) / 100)) : 0;
+      enemy.hp = Math.max(0, enemy.hp - dmg);
+      if (enemy.hp <= 0) {
+        this.fallKills += 1;
+        enemy.y = stage.floorY;
+        this.handleEnemyKilled(enemy, pitX, pitTopY - 20, false, true);
+        this.spawnDamageNumber(pitX, pitTopY - 60, 'CAST INTO THE ABYSS', '#e7e5e4', 1.25);
+        return;
+      }
+      // Return the boss to its arena, stunned and briefly protected.
+      const minX = stage.bossZoneStartX + 90;
+      const maxX = stage.worldWidth - 90;
+      enemy.x = Math.max(minX, Math.min(maxX, enemy.homeX));
+      enemy.y = enemy.homeY - 40;
+      enemy.vx = 0;
+      enemy.vy = 0;
+      enemy.onGround = false;
+      enemy.invulnTimer = Math.max(enemy.invulnTimer, 0.9);
+      enemy.hurtStunTimer = Math.max(enemy.hurtStunTimer, 0.5);
+      enemy.flashTimer = 0.3;
+      this.spawnSparkles(enemy.x, enemy.y - 40, 16, '#a8a29e', '#ffffff', 1.1);
+      if (dmg > 0) this.spawnDamageNumber(enemy.x, enemy.y - 80, `${dmg}`, '#e7e5e4', 1.3, 'FELL');
+      return;
+    }
+
+    enemy.hp = 0;
+    this.fallKills += 1;
+    this.handleEnemyKilled(enemy, pitX, pitTopY - 20, false, true);
+    this.spawnDamageNumber(pitX, pitTopY - 50, 'INTO THE ABYSS', '#e7e5e4', 1.1, 'FELL');
   }
 
   private updateGrapple(dt: number, input: InputState, tuning: TuningConfig): void {
@@ -4955,6 +5550,11 @@ export class GameEngine {
   /** Weapon reach used by mobile auto-attack (matches the swing reach, times the tuning multiplier). */
   private getAutoAttackReach(tuning: TuningConfig): number {
     const p = this.player;
+    if (p.weapon === 'spire_staff') {
+      // Wizard: auto-attack fires the bolt at foes inside ~90% of its range.
+      const ct = this.charTune('wizard');
+      return ct.wizardBoltRange * tuning.playerScale * 0.9 * (tuning.mobileAutoAttackRange ?? 1);
+    }
     const longReach =
       p.weapon === 'whip' || p.weapon === 'naginata' || p.weapon === 'ribbon_whip' || p.weapon === 'silk_whip';
     return tuning.attackRange * (longReach ? 1.18 : 1.05) * tuning.playerScale * (tuning.mobileAutoAttackRange ?? 1);
@@ -4975,7 +5575,10 @@ export class GameEngine {
   public findAssassinationTarget(tuning: TuningConfig): Enemy | null {
     const p = this.player;
     if (this.currentStage.isCamp) return null;
-    const reach = this.getAutoAttackReach(tuning) / Math.max(0.1, tuning.mobileAutoAttackRange ?? 1);
+    const reach =
+      p.weapon === 'spire_staff'
+        ? 95 * tuning.playerScale
+        : this.getAutoAttackReach(tuning) / Math.max(0.1, tuning.mobileAutoAttackRange ?? 1);
     const pyMid = p.y - (p.crouching ? p.crouchBaseH : p.baseH) * tuning.playerScale * 0.5;
     let best: Enemy | null = null;
     let bestD = Infinity;
@@ -5070,6 +5673,14 @@ export class GameEngine {
     }
     if (target.kind === 'camp_hero_minstrel') {
       this.selectCharacter('minstrel', tuning);
+      return;
+    }
+    if (target.kind === 'camp_hero_monk') {
+      this.selectCharacter('monk', tuning);
+      return;
+    }
+    if (target.kind === 'camp_hero_wizard') {
+      this.selectCharacter('wizard', tuning);
       return;
     }
     if (target.kind === 'camp_weapon_rack') {
@@ -5368,6 +5979,26 @@ export class GameEngine {
               0.95
             );
           }
+        } else if (p.attackWeapon === 'ash_wraps') {
+          const palm = p.monkComboStep === 2;
+          p.attackTimer = (tuning.attackActiveMs / 1000) * (palm ? 0.95 : 0.65);
+          const fx = p.x + p.facing * tuning.attackRange * scale * (palm ? 0.95 : 0.75);
+          const fy = p.y - h * 0.6;
+          this.spawnSparkles(fx, fy, palm ? 10 : 4, palm ? '#e7e5e4' : '#a8a29e', weaponLv >= 6 ? '#ea580c' : '#78716c', palm ? 0.9 : 0.5);
+          if (palm) {
+            this.shockwaves.push({
+              x: fx,
+              y: fy,
+              radius: 4,
+              maxRadius: (40 + this.getWeaponEvoTier() * 16) * scale,
+              color: this.getWeaponEvoTier() >= 2 ? '#fde68a' : this.getWeaponEvoTier() >= 1 ? '#ea580c' : '#d6d3d1',
+              life: 0.16,
+              maxLife: 0.16,
+            });
+          }
+        } else if (p.attackWeapon === 'spire_staff') {
+          p.attackTimer = 0.06;
+          this.spawnWizardBolt(tuning);
         } else if (p.attackWeapon === 'sword') {
           p.attackTimer = (tuning.attackActiveMs / 1000) * 1.1;
           if (p.fireWeaponTimer > 0 || weaponLv >= 4) {
@@ -5426,6 +6057,10 @@ export class GameEngine {
               ? Math.max(0.15, (tuning.attackRecoveryMs / 1000) * 1.22)
               : p.attackWeapon === 'rapier'
                 ? (tuning.attackRecoveryMs / 1000) * 0.62
+                : p.attackWeapon === 'ash_wraps'
+                  ? (tuning.attackRecoveryMs / 1000) * (p.monkComboStep === 2 ? 1.25 : 0.55)
+                  : p.attackWeapon === 'spire_staff'
+                    ? (tuning.attackRecoveryMs / 1000) * 2.2
                 : p.attackWeapon === 'katana'
                   ? (tuning.attackRecoveryMs / 1000) * 0.78
                   : p.attackWeapon === 'sword' || p.attackWeapon === 'naginata'
@@ -5547,6 +6182,19 @@ export class GameEngine {
     for (const enemy of this.enemies) {
       if (enemy.dead) continue;
 
+      // ENEMIES THAT FALL DIE: below the level (pits / bottomless gaps) = kill with full credit.
+      if (enemy.y > this.currentStage.worldHeight + 24) {
+        if (tuning.fallDeathEnabled !== false) {
+          this.handleEnemyFell(enemy, tuning);
+          if (enemy.dead) continue;
+        } else {
+          enemy.x = enemy.homeX;
+          enemy.y = enemy.homeY;
+          enemy.vx = 0;
+          enemy.vy = 0;
+        }
+      }
+
       const et = this.enemyTune(enemy);
       // Per-type AI time scale (movement, cooldowns, windups all speed up / slow down together)
       const dt = baseDt * Math.max(0.05, et.speedMult);
@@ -5619,7 +6267,14 @@ export class GameEngine {
 
       if (enemy.hurtStunTimer > 0) {
         enemy.hurtStunTimer = Math.max(0, enemy.hurtStunTimer - dt);
-        enemy.vx *= Math.pow(0.04, dt);
+        // Launched foes keep their momentum through the air (so knockback can carry them over pits)
+        // and stay helpless until they land.
+        const airborneLaunch = !isFlying && !enemy.onGround && !enemy.isBoss;
+        if (airborneLaunch) enemy.hurtStunTimer = Math.max(enemy.hurtStunTimer, 0.04);
+        enemy.vx *= Math.pow(airborneLaunch ? 0.5 : 0.04, dt);
+        if (isFlying) {
+          enemy.x = Math.max(20, Math.min(this.currentStage.worldWidth - 20, enemy.x + enemy.vx * dt));
+        }
         if (!enemy.isBoss && enemy.attackChargeTimer > 0) {
           enemy.attackChargeTimer = 0;
           enemy.pendingAttackKind = '';
@@ -7910,6 +8565,54 @@ export class GameEngine {
         }
       }
 
+      if (proj.kind === 'arcane_bolt') {
+        if (Math.random() < 0.7) {
+          this.particles.push({
+            x: proj.x - Math.sign(proj.vx) * proj.radius,
+            y: proj.y + (Math.random() - 0.5) * proj.radius,
+            vx: -proj.vx * 0.08 + (Math.random() - 0.5) * 30,
+            vy: (Math.random() - 0.5) * 30,
+            size: proj.overcharged ? 3.5 : 2.5,
+            color: Math.random() < 0.5 ? (proj.color ?? '#a5b4fc') : '#e0e7ff',
+            life: 0.2,
+            maxLife: 0.2,
+            kind: 'energy_wisp',
+            rotation: 0,
+          });
+        }
+        const hitIds = proj.hitIds ?? (proj.hitIds = []);
+        let target: Enemy | null = null;
+        for (const enemy of this.enemies) {
+          if (enemy.dead || hitIds.includes(enemy.id)) continue;
+          if (rectsOverlap(projRect, this.getEnemyRect(enemy, tuning.enemyScale))) {
+            target = enemy;
+            break;
+          }
+        }
+        if (target) {
+          hitIds.push(target.id);
+          this.wizardBoltHit(proj, target, tuning);
+          if (!proj.pierce || target.isBoss) {
+            this.projectiles.splice(i, 1);
+          }
+        } else if (hitSolid) {
+          this.spawnSparkles(proj.x, proj.y, 6, proj.color ?? '#a5b4fc', '#ffffff', 0.6);
+          this.projectiles.splice(i, 1);
+        } else {
+          // Bolt shatters enemy projectiles it meets
+          for (let j = this.projectiles.length - 1; j >= 0; j--) {
+            const other = this.projectiles[j];
+            if (!other.fromEnemy) continue;
+            if (Math.hypot(other.x - proj.x, other.y - proj.y) <= proj.radius + other.radius + 4) {
+              this.spawnSparkles(other.x, other.y, 6, proj.color ?? '#a5b4fc', '#ffffff', 0.7);
+              this.projectiles.splice(j, 1);
+              if (j < i) i--;
+            }
+          }
+        }
+        continue;
+      }
+
       let hitEnemy: Enemy | null = null;
       for (const enemy of this.enemies) {
         if (enemy.dead) continue;
@@ -8454,7 +9157,7 @@ export class GameEngine {
     }
   }
 
-  private handleEnemyKilled(enemy: Enemy, hitX: number, hitY: number, wasAssassination = false): void {
+  private handleEnemyKilled(enemy: Enemy, hitX: number, hitY: number, wasAssassination = false, fell = false): void {
     enemy.dead = true;
     const isBig = Boolean(enemy.isBigBoss);
 
@@ -8469,7 +9172,7 @@ export class GameEngine {
       isBig ? 1.45 : enemy.isBoss ? 1.3 : wasAssassination ? 1.3 : 1.1,
       isBig ? 8 : enemy.isBoss ? 6 : 5
     );
-    this.addBloodStain(hitX, this.currentStage.floorY, enemy.isBoss ? 34 : 20);
+    if (!fell) this.addBloodStain(hitX, this.currentStage.floorY, enemy.isBoss ? 34 : 20);
     this.spawnSparkles(hitX, hitY, enemy.isBoss ? 30 : 16, '#dc2626', '#ffd166', enemy.isBoss ? 1.65 : 1.15);
 
     // Lethal cleave slash line!
@@ -8595,7 +9298,21 @@ export class GameEngine {
 
       if (attackBox && !p.attackHitIds.has(enemy.id) && rectsOverlap(attackBox, eRect)) {
         p.attackHitIds.add(enemy.id);
-        this.handlePlayerHitEnemy(enemy, tuning, 'weapon', 1 + p.weaponDamageBonus);
+        if (p.attackWeapon === 'ash_wraps') {
+          // Monk 3-hit chain: jab, jab, heavy palm (bonus damage, guard break, big shove).
+          const palm = p.monkComboStep === 2;
+          this.handlePlayerHitEnemy(
+            enemy,
+            tuning,
+            'weapon',
+            1 + p.weaponDamageBonus,
+            palm
+              ? { kbX: 320, kbY: 130, bonusDamage: this.charTune('monk').monkComboBonus, guardBreak: true, stun: 0.42 }
+              : { kbX: 105 }
+          );
+        } else {
+          this.handlePlayerHitEnemy(enemy, tuning, 'weapon', 1 + p.weaponDamageBonus);
+        }
       }
 
       if (megaBox && !p.katanaMegaHitIds.has(enemy.id) && rectsOverlap(megaBox, eRect)) {
@@ -8614,7 +9331,8 @@ export class GameEngine {
     enemy: Enemy,
     tuning: TuningConfig,
     source: 'weapon' | 'fireball' | 'dash' | 'grapple' | 'gas' | 'hammer_meteor',
-    abilityPower = 1
+    abilityPower = 1,
+    opts?: HitOpts
   ): void {
     const p = this.player;
     const eScale = tuning.enemyScale;
@@ -8639,7 +9357,7 @@ export class GameEngine {
       !p.onGround &&
       p.y < enemy.y - 26 &&
       Math.abs(p.x - enemy.x) < 120;
-    const canAssassinate = source === 'weapon' || source === 'dash';
+    const canAssassinate = (source === 'weapon' || source === 'dash') && !opts?.noAssassinate;
     const isAssassination =
       canAssassinate &&
       tuning.assassinationEnabled &&
@@ -8648,6 +9366,7 @@ export class GameEngine {
 
     const isHeavyHit =
       source === 'hammer_meteor' ||
+      Boolean(opts?.guardBreak) ||
       ((p.weapon === 'hammer' || p.weapon === 'greataxe') && source === 'weapon');
 
     // Front-Shield Guard for armored Knights & Obsidian Guards!
@@ -8735,7 +9454,7 @@ export class GameEngine {
     }
 
     const fireBonus = fireBonusActive ? 1 + this.getSpellFlatBonus(p.fireWeaponLevel) : 0;
-    let damage = baseDamage + fireBonus;
+    let damage = baseDamage + fireBonus + Math.max(0, Math.round(opts?.bonusDamage ?? 0));
 
     // Light / Solar / Prism / Eclipse Boss Damage bonus!
     if (enemy.isBoss && this.hasElement('light')) {
@@ -8763,10 +9482,27 @@ export class GameEngine {
     enemy.flashTimer = 0.18;
     enemy.hurtStunTimer = enemy.isBoss ? 0.04 : source === 'gas' ? 0.05 : 0.22;
     enemy.alerted = true;
-    const pushDir = source === 'hammer_meteor' ? (enemy.x >= p.x ? 1 : -1) : p.facing;
+    const pushDir =
+      opts?.dirX !== undefined ? (opts.dirX >= 0 ? 1 : -1) : source === 'hammer_meteor' ? (enemy.x >= p.x ? 1 : -1) : p.facing;
     if (source !== 'gas') {
-      const kb = source === 'hammer_meteor' ? 280 : isHeavyHit ? 225 : 135;
-      enemy.vx = pushDir * (enemy.isBoss ? 48 : kb);
+      const kbMult = tuning.knockbackMult ?? 1;
+      const kb = (opts?.kbX ?? (source === 'hammer_meteor' ? 280 : isHeavyHit ? 225 : 135)) * kbMult;
+      enemy.vx = pushDir * (enemy.isBoss ? (opts?.kbX ? Math.min(160, 48 + kb * 0.12) : 48) : kb);
+      const flying = isFlyingEnemyType(enemy.type);
+      if (!enemy.isBoss && enemy.hp > 0) {
+        if (opts?.stun) enemy.hurtStunTimer = Math.max(enemy.hurtStunTimer, opts.stun);
+        if (opts?.kbY && !flying) {
+          enemy.vy = Math.min(enemy.vy, -opts.kbY * kbMult);
+          enemy.onGround = false;
+        }
+        // Ledge shove: any hero's hit next to a pit edge sends regular foes over it.
+        if (tuning.ledgeShoveAssist !== false && !flying && enemy.onGround && this.isNearLedge(enemy, pushDir, 70, tuning)) {
+          enemy.vx = pushDir * Math.max(Math.abs(enemy.vx), 300);
+          enemy.vy = Math.min(enemy.vy, -150);
+          enemy.onGround = false;
+          enemy.hurtStunTimer = Math.max(enemy.hurtStunTimer, 0.45);
+        }
+      }
     }
 
     // Wraith spectral phase-step when surviving a strike!
@@ -9033,6 +9769,11 @@ export class GameEngine {
 
     if (source !== 'gas') {
       this.applyElementalHitEffect(enemy, hitX, hitY, tuning, isCrit, isAssassination);
+    }
+
+    // Monk passive — Unbroken Flow: every fist strike shaves 0.2s off Pyre Dash.
+    if (p.characterId === 'monk' && source === 'weapon' && p.attackState !== 'idle' && p.weaponSkillCooldown > 0) {
+      p.weaponSkillCooldown = Math.max(0, p.weaponSkillCooldown - 0.2);
     }
 
     if (enemy.hp <= 0) {

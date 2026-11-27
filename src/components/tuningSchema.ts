@@ -117,6 +117,7 @@ export function formatValue(v: number, fmt: Fmt): string {
 // GENERAL
 // ---------------------------------------------------------------------------
 const GENERAL_ROOTS = [
+  'fallDeathEnabled', 'fallDeathBossMode', 'fallDeathBossDamagePct', 'knockbackMult', 'ledgeShoveAssist',
   'gameSpeed', 'hitstopMs', 'shakeMult', 'zoomPunchMult', 'flashMult', 'critShakeIntensity',
   'zoom', 'playerScale', 'enemyScale',
   'cameraOffsetY', 'cameraDeadzoneX', 'cameraDeadzoneY', 'cameraSmoothing', 'showCameraGuide', 'cameraLookAhead',
@@ -239,6 +240,18 @@ const generalTab: TabDef = {
       ],
     },
     {
+      id: 'g-fall',
+      title: 'Fall Death & Knockback',
+      subtitle: 'Enemies knocked into pits die — all heroes',
+      items: [
+        T('fallDeathEnabled', 'Fall Death', 'Enemies knocked or pushed into a pit / below the level die with full XP and drop credit. Off: they reappear at their post.'),
+        SEL('fallDeathBossMode', 'Bosses That Fall', 'Boss arenas are mostly solid, but if a boss does fall: take big damage and return to the arena, die instantly, or just return.', ['Big damage + return', 'Instant kill', 'No damage, return']),
+        S('fallDeathBossDamagePct', 'Boss Fall Damage', '% of max HP a boss loses when it falls (Big damage mode).', 0, 100, 1, 'pct'),
+        S('knockbackMult', 'Knockback (All Heroes)', 'Multiplies how far every hero\'s hits push enemies (bosses barely move).', 0, 3, 0.05, 'x'),
+        T('ledgeShoveAssist', 'Ledge Shove', 'A hit on a regular enemy standing near a pit edge shoves it over the edge (any hero, any weapon).'),
+      ],
+    },
+    {
       id: 'g-hurt',
       title: 'Damage Taken & Hit Reaction',
       items: [
@@ -320,6 +333,8 @@ const CHAR_TAB_LABEL: Record<CharacterId, string> = {
   brute: 'Brute',
   ronin: 'Ronin',
   minstrel: 'Minstrel',
+  monk: 'Monk',
+  wizard: 'Wizard',
 };
 
 function characterTab(id: CharacterId): TabDef {
@@ -332,10 +347,32 @@ function characterTab(id: CharacterId): TabDef {
         ? [S(P('hammerMeteorDamage'), 'Hammer Meteor Damage', 'Base damage of the Hammer Meteor slam (before weapon level bonuses).', 1, 15, 1, 'int')]
         : id === 'ronin'
           ? [S(P('katanaMegaBonus'), 'Mega Slash Bonus Damage', 'Extra damage while the charged Katana Mega Slash is active.', 0, 8, 1, 'int')]
-          : [
-              S(P('zipSlowMo'), 'Whip-Zip Enemy Slow-Mo', 'Enemy speed while the Minstrel is whip-zipping (0.42 = original).', 0.05, 1, 0.01, 'x'),
-              S(P('zipDurationSec'), 'Whip-Zip Max Duration', 'Maximum time a whip-zip lasts before it auto-ends.', 0.3, 2, 0.02, 'sec'),
-            ];
+          : id === 'monk'
+            ? [
+                S(P('monkDashLength'), 'Pyre Dash Length', 'Distance covered by the Pyre Dash [3] (before evolution bonuses).', 120, 700, 10, 'px'),
+                S(P('monkDashSec'), 'Pyre Dash Duration', 'How long the dash lasts. Shorter = faster dash over the same length. I-frames last the whole dash.', 0.12, 0.7, 0.01, 'sec'),
+                S(P('monkDashWidth'), 'Pyre Dash Hitbox Width', 'Width of the dash hitbox around the Monk.', 40, 220, 2, 'px'),
+                S(P('monkDashHeightMult'), 'Pyre Dash Hitbox Height ×', 'Hitbox height as a multiple of the Monk\'s height (1.35 = taller than him).', 0.6, 3, 0.05, 'x'),
+                S(P('monkDashDamage'), 'Pyre Dash Damage', 'Base damage of the dash (weapon level and hero bonus add on top).', 1, 12, 1, 'int'),
+                S(P('monkDashKnockback'), 'Pyre Dash Knockback', 'How hard the dash hurls foes aside (also lifts them).', 0, 900, 10, 'int'),
+                S(P('monkDashCooldown'), 'Pyre Dash Cooldown', 'Seconds between dashes (each fist hit shaves 0.2s off — Unbroken Flow).', 0.3, 5, 0.05, 'sec'),
+                S(P('monkComboBonus'), 'Palm (3rd Hit) Bonus Damage', 'Extra damage on the heavy palm that ends the 3-hit fist chain.', 0, 6, 1, 'int'),
+              ]
+            : id === 'wizard'
+              ? [
+                  S(P('wizardBoltSpeed'), 'Bolt Speed', 'Flight speed of the elemental bolt [1].', 200, 1600, 10, 'pxs'),
+                  S(P('wizardBoltRange'), 'Bolt Range', 'How far the bolt flies before fading. Mobile auto-attack fires at foes inside ~90% of this.', 120, 700, 10, 'px'),
+                  S(P('wizardBoltDamage'), 'Bolt Damage', 'Base bolt damage (weapon level adds on top; every 4th bolt is Overcharged: +1, pierces).', 1, 8, 1, 'int'),
+                  S(P('wizardNovaRadius'), 'Nova Radius', 'Radius of the Repulsion Nova [3] around the Wizard.', 60, 360, 5, 'px'),
+                  S(P('wizardNovaForce'), 'Nova Force', 'Horizontal push of the nova (falls off a little toward the edge).', 0, 1200, 10, 'int'),
+                  S(P('wizardNovaLift'), 'Nova Lift', 'Upward pop of the nova so foes fly in an arc.', 0, 700, 10, 'int'),
+                  S(P('wizardNovaDamage'), 'Nova Damage', 'Base nova damage (weapon level adds on top).', 0, 10, 1, 'int'),
+                  S(P('wizardNovaCooldown'), 'Nova Cooldown', 'Seconds between novas.', 0.3, 8, 0.05, 'sec'),
+                ]
+              : [
+                  S(P('zipSlowMo'), 'Whip-Zip Enemy Slow-Mo', 'Enemy speed while the Minstrel is whip-zipping (0.42 = original).', 0.05, 1, 0.01, 'x'),
+                  S(P('zipDurationSec'), 'Whip-Zip Max Duration', 'Maximum time a whip-zip lasts before it auto-ends.', 0.3, 2, 0.02, 'sec'),
+                ];
   return {
     id: `char-${id}`,
     label: CHAR_TAB_LABEL[id],

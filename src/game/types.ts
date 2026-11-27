@@ -1,6 +1,6 @@
 export type Facing = 1 | -1;
 
-export type CharacterId = 'hunter' | 'brute' | 'ronin' | 'minstrel';
+export type CharacterId = 'hunter' | 'brute' | 'ronin' | 'minstrel' | 'monk' | 'wizard';
 
 export type RaidId =
   | 'nocturne_castle'
@@ -67,6 +67,8 @@ export type WeaponId =
   | 'naginata'
   | 'ribbon_whip'
   | 'silk_whip'
+  | 'ash_wraps'
+  | 'spire_staff'
   | 'sword';
 
 export type AbilityId =
@@ -74,7 +76,9 @@ export type AbilityId =
   | 'dash_attack'
   | 'grapple'
   | 'gas_bomb'
-  | 'fire_weapon';
+  | 'fire_weapon'
+  | 'cinder_palm'
+  | 'chain_storm';
 
 export type ItemId =
   | 'health_potion'
@@ -380,6 +384,18 @@ export interface TuningConfig {
   /** Enemies that lose you while you hide stop chasing beyond this distance. */
   hideBreakDistance: number;
 
+  // ===== Fall death & knockback =====
+  /** Enemies knocked / pushed into a pit (below the level) die with full kill credit. */
+  fallDeathEnabled: boolean;
+  /** Bosses that fall: 0 = big damage + return to arena · 1 = instant kill · 2 = no damage, just return. */
+  fallDeathBossMode: number;
+  /** % of max HP a boss loses when it falls (mode 0). */
+  fallDeathBossDamagePct: number;
+  /** Multiplies the knockback every hero's hits apply to enemies. */
+  knockbackMult: number;
+  /** Hits near a pit edge shove regular enemies over it (all heroes). */
+  ledgeShoveAssist: boolean;
+
   killFreeze: KillFreezeTuning;
   characters: Record<CharacterId, CharacterTuning>;
   enemies: Record<string, EnemyTuning>;
@@ -433,6 +449,24 @@ export interface CharacterTuning {
   katanaMegaBonus: number; // ronin
   zipSlowMo: number; // minstrel
   zipDurationSec: number; // minstrel
+  // Monk: Pyre Dash (key 3) + fists
+  monkDashLength: number;
+  monkDashSec: number;
+  monkDashWidth: number;
+  monkDashHeightMult: number;
+  monkDashDamage: number;
+  monkDashKnockback: number;
+  monkDashCooldown: number;
+  monkComboBonus: number;
+  // Wizard: Elemental Bolt (key 1) + Repulsion Nova (key 3)
+  wizardBoltSpeed: number;
+  wizardBoltRange: number;
+  wizardBoltDamage: number;
+  wizardNovaRadius: number;
+  wizardNovaForce: number;
+  wizardNovaLift: number;
+  wizardNovaDamage: number;
+  wizardNovaCooldown: number;
 }
 
 export interface EnemyTuning {
@@ -517,6 +551,8 @@ export type InteractableKind =
   | 'camp_hero_brute'
   | 'camp_hero_ronin'
   | 'camp_hero_minstrel'
+  | 'camp_hero_monk'
+  | 'camp_hero_wizard'
   | 'camp_weapon_rack'
   | 'camp_craft_bench'
   | 'camp_raid_gate';
@@ -636,7 +672,15 @@ export interface Projectile {
     | 'stone_shard'
     | 'crimson_wave'
     | 'lava_orb'
-    | 'storm_arc';
+    | 'storm_arc'
+    | 'arcane_bolt';
+  /** Arcane bolt colours (element-tinted) and flags. */
+  color?: string;
+  color2?: string;
+  pierce?: boolean;
+  overcharged?: boolean;
+  hitIds?: number[];
+  startX?: number;
   slotLevel?: number;
   returnTimer?: number;
 }
@@ -790,6 +834,17 @@ export interface Player {
   minstrelVaultHitIds: Set<number>;
   minstrelDanceTimer: number;
   minstrelDanceTickTimer: number;
+
+  // Monk: Pyre Dash (key 3), Cinder Palm (spell), fist combo
+  monkDashTimer: number;
+  monkDashHitIds: Set<number>;
+  monkComboStep: number;
+  monkComboTimer: number;
+  monkPalmTimer: number;
+  // Wizard: Repulsion Nova pose timer, bolt counter for Overcharge passive, Chain Storm pose
+  wizardNovaTimer: number;
+  wizardBoltCount: number;
+  wizardCastTimer: number;
 
   isHidden: boolean;
   ambushTimer: number;

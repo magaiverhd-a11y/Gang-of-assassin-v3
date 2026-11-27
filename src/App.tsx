@@ -172,6 +172,8 @@ export default function App() {
       grapple: 0,
       gas_bomb: 0,
       fire_weapon: 0,
+      cinder_palm: 0,
+      chain_storm: 0,
     },
     itemSlots: ['health_potion', 'mana_potion', 'armor_potion'],
     itemCounts: {
