@@ -18,6 +18,7 @@ import { MapModal } from './components/MapModal';
 import { RaidSelectModal } from './components/RaidSelectModal';
 import { LeftHud, RightHud } from './components/SideHuds';
 import { TuningPanel } from './components/TuningPanel';
+import { cloneTuning, loadStoredTuning, saveStoredTuning } from './game/tuningStore';
 import { sound } from './game/audio';
 import {
   BASE_ELEMENTS,
@@ -43,7 +44,7 @@ import {
 } from './game/types';
 
 export default function App() {
-  const [tuning, setTuning] = useState<TuningConfig>(DEFAULT_TUNING);
+  const [tuning, setTuning] = useState<TuningConfig>(() => loadStoredTuning());
   const [showTuning, setShowTuning] = useState<boolean>(false);
   const [muted, setMuted] = useState<boolean>(false);
   const [hud, setHud] = useState<HudSnapshot>({
@@ -162,7 +163,17 @@ export default function App() {
 
   useEffect(() => {
     tuningRef.current = tuning;
+    saveStoredTuning(tuning);
   }, [tuning]);
+
+  const handleTuningReplace = useCallback((next: TuningConfig) => {
+    tuningRef.current = next;
+    setTuning(next);
+  }, []);
+
+  const handleTestFreeze = useCallback(() => {
+    engineRef.current?.previewKillFreeze(tuningRef.current);
+  }, []);
 
   const handleTuningChange = useCallback(
     <K extends keyof TuningConfig>(key: K, value: TuningConfig[K]) => {
@@ -172,7 +183,7 @@ export default function App() {
   );
 
   const handleResetDefaults = useCallback(() => {
-    setTuning(DEFAULT_TUNING);
+    setTuning(cloneTuning(DEFAULT_TUNING));
   }, []);
 
   const handleReturnToCamp = useCallback((preserveUpgrades?: boolean) => {
@@ -303,6 +314,18 @@ export default function App() {
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       const code = e.code;
+
+      // Never treat typing in the tuning panel (search / number boxes / paste box) as game input.
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+        return;
+      }
+
+      // Assassination "freeze until key": any key resumes (and is swallowed).
+      if (engineRef.current?.releaseKillFreeze()) {
+        e.preventDefault();
+        return;
+      }
 
       if (
         code === 'Space' ||
@@ -792,7 +815,13 @@ export default function App() {
         <LeftHud hud={hud} onOpenInventory={handleToggleInventory} />
 
         {/* Unobstructed Center Game Viewport */}
-        <div ref={stageRef} className="flex-1 relative min-w-0 h-full overflow-hidden bg-[#07090f]">
+        <div
+          ref={stageRef}
+          className="flex-1 relative min-w-0 h-full overflow-hidden bg-[#07090f]"
+          onPointerDownCapture={() => {
+            engineRef.current?.releaseKillFreeze();
+          }}
+        >
           <canvas ref={canvasRef} className="block w-full h-full" />
 
           {/* Boss Health Bar(s) — Supports Single Boss, Enraged Phase II, and Eclipse Duo-Boss Chambers */}
@@ -1053,11 +1082,12 @@ export default function App() {
 
         {/* Slide-over Tuning Drawer */}
         {showTuning && (
-          <div className="absolute top-0 right-0 bottom-0 z-30 shadow-2xl">
+          <div className="absolute top-0 right-0 bottom-0 z-30 shadow-2xl max-w-full">
             <TuningPanel
               tuning={tuning}
-              onChange={handleTuningChange}
-              onResetDefaults={handleResetDefaults}
+              onReplace={handleTuningReplace}
+              onTestFreeze={handleTestFreeze}
+              onClose={() => setShowTuning(false)}
             />
           </div>
         )}
