@@ -429,6 +429,17 @@ class SoundBank {
     this.playHarpNote(now + 0.05, 987.77 * pitchBoost, 0.42, 0.085);
   }
 
+  /** Minstrel Encore Waltz / phantom-echo dance: quick rising harp arpeggio (intensity 1-3). */
+  public playMinstrelDance(intensity = 1): void {
+    const ctx = this.ensure();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+    const level = Math.max(1, Math.min(3, Math.round(intensity)));
+    const notes = [523.25, 659.25, 783.99, 1046.5, 1318.51].slice(0, 2 + level);
+    notes.forEach((f, i) => this.playHarpNote(now + i * 0.06, f, 0.38, 0.075));
+    this.playNoiseBurst(now, 0.14, 'bandpass', 2400, 900, 1.6, 0.12, 0.3, 0.004);
+  }
+
   public playSlowMoPulse(): void {
     const ctx = this.ensure();
     if (!ctx) return;

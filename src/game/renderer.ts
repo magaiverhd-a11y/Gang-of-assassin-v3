@@ -36,6 +36,8 @@ export function renderGame(
   viewportW: number,
   viewportH: number
 ): void {
+  // Tuning v2: render with the same per-character tuning the engine simulates with.
+  tuning = engine.effectiveTuning ?? tuning;
   const stage = engine.currentStage;
   const theme = stage.theme;
 
@@ -74,7 +76,7 @@ export function renderGame(
   }
 
   // 2. World Space Transform (Zoom + Impact Zoom-Punch + Camera + Shake)
-  const effectiveZoom = tuning.zoom * (1 + engine.cameraZoomPunch);
+  const effectiveZoom = tuning.zoom * (1 + engine.cameraZoomPunch * (tuning.zoomPunchMult ?? 1));
   ctx.save();
   ctx.translate(
     Math.round(viewportW / 2 + engine.camera.offsetX),
@@ -529,9 +531,10 @@ export function renderGame(
     ctx.restore();
   }
 
-  if (engine.screenFlashAlpha > 0.005) {
+  const flashMult = tuning.flashMult ?? 1;
+  if (engine.screenFlashAlpha * flashMult > 0.005) {
     ctx.save();
-    ctx.globalAlpha = Math.min(0.68, engine.screenFlashAlpha);
+    ctx.globalAlpha = Math.min(0.68, engine.screenFlashAlpha * flashMult);
     ctx.fillStyle = engine.screenFlashColor;
     ctx.fillRect(0, 0, viewportW, viewportH);
 
@@ -547,7 +550,7 @@ export function renderGame(
       );
       vig.addColorStop(0, 'rgba(0,0,0,0)');
       vig.addColorStop(1, 'rgba(8,10,16,0.55)');
-      ctx.globalAlpha = Math.min(0.7, engine.screenFlashAlpha * 1.4);
+      ctx.globalAlpha = Math.min(0.7, engine.screenFlashAlpha * flashMult * 1.4);
       ctx.fillStyle = vig;
       ctx.fillRect(0, 0, viewportW, viewportH);
     }
@@ -572,6 +575,21 @@ export function renderGame(
         ctx.fillText(engine.transitionSublabel, viewportW / 2, viewportH / 2 + 18);
       }
     }
+    ctx.restore();
+  }
+
+  // Tuning v2: "freeze until key" badge (small, top-center so screenshots stay clean)
+  if (engine.killFreezeHold) {
+    ctx.save();
+    ctx.font = '600 11px "JetBrains Mono", monospace';
+    ctx.textAlign = 'center';
+    const label = 'FROZEN · press any key / tap to resume';
+    const w = ctx.measureText(label).width + 18;
+    ctx.globalAlpha = 0.82;
+    ctx.fillStyle = 'rgba(8,10,16,0.75)';
+    ctx.fillRect(viewportW / 2 - w / 2, 8, w, 20);
+    ctx.fillStyle = '#e5a93c';
+    ctx.fillText(label, viewportW / 2, 22);
     ctx.restore();
   }
 }

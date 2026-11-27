@@ -8,6 +8,7 @@ import {
   canCharacterUseWeapon,
   CHARACTERS,
   COMBINED_ELEMENTS,
+  DEFAULT_TUNING,
   CRAFT_RECIPES,
   getActiveElementDef,
   getCombinedElementId,
@@ -25,6 +26,10 @@ import {
 import { CAMP_STAGE, ENEMY_SPECS, isFlyingEnemyType } from './level';
 import { RAIDS_BY_ID } from './raids';
 import {
+  EnemyTuning,
+  CharacterTuning,
+  CharacterDef,
+  BossTuning,
   AbilityId,
   Afterimage,
   ArtifactId,
@@ -166,7 +171,120 @@ export class GameEngine {
   private afterimageAccum = 0;
   private shadowAfterimageAccum = 0;
 
+  // ===== Tuning v2 state =====
+  /** Last raw tuning passed in by the UI (used by helpers that do not receive tuning). */
+  private tuning: TuningConfig = DEFAULT_TUNING;
+  /** Tuning with per-character overrides baked in (renderer uses this too). */
+  public effectiveTuning: TuningConfig = DEFAULT_TUNING;
+  /** Assassination slow-motion (real-time seconds left + world time scale). */
+  public killSlowTimer = 0;
+  public killSlowScale = 1;
+  /** "Freeze until key" mode: world is held after an assassination until released. */
+  public killFreezeHold = false;
+
+  /** Character definition with live tuning overrides applied. */
+  private cdef(id: CharacterId): CharacterDef {
+    const base = CHARACTERS[id];
+    const t = this.tuning.characters?.[id];
+    if (!t) return base;
+    return {
+      ...base,
+      baseHp: Math.max(1, Math.round(t.baseHp)),
+      baseMp: Math.max(0, Math.round(t.baseMp)),
+      speedMult: t.speedMult,
+      jumpMult: t.jumpMult,
+      airJumps: Math.max(0, Math.round(t.airJumps)),
+      canWallCling: t.canWallCling,
+      bonusBaseDamage: Math.round(t.bonusBaseDamage),
+      bonusWeaponDamage: Math.round(t.bonusWeaponDamage),
+    };
+  }
+
+  private charTune(id: CharacterId = this.player.characterId): CharacterTuning {
+    return this.tuning.characters?.[id] ?? DEFAULT_TUNING.characters[id];
+  }
+
+  private enemyTune(enemy: Enemy): EnemyTuning & Partial<BossTuning> {
+    const table = enemy.isBoss ? this.tuning.bosses : this.tuning.enemies;
+    const fallback = enemy.isBoss ? DEFAULT_TUNING.bosses : DEFAULT_TUNING.enemies;
+    return table?.[enemy.type] ?? fallback[enemy.type] ?? DEFAULT_TUNING.enemies.ghoul;
+  }
+
+  /** Scale damage an enemy deals to the player (per type x global). */
+  private scaleEnemyDamage(amount: number, enemy: Enemy): number {
+    const mult =
+      this.enemyTune(enemy).damageMult *
+      (enemy.isBoss ? this.tuning.bossDamageMult : this.tuning.enemyDamageMult);
+    if (mult === 1) return amount;
+    if (mult <= 0) return 0;
+    return Math.max(1, Math.round(amount * mult));
+  }
+
+  /** Build the tuning the engine actually runs with: global values x current hero's overrides. */
+  public buildEffectiveTuning(tuning: TuningConfig): TuningConfig {
+    this.tuning = tuning;
+    const ct = this.charTune(this.player?.characterId ?? this.selectedCharacter);
+    const eff: TuningConfig = {
+      ...tuning,
+      attackStartupMs: tuning.attackStartupMs * ct.attackTimeMult,
+      attackActiveMs: tuning.attackActiveMs * ct.attackTimeMult,
+      attackRecoveryMs: tuning.attackRecoveryMs * ct.attackTimeMult,
+      attackRange: tuning.attackRange * ct.attackRangeMult,
+    };
+    this.effectiveTuning = eff;
+    return eff;
+  }
+
+  /** Release the "freeze until key" hold. Returns true if a hold was active. */
+  public releaseKillFreeze(): boolean {
+    if (!this.killFreezeHold) return false;
+    this.killFreezeHold = false;
+    return true;
+  }
+
+  /** Fire the configured assassination freeze package at a world point (used by kills and the panel's Test button). */
+  public triggerKillFreeze(x: number, y: number, isBoss: boolean, tuning: TuningConfig): void {
+    const kf = tuning.killFreeze;
+    if (!kf || !kf.enabled) {
+      // Freeze disabled: plain hit-stop like a normal heavy hit.
+      this.hitstopTimer = Math.max(this.hitstopTimer, tuning.hitstopMs / 1000);
+      this.triggerShake(Math.max(8, tuning.critShakeIntensity), 0.24);
+      return;
+    }
+    const bossMult = isBoss ? kf.bossFreezeMult : 1;
+    this.hitstopTimer = Math.max(this.hitstopTimer, (kf.freezeMs / 1000) * bossMult);
+    if (kf.shake > 0) this.triggerShake(kf.shake, kf.shakeMs / 1000);
+    if (kf.zoomPunch > 0) this.cameraZoomPunch = Math.max(this.cameraZoomPunch, kf.zoomPunch);
+    if (kf.flash) {
+      this.impactFrameTimer = Math.max(this.impactFrameTimer, kf.impactFrameMs / 1000);
+      this.triggerImpactFlash('#ff334b', kf.flashAlpha, x, y, 1.75, 0.34);
+    }
+    if (kf.slowMoMs > 0 && kf.slowMoScale < 1) {
+      // Slow-mo starts after the freeze ends (timer only ticks once hit-stop is over).
+      this.killSlowTimer = Math.max(this.killSlowTimer, kf.slowMoMs / 1000);
+      this.killSlowScale = Math.max(0.05, kf.slowMoScale);
+    }
+    if (kf.holdUntilKey) {
+      this.killFreezeHold = true;
+    }
+  }
+
+  /** Panel "Test Freeze" button: plays the assassination impact on the hero without needing a target. */
+  public previewKillFreeze(tuning: TuningConfig): void {
+    const p = this.player;
+    const x = p.x + p.facing * 30;
+    const y = p.y - p.baseH * tuning.playerScale * 0.55;
+    sound.playAssassinate();
+    this.spawnSparkles(x, y, 34, '#ff334b', '#fff5d6', 1.8);
+    this.spawnSlashLine(x, y, p.facing > 0 ? -0.58 : Math.PI + 0.58, 260, 12, '#ff334b', '#ffffff', 0.34);
+    this.shockwaves.push({ x, y, radius: 14, maxRadius: 155, color: '#ff334b', life: 0.3, maxLife: 0.3 });
+    this.spawnDamageNumber(x, y - 18, 'FREEZE TEST', '#ff334b', 1.3);
+    this.triggerKillFreeze(x, y, false, tuning);
+  }
+
   constructor(tuning: TuningConfig) {
+    this.tuning = tuning;
+    this.buildEffectiveTuning(tuning);
     this.player = this.createFreshPlayer(CAMP_STAGE.floorY, this.selectedCharacter);
     this.camera = this.createCamera(this.player, tuning);
     this.rollOfferedRaids();
@@ -264,7 +382,15 @@ export class GameEngine {
       animTime: 0,
       dead: false,
     });
+    this.applyEnemyHpTuning(this.enemies[this.enemies.length - 1]);
     this.spawnSparkles(clampX, y - spec.baseH * 0.5, 14, '#2dd4bf', '#ffffff', 1.1);
+  }
+
+  private applyEnemyHpTuning(e: Enemy): void {
+    const m = this.enemyTune(e).hpMult;
+    if (m === 1) return;
+    e.maxHp = Math.max(1, Math.round(e.maxHp * m));
+    e.hp = e.maxHp;
   }
 
   public getRaidOrderTier(): number {
@@ -317,7 +443,7 @@ export class GameEngine {
   }
 
   private createFreshPlayer(floorY: number, charId: CharacterId): Player {
-    const cDef = CHARACTERS[charId];
+    const cDef = this.cdef(charId);
     const art = this.getArtifactBaseBonuses();
     const maxHp = cDef.baseHp + art.maxHp;
     const maxMp = cDef.baseMp + art.maxMp;
@@ -669,8 +795,8 @@ export class GameEngine {
 
     const subtitle =
       targetRaid === 'eclipse_gauntlet'
-        ? `END BOSS GAUNTLET · 4 Duo-Boss Chambers + Final Overlord · ${CHARACTERS[this.selectedCharacter].name}`
-        : `${scaling.label} · 4 Rooms + Big Boss · ${CHARACTERS[this.selectedCharacter].name}`;
+        ? `END BOSS GAUNTLET · 4 Duo-Boss Chambers + Final Overlord · ${this.cdef(this.selectedCharacter).name}`
+        : `${scaling.label} · 4 Rooms + Big Boss · ${this.cdef(this.selectedCharacter).name}`;
 
     this.startRoomTransition(`${raidDef.name} · ${room1.name}`, subtitle, () => {
       // Preserve the hero's full Camp loadout & carried upgrades when marching into Room 1!
@@ -687,7 +813,7 @@ export class GameEngine {
     if (this.selectedCharacter === charId) return;
 
     const prev = this.player;
-    const prevBase = CHARACTERS[prev.characterId];
+    const prevBase = this.cdef(prev.characterId);
     const art = this.getArtifactBaseBonuses();
 
     // Preserve carried raid upgrade deltas when swapping heroes by the campfire!
@@ -711,7 +837,7 @@ export class GameEngine {
 
     // Carry inventory (weapons, spells, slots, slot levels, potions) across hero switch in Camp.
     // Main weapons and hero-specific weapons are strictly class-exclusive!
-    const nextChar = CHARACTERS[charId];
+    const nextChar = this.cdef(charId);
     const mergedWeapons = new Set<WeaponId>([...prev.unlockedWeapons, nextChar.defaultWeapon]);
     next.unlockedWeapons = WEAPON_ORDER.filter((w) => mergedWeapons.has(w));
     next.weapon = canCharacterUseWeapon(charId, prev.weapon) ? prev.weapon : nextChar.defaultWeapon;
@@ -760,15 +886,15 @@ export class GameEngine {
       this.player.x,
       this.player.y - this.player.baseH * tuning.playerScale * 0.5,
       16,
-      CHARACTERS[charId].accent,
+      this.cdef(charId).accent,
       '#fff5d6',
       1.1
     );
     this.spawnDamageNumber(
       this.player.x,
       this.player.y - this.player.baseH * tuning.playerScale - 16,
-      CHARACTERS[charId].name.toUpperCase(),
-      CHARACTERS[charId].accent,
+      this.cdef(charId).name.toUpperCase(),
+      this.cdef(charId).accent,
       1.0
     );
   }
@@ -843,7 +969,7 @@ export class GameEngine {
     if (this.bossCores < art.coreCost) return false;
 
     const p = this.player;
-    const baseChar = CHARACTERS[p.characterId];
+    const baseChar = this.cdef(p.characterId);
     const artBonus = this.getArtifactBaseBonuses();
 
     switch (art.sacrificeType) {
@@ -983,6 +1109,8 @@ export class GameEngine {
     const scaling = getRaidOrderScaling(this.getRaidOrderTier());
     this.platforms = this.currentStage.platforms;
     this.enemies = this.currentStage.createEnemies(scaling.hpMult, scaling.flatHpBonus);
+    this.tuning = tuning;
+    for (const e of this.enemies) this.applyEnemyHpTuning(e);
     if (this.isCursedChamber) {
       for (const e of this.enemies) {
         const bonus = Math.max(1, Math.round(e.maxHp * 0.25));
@@ -1244,7 +1372,7 @@ export class GameEngine {
         unlockPool.push({
           id: `weapon_${wId}`,
           kind: 'unlock_weapon',
-          category: w.ownerChar ? `${CHARACTERS[w.ownerChar].name} Weapon` : 'New Weapon',
+          category: w.ownerChar ? `${this.cdef(w.ownerChar).name} Weapon` : 'New Weapon',
           title: w.name,
           description: `${w.description} Added to your Inventory (equip in Base Camp [I]).`,
           accent: w.accent,
@@ -1300,7 +1428,7 @@ export class GameEngine {
     );
     if (allyPool.length > 0) {
       const pickedPartner = allyPool[Math.floor(Math.random() * allyPool.length)];
-      const partnerDef = CHARACTERS[pickedPartner];
+      const partnerDef = this.cdef(pickedPartner);
       const partnerMove =
         pickedPartner === 'brute'
           ? 'Meteor Hammer Slam (massive AoE crater + stun)'
@@ -1626,7 +1754,7 @@ export class GameEngine {
         if (opt.partnerCharId) {
           p.tagPartner = opt.partnerCharId;
           p.tagPartnerCooldown = 0;
-          const partnerDef = CHARACTERS[opt.partnerCharId];
+          const partnerDef = this.cdef(opt.partnerCharId);
           sound.playHeroTagIn();
           this.spawnSparkles(p.x, p.y - p.baseH * 0.5, 26, partnerDef.accent, '#ffffff', 1.35);
           this.spawnDamageNumber(
@@ -2289,6 +2417,7 @@ export class GameEngine {
   }
 
   public triggerShake(magnitude: number, duration = 0.22): void {
+    magnitude *= this.tuning.shakeMult ?? 1;
     if (magnitude <= 0) return;
     this.camera.shakeMagnitude = Math.max(this.camera.shakeMagnitude, magnitude);
     this.camera.shakeDuration = duration;
@@ -2382,11 +2511,22 @@ export class GameEngine {
   public update(
     dt: number,
     input: InputState,
-    tuning: TuningConfig,
+    rawTuning: TuningConfig,
     viewportW: number,
     viewportH: number
   ): void {
-    const safeDt = Math.min(dt, 0.05);
+    const tuning = this.buildEffectiveTuning(rawTuning);
+    let safeDt = Math.min(dt, 0.05) * Math.max(0.05, tuning.gameSpeed ?? 1);
+
+    // FREEZE-UNTIL-KEY: hold the exact assassination frame (screenshots / tuning). Camera stays put.
+    if (this.killFreezeHold) {
+      if (this.status !== 'PLAYING') {
+        this.killFreezeHold = false;
+      } else {
+        return;
+      }
+    }
+
     this.time += safeDt;
 
     this.updateCameraShake(safeDt);
@@ -2417,6 +2557,12 @@ export class GameEngine {
         this.impactBurstTimer = Math.max(0, this.impactBurstTimer - safeDt * 0.2);
       }
       return;
+    }
+
+    // Assassination slow-motion: real time ticks the timer, the world runs at killSlowScale.
+    if (this.killSlowTimer > 0) {
+      this.killSlowTimer = Math.max(0, this.killSlowTimer - safeDt);
+      safeDt *= this.killSlowScale;
     }
 
     this.updateParticlesAndNumbers(safeDt);
@@ -2454,7 +2600,7 @@ export class GameEngine {
 
     if (!this.currentStage.isCamp) {
       // Eclipse Hourglass slows foes to 14%; Minstrel Whip-Zip creates tactical 42% slow-motion!
-      const minstrelSlow = this.player.minstrelZipActive ? 0.42 : 1.0;
+      const minstrelSlow = this.player.minstrelZipActive ? this.charTune('minstrel').zipSlowMo : 1.0;
       const enemySlowMult = Math.min(this.eclipseFreezeTimer > 0 ? 0.14 : 1.0, minstrelSlow);
       const enemyDt = safeDt * enemySlowMult;
       this.updateEnemies(enemyDt, tuning);
@@ -2528,7 +2674,7 @@ export class GameEngine {
 
   private updatePlayer(dt: number, input: InputState, tuning: TuningConfig): void {
     const p = this.player;
-    const cDef = CHARACTERS[p.characterId];
+    const cDef = this.cdef(p.characterId);
     const scale = tuning.playerScale;
     const cdSpeedMult = 1 + p.swiftFootworkLevel * 0.1;
     p.animTime += dt;
@@ -3592,7 +3738,7 @@ export class GameEngine {
         // Whip Weapon Skill: Backdash (Every 5 upgrades expands Explosive Parting Shock Snap!)
         const canBackdash = p.onGround || (tuning.allowAirBackdash && !p.airBackdashUsed);
         if (!canBackdash) return false;
-        p.backdashTimer = 0.2 + Math.min(0.1, evoTier * 0.03);
+        p.backdashTimer = this.charTune().backdashSec + Math.min(0.1, evoTier * 0.03);
         p.weaponSkillCooldown = wDef.skillCooldown;
         p.invulnTimer = Math.max(p.invulnTimer, 0.24 + evoTier * 0.06);
         p.crouching = false;
@@ -3945,7 +4091,7 @@ export class GameEngine {
     p.minstrelZipActive = true;
     p.minstrelZipX = anchor.x;
     p.minstrelZipY = anchor.y;
-    p.minstrelZipTimer = 0.78;
+    p.minstrelZipTimer = this.charTune('minstrel').zipDurationSec;
     p.minstrelZipHitIds.clear();
     p.minstrelVaultTimer = 0;
     p.attackState = 'idle';
@@ -4327,7 +4473,13 @@ export class GameEngine {
     tuning: TuningConfig
   ): boolean {
     const p = this.player;
-    const def = ABILITIES[abilityId];
+    const ct = this.charTune();
+    const baseDef = ABILITIES[abilityId];
+    const def = {
+      ...baseDef,
+      manaCost: Math.max(0, Math.round(baseDef.manaCost * ct.spellCostMult)),
+      cooldown: baseDef.cooldown * ct.spellCooldownMult,
+    };
     if (p.abilityCooldowns[abilityId] > 0) return false;
     if (p.mp < def.manaCost) {
       this.spawnDamageNumber(p.x, p.y - p.baseH * tuning.playerScale - 12, 'LOW MP', '#60a5fa', 0.85);
@@ -5288,7 +5440,7 @@ export class GameEngine {
     }
   }
 
-  private updateEnemies(dt: number, tuning: TuningConfig): void {
+  private updateEnemies(baseDt: number, tuning: TuningConfig): void {
     const p = this.player;
     const eScale = tuning.enemyScale;
     const bossStart = this.currentStage.bossZoneStartX;
@@ -5298,10 +5450,14 @@ export class GameEngine {
     for (const enemy of this.enemies) {
       if (enemy.dead) continue;
 
+      const et = this.enemyTune(enemy);
+      // Per-type AI time scale (movement, cooldowns, windups all speed up / slow down together)
+      const dt = baseDt * Math.max(0.05, et.speedMult);
       const isFlying = isFlyingEnemyType(enemy.type);
 
-      // Trigger Phase II ENRAGE on Big Bosses at <= 52% HP!
-      if (enemy.isBigBoss && !enemy.enraged && enemy.hp <= enemy.maxHp * 0.52) {
+      // Trigger Phase II ENRAGE on Big Bosses at <= 52% HP (tunable per boss)!
+      const canEnrage = enemy.isBigBoss || (enemy.isBoss && Boolean(et.phase2OnMiniBoss));
+      if (canEnrage && !enemy.enraged && enemy.hp <= enemy.maxHp * (et.phase2At ?? 0.52)) {
         enemy.enraged = true;
         enemy.invulnTimer = Math.max(enemy.invulnTimer, 0.75);
         sound.playHammerBoom();
@@ -5330,7 +5486,7 @@ export class GameEngine {
         enemy.vx *= Math.pow(0.28, dt);
       }
       const isChilled = Boolean(enemy.chillTimer && enemy.chillTimer > 0);
-      const enemyPace = (enemy.enraged ? pace * 1.24 : pace) * (isChilled ? 0.58 : 1.0);
+      const enemyPace = (enemy.enraged ? pace * (et.enrageSpeed ?? 1.24) : pace) * (isChilled ? 0.58 : 1.0);
 
       enemy.animTime += dt * (isChilled ? 0.6 : 1.0);
       if (enemy.flashTimer > 0) enemy.flashTimer = Math.max(0, enemy.flashTimer - dt);
@@ -5385,7 +5541,7 @@ export class GameEngine {
 
       // Hiding spots conceal the hunter from non-boss enemies!
       if (p.isHidden && !enemy.isBoss) {
-        if (enemy.alerted && Math.hypot(dx, dy) > 42) {
+        if (enemy.alerted && Math.hypot(dx, dy) > tuning.hideBreakDistance) {
           enemy.alerted = false;
           enemy.attackChargeTimer = 0;
           enemy.pendingAttackKind = '';
@@ -5394,22 +5550,34 @@ export class GameEngine {
       } else if (!enemy.alerted) {
         const inFront = dx * enemy.facing > -24;
         // Crouch-walking AND Shadow Chain Momentum dramatically shrink non-boss enemy detection!
-        const crouchStealth = p.crouching && !enemy.isBoss ? 0.52 : 1.0;
-        const chainStealth = p.shadowChainTimer > 0 && !enemy.isBoss ? 0.35 : 1.0;
-        const effectiveVision = enemy.visionRange * crouchStealth * chainStealth;
-        const closeSense = p.shadowChainTimer > 0 ? 34 : p.crouching ? 44 : 95;
+        const crouchStealth = p.crouching && !enemy.isBoss ? tuning.crouchStealthMult : 1.0;
+        const chainStealth = p.shadowChainTimer > 0 && !enemy.isBoss ? tuning.chainStealthMult : 1.0;
+        const effectiveVision =
+          enemy.visionRange * crouchStealth * chainStealth * et.visionMult * tuning.stealthVisionMult;
+        const closeSense =
+          p.shadowChainTimer > 0
+            ? tuning.closeSenseChain
+            : p.crouching
+              ? tuning.closeSenseCrouch
+              : tuning.closeSenseNormal;
         const canSee = isFlying
           ? Math.hypot(dx, dy) < effectiveVision
           : enemy.isBoss
             ? p.x >= bossStart
-            : (inFront || distX < closeSense) && distX < effectiveVision && distY < 110;
+            : (inFront || distX < closeSense) && distX < effectiveVision && distY < tuning.visionHeight;
 
         if (canSee) {
           enemy.alerted = true;
           enemy.alertTimer = 0.6;
-          enemy.attackCooldown = Math.max(enemy.attackCooldown, 0.5 / pace);
+          enemy.attackCooldown = Math.max(enemy.attackCooldown, et.reactionSec / pace);
         }
       }
+
+      // Snapshot so the generic windup / cooldown / damage tuning can be applied after the AI switch.
+      const prevCooldown = enemy.attackCooldown;
+      const prevCharge = enemy.attackChargeTimer;
+      const prevProjCount = this.projectiles.length;
+      const prevHazardCount = this.groundHazards.length;
 
       const startTelegraph = (kind: string, baseDuration: number) => {
         const dur = Math.max(0.25, baseDuration / enemyPace);
@@ -7368,6 +7536,41 @@ export class GameEngine {
           break;
         }
       }
+
+      this.applyEnemyAttackTuning(enemy, et, prevCooldown, prevCharge, prevProjCount, prevHazardCount);
+    }
+  }
+
+  /** Generic per-type windup / cooldown / damage tuning layered on top of every enemy's hand-written AI. */
+  private applyEnemyAttackTuning(
+    enemy: Enemy,
+    et: EnemyTuning,
+    prevCooldown: number,
+    prevCharge: number,
+    prevProjCount: number,
+    prevHazardCount: number
+  ): void {
+    if (et.cooldownMult !== 1 && enemy.attackCooldown > prevCooldown + 1e-6) {
+      enemy.attackCooldown = prevCooldown + (enemy.attackCooldown - prevCooldown) * Math.max(0.05, et.cooldownMult);
+    }
+    if (et.windupMult !== 1 && enemy.attackChargeTimer > prevCharge + 1e-6) {
+      const m = Math.max(0.05, et.windupMult);
+      enemy.attackChargeTimer *= m;
+      enemy.chargeDuration *= m;
+    }
+    for (let i = prevProjCount; i < this.projectiles.length; i++) {
+      const proj = this.projectiles[i];
+      if (proj.fromEnemy && !proj.tuned) {
+        proj.tuned = true;
+        proj.damage = this.scaleEnemyDamage(proj.damage, enemy);
+      }
+    }
+    for (let i = prevHazardCount; i < this.groundHazards.length; i++) {
+      const h = this.groundHazards[i];
+      if (!h.tuned) {
+        h.tuned = true;
+        h.damage = this.scaleEnemyDamage(h.damage, enemy);
+      }
     }
   }
 
@@ -8304,7 +8507,7 @@ export class GameEngine {
       }
 
       if (!enemy.dead && !(p.isHidden && !enemy.isBoss) && rectsOverlap(pRect, eRect)) {
-        this.damagePlayer(1, enemy.x, enemy.isBoss, tuning);
+        this.damagePlayer(this.scaleEnemyDamage(1, enemy), enemy.x, enemy.isBoss, tuning);
         enemy.alerted = true;
       }
     }
@@ -8416,12 +8619,12 @@ export class GameEngine {
     // Milestone-aware damage calculation
     let baseDamage = 1;
     if (source === 'hammer_meteor') {
-      const charBonus = CHARACTERS[p.characterId].bonusBaseDamage;
-      baseDamage = 4 + charBonus + weaponFlat + (enemy.isBoss ? 2 : 0);
+      const charBonus = this.cdef(p.characterId).bonusBaseDamage;
+      baseDamage = this.charTune().hammerMeteorDamage + charBonus + weaponFlat + (enemy.isBoss ? 2 : 0);
     } else if (source === 'weapon') {
-      const charBonus = CHARACTERS[p.characterId].bonusBaseDamage;
+      const charBonus = this.cdef(p.characterId).bonusBaseDamage;
       const heavyBonus = p.weapon === 'hammer' || p.weapon === 'greataxe' ? 1 : 0;
-      const megaBonus = p.katanaMegaSlashTimer > 0 ? 1 : 0;
+      const megaBonus = p.katanaMegaSlashTimer > 0 ? this.charTune().katanaMegaBonus : 0;
       const bossBonus = enemy.isBoss ? 1 : 0;
       baseDamage = 1 + charBonus + heavyBonus + megaBonus + weaponFlat + bossBonus;
     } else if (source === 'fireball') {
@@ -8443,8 +8646,12 @@ export class GameEngine {
       damage = Math.max(damage + 1, Math.round(damage * bossMult));
     }
 
+    if (tuning.playerDamageMult !== 1 && !isAssassination) {
+      damage = tuning.playerDamageMult <= 0 ? 0 : Math.max(1, Math.round(damage * tuning.playerDamageMult));
+    }
+
     if (isAssassination) {
-      const assMult = 1 + p.assassinTrainingLevel * 0.25;
+      const assMult = (1 + p.assassinTrainingLevel * 0.25) * this.charTune().assassinDamageMult * tuning.playerDamageMult;
       const shadowAssBonus = this.hasElement('shadow') ? 2 : 0;
       damage = enemy.isBoss
         ? Math.round((8 + weaponFlat * 2 + shadowAssBonus) * assMult)
@@ -8486,7 +8693,7 @@ export class GameEngine {
 
     // Boss Anti-Combo Protection: Post-Hit Immunity + Reactive Jump-Away OR Instant Counter-Charge!
     if (enemy.isBoss && enemy.hp > 0 && source !== 'gas') {
-      enemy.invulnTimer = enemy.isBigBoss ? 0.62 : 0.56;
+      enemy.invulnTimer = (enemy.isBigBoss ? 0.62 : 0.56) * (this.enemyTune(enemy).invulnMult ?? 1);
       enemy.bossHitCounter += 1;
       const pace = getRaidOrderScaling(this.getRaidOrderTier()).chargeSpeedMult * this.getRoomPaceMult();
       const isFlyingBoss = isFlyingEnemyType(enemy.type);
@@ -8618,30 +8825,30 @@ export class GameEngine {
       });
       // Shadow Chain Momentum: EVERY assassination triggers speed + stealth burst & rising chain chime!
       p.shadowChainCount += 1;
-      const chainDuration = 2.8 + p.assassinTrainingLevel * 0.7;
+      const ctA = this.charTune();
+      const mpReward = Math.max(0, Math.round(ctA.assassinMpReward));
+      const chainDuration = ctA.shadowChainSec + p.assassinTrainingLevel * 0.7;
       p.shadowChainTimer = Math.max(p.shadowChainTimer, chainDuration);
       p.ambushTimer = Math.max(p.ambushTimer, chainDuration);
       sound.playShadowChain(p.shadowChainCount);
 
       const funnyCallouts = isDropAssassination
-        ? ['DROP BONK! · +2 MP', 'FROM THE RAFTERS! · +2 MP', 'AIR MAIL! · +2 MP', 'HEADS UP! · +2 MP']
+        ? ['DROP BONK!', 'FROM THE RAFTERS!', 'AIR MAIL!', 'HEADS UP!']
         : p.crouching
-          ? ['SNEAK ATTACK! · +2 MP', 'BOO! · +2 MP', 'ANKLE BITER! · +2 MP', 'DIDN’T SEE ME! · +2 MP']
-          : ['SURPRISE! · +2 MP', 'LIGHTS OUT! · +2 MP', 'SHADOW CHAIN! · +2 MP', 'CLEAN CUT! · +2 MP'];
+          ? ['SNEAK ATTACK!', 'BOO!', 'ANKLE BITER!', 'DIDN’T SEE ME!']
+          : ['SURPRISE!', 'LIGHTS OUT!', 'SHADOW CHAIN!', 'CLEAN CUT!'];
       const callout =
         p.shadowChainCount >= 2
-          ? `SHADOW CHAIN x${p.shadowChainCount}! · +2 MP`
+          ? `SHADOW CHAIN x${p.shadowChainCount}!`
           : funnyCallouts[Math.floor(Math.random() * funnyCallouts.length)];
-      this.spawnDamageNumber(hitX, hitY - 18, `${damage}`, '#ff334b', 1.55, callout);
-      this.triggerShake(Math.max(16, tuning.critShakeIntensity * 1.65), 0.38);
-      this.hitstopTimer = Math.max((tuning.hitstopMs / 1000) * 4.0, 0.26);
-      this.cameraZoomPunch = Math.max(this.cameraZoomPunch, 0.14);
-      this.impactFrameTimer = Math.max(this.impactFrameTimer, 0.095);
-      this.triggerImpactFlash('#ff334b', 0.68, hitX, hitY, 1.75, 0.34);
+      const mpTag = mpReward > 0 ? ` · +${mpReward} MP` : '';
+      this.spawnDamageNumber(hitX, hitY - 18, `${damage}`, '#ff334b', 1.55, `${callout}${mpTag}`);
+      // ASSASSINATION FREEZE (fully tunable in the Kill FX tab)
+      this.triggerKillFreeze(hitX, hitY, enemy.isBoss, tuning);
 
       // Assassination execution bonus: restore +2 MP + brief i-frames
-      p.mp = Math.min(p.maxMp, p.mp + 2);
-      p.invulnTimer = Math.max(p.invulnTimer, 0.42);
+      p.mp = Math.min(p.maxMp, p.mp + mpReward);
+      p.invulnTimer = Math.max(p.invulnTimer, ctA.assassinIFramesSec);
       this.afterimages.push({
         x: p.x,
         y: p.y,
@@ -9039,7 +9246,7 @@ export class GameEngine {
 
   private summonPhantomAlly(charId: CharacterId, tuning: TuningConfig, offsetX?: number): void {
     const p = this.player;
-    const def = CHARACTERS[charId];
+    const def = this.cdef(charId);
     const spawnX = Math.max(
       40,
       Math.min(this.currentStage.worldWidth - 40, p.x + (offsetX ?? p.facing * 42))
@@ -9197,7 +9404,7 @@ export class GameEngine {
     tuning: TuningConfig
   ): void {
     const p = this.player;
-    if (p.invulnTimer > 0 || this.status !== 'PLAYING') return;
+    if (damage <= 0 || p.invulnTimer > 0 || this.status !== 'PLAYING') return;
 
     // UNIVERSAL ZERO-EXTRA-BUTTON PERFECT PARRY / CLASH (Works for ALL 4 Heroes via [1] Attack or [3] Skill!)
     if (p.parryWindowTimer > 0) {
@@ -9277,7 +9484,7 @@ export class GameEngine {
     p.hp = Math.max(0, p.hp - finalDamage);
     this.comboCount = 0;
     this.comboTimer = 0;
-    p.invulnTimer = 1.25;
+    p.invulnTimer = tuning.playerInvulnSec;
     p.flashTimer = 0.18;
     p.attackState = 'idle';
     p.attackTimer = 0;

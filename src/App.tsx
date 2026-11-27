@@ -108,6 +108,7 @@ export default function App() {
     specialItemSlot: 'eclipse_hourglass',
     specialItemCounts: {
       eclipse_hourglass: 1,
+      hero_tag_horn: 0,
     },
     specialItemCooldown: 0,
     eclipseFreezeTimer: 0,
@@ -137,6 +138,12 @@ export default function App() {
     shadowChainTimer: 0,
     shadowChainCount: 0,
     minstrelSlowMo: false,
+    parries: 0,
+    secretsFound: 0,
+    isCursedChamber: false,
+    cursedDoorAvailable: false,
+    tagPartner: null,
+    tagPartnerCooldown: 0,
   });
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
