@@ -1075,6 +1075,14 @@ export class GameEngine {
     }
   }
 
+  /** Open the forge / blood altar directly (mobile top bar). Only works in Base Camp. */
+  public openCrafting(): void {
+    if (this.status === 'CAMP' && this.currentStage.isCamp) {
+      sound.playInteract();
+      this.status = 'CRAFTING';
+    }
+  }
+
   public toggleMap(): void {
     if (this.status === 'MAP') {
       this.status = this.modalReturnStatus;

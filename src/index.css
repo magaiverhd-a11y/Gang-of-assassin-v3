@@ -55,3 +55,20 @@ input[type="range"].tune-slider::-moz-range-thumb {
   border: 1px solid #c82333;
   cursor: pointer;
 }
+
+/* ---- Mobile portrait layout ---- */
+@keyframes nc-pulse {
+  0%, 100% { filter: brightness(1); }
+  50% { filter: brightness(1.45); }
+}
+
+html.nc-mobile,
+html.nc-mobile body {
+  overscroll-behavior: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+  position: fixed;
+  inset: 0;
+}
