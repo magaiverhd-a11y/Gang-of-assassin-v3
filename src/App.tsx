@@ -489,6 +489,10 @@ export default function App() {
 
     if (!engineRef.current) {
       engineRef.current = new GameEngine(tuningRef.current);
+      // Debug hook for tuning / automated smoke tests: open the game with ?debug in the URL.
+      if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('debug')) {
+        (window as unknown as { __nocturneEngine?: GameEngine }).__nocturneEngine = engineRef.current;
+      }
     }
 
     let viewportW = stage.clientWidth || 960;

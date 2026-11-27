@@ -181,6 +181,8 @@ export class GameEngine {
   public killSlowScale = 1;
   /** "Freeze until key" mode: world is held after an assassination until released. */
   public killFreezeHold = false;
+  /** Hold requested; engages once the kill hit-stop has finished so the held frame is readable. */
+  private killFreezeHoldPending = false;
 
   /** Character definition with live tuning overrides applied. */
   private cdef(id: CharacterId): CharacterDef {
@@ -239,6 +241,7 @@ export class GameEngine {
   public releaseKillFreeze(): boolean {
     if (!this.killFreezeHold) return false;
     this.killFreezeHold = false;
+    this.killFreezeHoldPending = false;
     return true;
   }
 
@@ -265,7 +268,7 @@ export class GameEngine {
       this.killSlowScale = Math.max(0.05, kf.slowMoScale);
     }
     if (kf.holdUntilKey) {
-      this.killFreezeHold = true;
+      this.killFreezeHoldPending = true;
     }
   }
 
@@ -2557,6 +2560,18 @@ export class GameEngine {
         this.impactBurstTimer = Math.max(0, this.impactBurstTimer - safeDt * 0.2);
       }
       return;
+    }
+
+    // Hit-stop is over: engage the "freeze until key" hold on a clean frame (flash cleared, particles kept).
+    if (this.killFreezeHoldPending) {
+      this.killFreezeHoldPending = false;
+      if (this.status === 'PLAYING') {
+        this.killFreezeHold = true;
+        this.screenFlashAlpha = 0;
+        this.impactFrameTimer = 0;
+        this.impactBurstTimer = 0;
+        return;
+      }
     }
 
     // Assassination slow-motion: real time ticks the timer, the world runs at killSlowScale.
