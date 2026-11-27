@@ -1,0 +1,57 @@
+@import "tailwindcss";
+
+@theme {
+  --font-display: "Cinzel", Georgia, serif;
+  --font-sans: "DM Sans", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  font-family: var(--font-sans);
+  background-color: #0b0d13;
+  color: #e8e4dc;
+}
+
+/* Custom crisp range slider styling for the live tuning drawer */
+input[type="range"].tune-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 4px;
+  background: #242938;
+  border-radius: 2px;
+  outline: none;
+}
+
+input[type="range"].tune-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 13px;
+  height: 13px;
+  border-radius: 2px;
+  background: #e8e4dc;
+  border: 1px solid #c82333;
+  cursor: pointer;
+  transition: transform 0.12s ease, background-color 0.12s ease;
+}
+
+input[type="range"].tune-slider::-webkit-slider-thumb:hover {
+  background: #ffffff;
+  transform: scale(1.12);
+}
+
+input[type="range"].tune-slider::-moz-range-thumb {
+  width: 13px;
+  height: 13px;
+  border-radius: 2px;
+  background: #e8e4dc;
+  border: 1px solid #c82333;
+  cursor: pointer;
+}
