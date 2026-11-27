@@ -1,4 +1,5 @@
 import { BOSS_ORDER, CHARACTERS, CHARACTER_ORDER, REGULAR_ENEMY_ORDER } from '../game/defaults';
+import { FX_ELEMENT_ORDER, fxElementLabel } from '../game/affinityFx';
 import { ENEMY_SPECS } from '../game/level';
 import { CharacterId, TuningConfig } from '../game/types';
 
@@ -326,6 +327,55 @@ const killTab: TabDef = {
 };
 
 // ---------------------------------------------------------------------------
+// AFFINITY & WEAPON EVOLUTION FX (visual only)
+// ---------------------------------------------------------------------------
+const F = (k: string) => ['fx', k];
+const fxTab: TabDef = {
+  id: 'fx',
+  label: 'Affinity FX',
+  accent: '#c2763a',
+  roots: ['fx'],
+  note: 'Visual only — none of these change damage or power. Preview options let you see any affinity / weapon tier on your current hero.',
+  groups: [
+    {
+      id: 'fx-aff',
+      title: 'Elemental Affinity Effects',
+      items: [
+        T(F('affinityFx'), 'Affinity FX', 'Master switch. Off = the old simple aura only.'),
+        S(F('intensity'), 'Intensity (PC)', 'Amount of affinity particles and effects on desktop.', 0, 2, 0.05, 'x'),
+        S(F('mobileIntensity'), 'Intensity (Phone)', 'Amount of affinity particles and effects in the phone layout.', 0, 2, 0.05, 'x'),
+        T(F('movementFx'), 'Movement FX', 'Footsteps, jump / double-jump bursts, landing impacts and dash wakes in your element.'),
+        T(F('runAura'), 'Body Aura', 'Low ground glow and motes coming off the hero while running or standing.'),
+        S(F('trailLength'), 'Wake Length', 'Elemental wake behind the hero when sprinting or dashing. 0 = off.', 0, 2, 0.05, 'x'),
+        T(F('attackFx'), 'Attack FX', 'Element-styled swing trails, hit sparks and impacts.'),
+        T(F('statusFx'), 'Status FX', 'Burn flames, frost rime, wind stagger, earth daze, holy brand and shadow wither on struck foes.'),
+        S(F('elementShakeMult'), 'Element Shake', 'Per-element impact shake (earth heavy, air light). 0 = same shake for every element.', 0, 2, 0.05, 'x'),
+        S(F('elementHitstopMult'), 'Element Hit-Stop', 'Per-element extra hit freeze (earth and shadow longer, air none). 0 = off.', 0, 2, 0.05, 'x'),
+        S(F('particleCap'), 'Particle Cap (PC)', 'Most affinity particles alive at once on desktop.', 40, 800, 10, 'int'),
+        S(F('mobileParticleCap'), 'Particle Cap (Phone)', 'Most affinity particles alive at once on phone. Lower = smoother.', 20, 400, 10, 'int'),
+      ],
+    },
+    {
+      id: 'fx-evo',
+      title: 'Weapon Evolution (every 5 upgrades)',
+      items: [
+        T(F('weaponEvoFx'), 'Weapon Evo Visuals', 'Evolved weapons change shape, size, colour, runes and attack trails at Awakened / Mythic / Transcendent.'),
+        S(F('weaponEvoGlow'), 'Evo Glow', 'Glow strength on evolved weapons and their trails.', 0, 2, 0.05, 'x'),
+        T(F('tierUpMoment'), 'Evolution Moment', 'Forge flash, rune circle, short text and sound when a weapon evolves. Off = text and sound only.'),
+      ],
+    },
+    {
+      id: 'fx-preview',
+      title: 'Preview (visual only)',
+      items: [
+        SEL(F('previewElement'), 'Preview Affinity', 'Shows the effects of any affinity on your hero. The real element effects in combat do not change.', ['Off', ...FX_ELEMENT_ORDER.map(fxElementLabel)]),
+        SEL(F('previewEvoTier'), 'Preview Weapon Tier', 'Shows a weapon tier on your hero. Damage does not change.', ['Off', 'Base', 'Awakened', 'Mythic', 'Transcendent']),
+      ],
+    },
+  ],
+};
+
+// ---------------------------------------------------------------------------
 // PER CHARACTER
 // ---------------------------------------------------------------------------
 const CHAR_TAB_LABEL: Record<CharacterId, string> = {
@@ -493,6 +543,7 @@ const bossesTab: TabDef = {
 export const TUNING_TABS: TabDef[] = [
   generalTab,
   killTab,
+  fxTab,
   ...CHARACTER_ORDER.map(characterTab),
   enemiesTab,
   bossesTab,
