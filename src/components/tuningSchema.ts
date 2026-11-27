@@ -22,7 +22,16 @@ export interface ToggleDef {
   desc: string;
 }
 
-export type ItemDef = SliderDef | ToggleDef;
+export interface SelectDef {
+  kind: 'select';
+  path: string[];
+  label: string;
+  desc: string;
+  /** Option labels; the stored value is the option index (a number, so copy/paste & merge stay simple). */
+  options: string[];
+}
+
+export type ItemDef = SliderDef | ToggleDef | SelectDef;
 
 export interface GroupDef {
   id: string;
@@ -62,6 +71,25 @@ const T = (path: string | string[], label: string, desc: string): ToggleDef => (
   desc,
 });
 
+const SEL = (path: string | string[], label: string, desc: string, options: string[]): SelectDef => ({
+  kind: 'select',
+  path: Array.isArray(path) ? path : [path],
+  label,
+  desc,
+  options,
+});
+
+/** Actions a mobile corner button can perform (index = stored tuning value). */
+export const MOBILE_ACTION_LABELS = [
+  'Jump',
+  'Dash / Weapon Skill',
+  'Spell',
+  'Interact / Assassinate',
+  'Item',
+  'Special Relic',
+  'Attack (manual)',
+];
+
 export function formatValue(v: number, fmt: Fmt): string {
   switch (fmt) {
     case 'x':
@@ -91,7 +119,10 @@ export function formatValue(v: number, fmt: Fmt): string {
 const GENERAL_ROOTS = [
   'gameSpeed', 'hitstopMs', 'shakeMult', 'zoomPunchMult', 'flashMult', 'critShakeIntensity',
   'zoom', 'playerScale', 'enemyScale',
-  'cameraOffsetY', 'cameraDeadzoneX', 'cameraDeadzoneY', 'cameraSmoothing', 'showCameraGuide',
+  'cameraOffsetY', 'cameraDeadzoneX', 'cameraDeadzoneY', 'cameraSmoothing', 'showCameraGuide', 'cameraLookAhead',
+  'mobileZoom', 'mobileLookAhead', 'mobileCameraOffsetY', 'mobileDeckPct', 'mobileAutoAttack',
+  'mobileAutoAttackRange', 'mobileAutoAttackPriority', 'mobileAutoAssassinate', 'mobileHaptics',
+  'mobileBtnTopLeft', 'mobileBtnTopRight', 'mobileBtnBottomLeft', 'mobileBtnBottomRight', 'mobileMiniButtons',
   'moveSpeed', 'jumpForce', 'gravity', 'coyoteTimeMs', 'jumpBufferMs',
   'airControl', 'airMaxSpeedMult', 'airDrag', 'airJumps', 'jumpCutMultiplier', 'apexHangGravityMult',
   'fallGravityMult', 'maxFallSpeed', 'lockAirDirectionOnAttack', 'airTurnFacing', 'allowAirBackdash',
@@ -137,6 +168,28 @@ const generalTab: TabDef = {
         S('cameraDeadzoneY', 'Vertical Deadzone', 'Vertical buffer before the camera shifts. Keeps normal jumps steady without screen bobbing.', 0, 180, 5, 'px'),
         S('cameraSmoothing', 'Camera Smoothing', 'How quickly the camera catches up once the player pushes past the deadzone. Higher values track more tightly.', 0.04, 0.5, 0.02, 'n2'),
         T('showCameraGuide', 'Show Deadzone Guide', 'Draws a dashed amber frame showing the camera deadzone window in real time.'),
+        S('cameraLookAhead', 'Camera Look-Ahead', 'Leads the camera ahead of the way the hero faces (desktop/landscape). Mobile portrait uses its own value below.', 0, 220, 5, 'px'),
+      ],
+    },
+    {
+      id: 'g-mobile',
+      title: 'Mobile (Portrait Phone)',
+      subtitle: 'Only used in the portrait phone layout (touch device held upright, or ?mobile in the URL)',
+      items: [
+        S('mobileZoom', 'Mobile Zoom', 'Camera zoom in portrait at a 390 px wide phone (scales with screen width). Higher = closer, bigger hero; lower = see more of the room.', 0.45, 1.4, 0.01, 'x'),
+        S('mobileLookAhead', 'Mobile Look-Ahead', 'How far the camera leads in the direction the hero faces, so you can see foes coming.', 0, 220, 5, 'px'),
+        S('mobileCameraOffsetY', 'Mobile Camera Height', 'Vertical camera offset in portrait. Negative raises the camera so the hero sits lower and you see more above.', -260, 80, 5, 'px'),
+        S('mobileDeckPct', 'Control Deck Height', 'Height of the bottom control deck as a % of the screen. The game view gets the rest and is never covered.', 26, 44, 1, 'pct'),
+        T('mobileAutoAttack', 'Auto-Attack', 'Swing automatically when an aware enemy is in weapon range. Never attacks unaware enemies, so stealth is not broken.'),
+        S('mobileAutoAttackRange', 'Auto-Attack Range', 'Multiplies the weapon reach used to decide when to swing. Below 1 waits until foes are closer.', 0.5, 1.6, 0.05, 'x'),
+        SEL('mobileAutoAttackPriority', 'Auto-Attack Target', 'Which foe auto-attack picks when several are in range.', ['Nearest', 'Lowest HP', 'Bosses / strongest first', 'Only in front (never turn)']),
+        T('mobileAutoAssassinate', 'Auto-Assassinate', 'Off: the Interact button performs backstabs (glows red when one is lined up). On: auto-attack also backstabs unaware foes from behind.'),
+        T('mobileHaptics', 'Vibration', 'Short vibration on button presses and stronger pulses on kills (Android Chrome; iPhone browsers ignore it).'),
+        SEL('mobileBtnTopLeft', 'Top-Left Button', 'Action of the top-left corner button.', MOBILE_ACTION_LABELS),
+        SEL('mobileBtnTopRight', 'Top-Right Button', 'Action of the top-right corner button.', MOBILE_ACTION_LABELS),
+        SEL('mobileBtnBottomLeft', 'Bottom-Left Button', 'Action of the bottom-left corner button.', MOBILE_ACTION_LABELS),
+        SEL('mobileBtnBottomRight', 'Bottom-Right Button', 'Action of the bottom-right corner button (best thumb spot).', MOBILE_ACTION_LABELS),
+        T('mobileMiniButtons', 'Item & Relic Mini Buttons', 'Two small buttons above the joystick for the equipped potion [5] and special relic [6].'),
       ],
     },
     {

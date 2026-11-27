@@ -89,6 +89,38 @@ function ItemRow({
       </button>
     );
   }
+  if (item.kind === 'select') {
+    const cur = Number(getAt(tuning, item.path)) || 0;
+    return (
+      <div
+        className="flex items-center justify-between gap-2 -mx-2 px-2 py-1.5 rounded hover:bg-[#171b27] transition-colors"
+        onMouseEnter={hover}
+        onMouseLeave={() => onHover(null)}
+        onTouchStart={hover}
+      >
+        <span className={`text-xs ${changed ? 'text-[#e5a93c]' : 'text-[#c5cbd9]'}`}>
+          {item.label}
+          {changed && <span className="ml-1 text-[9px] align-top">●</span>}
+        </span>
+        <select
+          aria-label={item.label}
+          data-tune-path={item.path.join('.')}
+          value={cur}
+          onChange={(e) => {
+            onSet(item.path, parseInt(e.target.value, 10));
+            (e.currentTarget as HTMLSelectElement).blur();
+          }}
+          className="max-w-[60%] bg-[#0c0f17] border border-[#262c3d] rounded px-1.5 py-1 text-[11px] text-[#e8e4dc] focus:outline-none focus:border-[#c82333]"
+        >
+          {item.options.map((o, i) => (
+            <option key={o} value={i}>
+              {o}
+            </option>
+          ))}
+        </select>
+      </div>
+    );
+  }
   const raw = getAt(tuning, item.path);
   const value = typeof raw === 'number' ? raw : 0;
   return (

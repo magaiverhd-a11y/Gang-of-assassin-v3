@@ -142,6 +142,8 @@ export class GameEngine {
   public impactBurstColor = '#ffd166';
   public impactBurstScale = 1;
   public cameraZoomPunch = 0;
+  /** Smoothed camera look-ahead (world px), see tuning.cameraLookAhead. */
+  private cameraLookOffset = 0;
   public impactFrameTimer = 0;
   public comboCount = 0;
   public comboTimer = 0;
@@ -2744,7 +2746,14 @@ export class GameEngine {
     }
 
     if (input.interactJustPressed) {
-      this.tryInteract(tuning);
+      // Mobile: the Interact button performs the stealth assassination when one is lined up.
+      const assassinTarget = input.autoAttack ? this.findAssassinationTarget(tuning) : null;
+      if (assassinTarget && p.attackState === 'idle') {
+        p.facing = assassinTarget.x >= p.x ? 1 : -1;
+        p.attackBufferTimer = 0.14;
+      } else {
+        this.tryInteract(tuning);
+      }
       if (this.status !== 'PLAYING' && this.status !== 'CAMP') return;
     }
 
@@ -3171,46 +3180,23 @@ export class GameEngine {
 
     const isAttacking = p.attackState !== 'idle';
 
-    // MOBILE AUTOMATIC ATTACK: automatically swings at foes in weapon range, incoming projectiles, & adjacent secret walls!
+    // MOBILE AUTOMATIC ATTACK: swings at foes in weapon range (stealth-safe), deflects projectiles & cracks secret walls.
     let autoAttackTriggered = false;
     if (
       input.autoAttack &&
+      tuning.mobileAutoAttack !== false &&
       !this.currentStage.isCamp &&
       p.attackState === 'idle' &&
       p.attackBufferTimer <= 0 &&
       !p.minstrelZipActive
     ) {
-      const wepReach =
-        (p.weapon === 'whip' || p.weapon === 'naginata' || p.weapon === 'ribbon_whip' || p.weapon === 'silk_whip'
-          ? tuning.attackRange * 1.18
-          : tuning.attackRange * 1.05) * scale;
       const moveInputX = (input.right ? 1 : 0) - (input.left ? 1 : 0);
+      const target = this.findAutoAttackTarget(tuning, moveInputX);
+      let closestTargetDir: -1 | 0 | 1 = target ? (target.x - p.x >= 0 ? 1 : -1) : 0;
       const pyMid = p.y - (p.crouching ? p.crouchBaseH : p.baseH) * scale * 0.5;
+      const wepReach = this.getAutoAttackReach(tuning);
 
-      // 1. Check enemies within weapon strike reach
-      let closestTargetDir: -1 | 0 | 1 = 0;
-      let bestScore = Infinity;
-      for (const enemy of this.enemies) {
-        if (enemy.dead) continue;
-        const ew = enemy.baseW * tuning.enemyScale * 0.5;
-        const eh = enemy.baseH * tuning.enemyScale;
-        const dx = enemy.x - p.x;
-        const absDx = Math.abs(dx) - ew;
-        const dy = Math.abs(enemy.y - eh * 0.5 - pyMid);
-        if (absDx <= wepReach && dy <= Math.max(76, eh * 0.72)) {
-          const inFront = dx * p.facing >= -18;
-          // Auto-turn toward a foe right behind us if player isn't deliberately running away
-          if (inFront || (absDx <= 86 && moveInputX === 0)) {
-            const score = absDx + (inFront ? 0 : 35);
-            if (score < bestScore) {
-              bestScore = score;
-              closestTargetDir = dx >= 0 ? 1 : -1;
-            }
-          }
-        }
-      }
-
-      // 2. Check incoming enemy projectiles for automatic Deflect!
+      // 2. Incoming enemy projectiles -> automatic deflect swing
       if (closestTargetDir === 0) {
         for (const proj of this.projectiles) {
           if (!proj.fromEnemy) continue;
@@ -3223,7 +3209,7 @@ export class GameEngine {
         }
       }
 
-      // 3. Check adjacent intact Secret Walls
+      // 3. Adjacent intact Secret Walls
       if (closestTargetDir === 0) {
         for (const sw of this.secretWalls) {
           if (sw.broken) continue;
@@ -3238,11 +3224,13 @@ export class GameEngine {
       }
 
       if (closestTargetDir !== 0) {
-        if (moveInputX === 0) {
+        if (moveInputX === 0 || moveInputX === closestTargetDir) {
           p.facing = closestTargetDir;
         }
-        p.attackBufferTimer = 0.08;
-        autoAttackTriggered = true;
+        if (p.facing === closestTargetDir) {
+          p.attackBufferTimer = 0.08;
+          autoAttackTriggered = true;
+        }
       }
     }
 
@@ -4954,6 +4942,92 @@ export class GameEngine {
         'AUTO-USED FLASK'
       );
     }
+  }
+
+  /** Weapon reach used by mobile auto-attack (matches the swing reach, times the tuning multiplier). */
+  private getAutoAttackReach(tuning: TuningConfig): number {
+    const p = this.player;
+    const longReach =
+      p.weapon === 'whip' || p.weapon === 'naginata' || p.weapon === 'ribbon_whip' || p.weapon === 'silk_whip';
+    return tuning.attackRange * (longReach ? 1.18 : 1.05) * tuning.playerScale * (tuning.mobileAutoAttackRange ?? 1);
+  }
+
+  /** True when a hit on this enemy right now would count as a stealth assassination. */
+  private isAssassinationPosition(enemy: Enemy, tuning: TuningConfig): boolean {
+    const p = this.player;
+    if (!tuning.assassinationEnabled || enemy.isBoss || enemy.dead) return false;
+    if (p.ambushTimer > 0) return true;
+    if (enemy.alerted) return false;
+    const isBehindEnemy = (p.x - enemy.x) * enemy.facing < 0;
+    const isDrop = !p.onGround && p.y < enemy.y - 26 && Math.abs(p.x - enemy.x) < 120;
+    return isBehindEnemy || isDrop;
+  }
+
+  /** Enemy (if any) the player can assassinate right now with one swing. */
+  public findAssassinationTarget(tuning: TuningConfig): Enemy | null {
+    const p = this.player;
+    if (this.currentStage.isCamp) return null;
+    const reach = this.getAutoAttackReach(tuning) / Math.max(0.1, tuning.mobileAutoAttackRange ?? 1);
+    const pyMid = p.y - (p.crouching ? p.crouchBaseH : p.baseH) * tuning.playerScale * 0.5;
+    let best: Enemy | null = null;
+    let bestD = Infinity;
+    for (const enemy of this.enemies) {
+      if (enemy.dead || enemy.isBoss) continue;
+      const ew = enemy.baseW * tuning.enemyScale * 0.5;
+      const eh = enemy.baseH * tuning.enemyScale;
+      const absDx = Math.abs(enemy.x - p.x) - ew;
+      const dy = Math.abs(enemy.y - eh * 0.5 - pyMid);
+      const isDrop = !p.onGround && p.y < enemy.y - 26;
+      if (absDx > reach || (!isDrop && dy > Math.max(76, eh * 0.72))) continue;
+      if (!this.isAssassinationPosition(enemy, tuning)) continue;
+      if (absDx < bestD) {
+        bestD = absDx;
+        best = enemy;
+      }
+    }
+    return best;
+  }
+
+  /**
+   * Mobile auto-attack target. Never swings at an unaware enemy (keeps stealth intact) unless
+   * the player is in assassination position and Auto-Assassinate is on.
+   */
+  private findAutoAttackTarget(tuning: TuningConfig, moveInputX: number): Enemy | null {
+    const p = this.player;
+    const reach = this.getAutoAttackReach(tuning);
+    const scale = tuning.playerScale;
+    const pyMid = p.y - (p.crouching ? p.crouchBaseH : p.baseH) * scale * 0.5;
+    const priority = Math.round(tuning.mobileAutoAttackPriority ?? 0);
+    let best: Enemy | null = null;
+    let bestScore = Infinity;
+    for (const enemy of this.enemies) {
+      if (enemy.dead) continue;
+      const ew = enemy.baseW * tuning.enemyScale * 0.5;
+      const eh = enemy.baseH * tuning.enemyScale;
+      const dx = enemy.x - p.x;
+      const absDx = Math.abs(dx) - ew;
+      const dy = Math.abs(enemy.y - eh * 0.5 - pyMid);
+      if (absDx > reach || dy > Math.max(76, eh * 0.72)) continue;
+
+      // Stealth guard
+      if (!enemy.alerted && !(p.ambushTimer > 0 && !enemy.isBoss)) {
+        if (!tuning.mobileAutoAssassinate || !this.isAssassinationPosition(enemy, tuning)) continue;
+      }
+
+      const inFront = dx * p.facing >= -18;
+      // Auto-turn toward a foe behind us unless the player is deliberately running away from it.
+      const runningAway = moveInputX !== 0 && Math.sign(dx) !== moveInputX;
+      if (!inFront && (priority === 3 || runningAway)) continue;
+
+      let score = absDx + (inFront ? 0 : 35);
+      if (priority === 1) score = enemy.hp * 1000 + absDx;
+      else if (priority === 2) score = (enemy.isBoss ? 0 : 1e7) - enemy.maxHp * 1000 + absDx;
+      if (score < bestScore) {
+        bestScore = score;
+        best = enemy;
+      }
+    }
+    return best;
   }
 
   private tryInteract(tuning: TuningConfig): void {
@@ -9606,8 +9680,13 @@ export class GameEngine {
     cam.targetX = Math.max(minX, Math.min(maxX, cam.targetX));
     cam.targetY = Math.max(minY, Math.min(maxY, cam.targetY));
 
+    // Optional look-ahead: lead the camera toward where the hero faces (used by the portrait mobile view).
+    const lookGoal = (tuning.cameraLookAhead ?? 0) * this.player.facing;
+    this.cameraLookOffset += (lookGoal - this.cameraLookOffset) * (1 - Math.pow(0.04, dt));
+    const goalX = Math.max(minX, Math.min(maxX, cam.targetX + this.cameraLookOffset));
+
     const smooth = 1 - Math.pow(1 - Math.max(0.02, Math.min(0.95, tuning.cameraSmoothing)), dt * 60);
-    cam.x += (cam.targetX - cam.x) * smooth;
+    cam.x += (goalX - cam.x) * smooth;
     cam.y += (cam.targetY - cam.y) * smooth;
   }
 
@@ -9778,7 +9857,12 @@ export class GameEngine {
       (it) => it.kind === 'boss_relic' || it.kind === 'boss_chest'
     );
 
+    const effTuning = this.effectiveTuning ?? this.tuning;
+    const assassinationReady =
+      this.status === 'PLAYING' && effTuning ? Boolean(this.findAssassinationTarget(effTuning)) : false;
+
     return {
+      assassinationReady,
       characterId: this.player.characterId,
       inCamp: Boolean(this.currentStage.isCamp),
       isBigBossRoom: Boolean(this.currentStage.isBigBossRoom),

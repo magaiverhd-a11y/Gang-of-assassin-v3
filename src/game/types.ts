@@ -318,6 +318,35 @@ export interface TuningConfig {
   cameraSmoothing: number;
   critShakeIntensity: number;
   showCameraGuide: boolean;
+  /** Camera leads ahead of the facing direction by this many world px (0 = off). */
+  cameraLookAhead: number;
+
+  // ===== Mobile (portrait touch layout) =====
+  /** Base camera zoom in portrait mobile at a 390 px wide screen (scaled with screen width). */
+  mobileZoom: number;
+  /** Camera look-ahead toward facing direction in portrait mobile (world px). */
+  mobileLookAhead: number;
+  /** Camera height offset used in portrait mobile (replaces Camera Height Offset). */
+  mobileCameraOffsetY: number;
+  /** Height of the bottom control deck as % of screen height. */
+  mobileDeckPct: number;
+  /** Automatic weapon attacks on mobile. */
+  mobileAutoAttack: boolean;
+  /** Multiplies the weapon reach used to decide when auto-attack swings. */
+  mobileAutoAttackRange: number;
+  /** 0 Nearest · 1 Lowest HP · 2 Bosses/strongest first · 3 Only in front (never turn). */
+  mobileAutoAttackPriority: number;
+  /** Let auto-attack also perform backstab assassinations (off = the Interact button does them). */
+  mobileAutoAssassinate: boolean;
+  /** Vibrate on button presses and kills (if the phone supports it). */
+  mobileHaptics: boolean;
+  /** Corner button actions (see MOBILE_ACTIONS): top-left, top-right, bottom-left, bottom-right. */
+  mobileBtnTopLeft: number;
+  mobileBtnTopRight: number;
+  mobileBtnBottomLeft: number;
+  mobileBtnBottomRight: number;
+  /** Show the two small Item / Relic buttons beside the joystick. */
+  mobileMiniButtons: boolean;
 
   // ===== Tuning v2: General =====
   /** Global world time scale (1 = normal). */
@@ -964,6 +993,8 @@ export interface BossHudBar {
 }
 
 export interface HudSnapshot {
+  /** Mobile: an unaware enemy is lined up for a stealth assassination (Interact button). */
+  assassinationReady?: boolean;
   characterId: CharacterId;
   activeRaidId: RaidId;
   activeRaidName: string;
