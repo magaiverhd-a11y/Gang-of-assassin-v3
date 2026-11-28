@@ -535,9 +535,8 @@ export function renderGame(
 
   if (tuning.fx?.affinityFx ?? true) {
     drawFxBehind(ctx, engine.fx, engine.player, tuning.playerScale, engine.time);
-  } else {
-    drawElementalPlayerAura(ctx, engine.player, tuning.playerScale, engine.time);
   }
+  drawElementalPlayerAura(ctx, engine.player, tuning.playerScale, engine.time);
   drawAffinityZones(ctx, engine.affinityZones);
   for (const ally of engine.phantomAllies) {
     drawPhantomAlly(ctx, ally, tuning.playerScale, engine.time);

@@ -559,7 +559,10 @@ export type UpgradeKind =
   | 'max_hp'
   | 'max_mp'
   | 'hp_regen'
-  | 'mp_regen';
+  | 'mp_regen'
+  | 'armor_relic'
+  | 'cooldown_relic'
+  | 'lifesteal_relic';
 
 export interface UpgradeOption {
   id: string;
@@ -919,6 +922,8 @@ export type InteractableKind =
   | 'brazier'
   | 'shrine'
   | 'upgrade_altar'
+  | 'item_altar'
+  | 'arsenal_relic'
   | 'camp_hero_hunter'
   | 'camp_hero_brute'
   | 'camp_hero_ronin'
@@ -1322,6 +1327,10 @@ export interface Player {
   specialItemPowerBonus: number;
   specialItemMaxChargesBonus: number;
   alchemistBeltLevel: number;
+  /** Extra cooldown recovery from level-up relics. */
+  cooldownRank: number;
+  /** Kill-heal rank from level-up relics. */
+  lifestealRank: number;
   cursedRelics: CursedRelicId[];
   mirrorCrownHitCounter: number;
   voidEdgeMpCooldown: number;

@@ -2243,6 +2243,56 @@ export function drawInteractable(
       }
       break;
     }
+
+    case 'item_altar': {
+      ctx.fillStyle = '#3b2438';
+      ctx.fillRect(-20, -12, 40, 12);
+      ctx.fillRect(-12, -36, 24, 24);
+      ctx.fillStyle = '#9f1239';
+      ctx.fillRect(-16, -40, 32, 6);
+      if (!item.used) {
+        const floatY = Math.sin(time * 4.2) * 4;
+        const glow = ctx.createRadialGradient(0, -58 + floatY, 2, 0, -58 + floatY, 48);
+        glow.addColorStop(0, 'rgba(244, 114, 182, 0.55)');
+        glow.addColorStop(1, 'rgba(244, 114, 182, 0)');
+        ctx.fillStyle = glow;
+        ctx.beginPath();
+        ctx.arc(0, -58 + floatY, 48, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#fbcfe8';
+        ctx.beginPath();
+        ctx.arc(0, -58 + floatY, 7, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#fb7185';
+        ctx.fillRect(-2, -70 + floatY, 4, 24);
+        ctx.fillRect(-8, -60 + floatY, 16, 4);
+      }
+      break;
+    }
+
+    case 'arsenal_relic': {
+      const floatY = Math.sin(time * 3.4) * 5;
+      const glow = ctx.createRadialGradient(0, -64 + floatY, 4, 0, -64 + floatY, 70);
+      glow.addColorStop(0, 'rgba(253, 224, 71, 0.7)');
+      glow.addColorStop(0.5, 'rgba(192, 132, 252, 0.28)');
+      glow.addColorStop(1, 'rgba(253, 224, 71, 0)');
+      ctx.fillStyle = glow;
+      ctx.beginPath();
+      ctx.arc(0, -64 + floatY, 70, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#fef9c3';
+      ctx.beginPath();
+      ctx.moveTo(0, -86 + floatY);
+      ctx.lineTo(14, -62 + floatY);
+      ctx.lineTo(0, -40 + floatY);
+      ctx.lineTo(-14, -62 + floatY);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = '#c084fc';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      break;
+    }
   }
 
   // Interactive prompt label
@@ -2270,6 +2320,8 @@ export function drawInteractable(
       item.kind === 'exit_door' || item.kind === 'cursed_door' || item.kind === 'camp_raid_gate'
         ? -164
         : item.kind === 'upgrade_altar' ||
+            item.kind === 'item_altar' ||
+            item.kind === 'arsenal_relic' ||
             item.kind === 'cursed_shrine' ||
             item.kind === 'boss_chest' ||
             item.kind === 'boss_relic'
@@ -4424,23 +4476,23 @@ export function drawElementalPlayerAura(
   time: number
 ): void {
   const activeEl = getActiveElementDef(player.baseElements, player.combinedElement);
-  const evoTier = Math.floor(Math.max(0, player.weaponDamageBonus) / 5);
-  if (!activeEl && evoTier <= 0) return;
+  const level = Math.max(0, player.affinityLevel || 0);
+  if (!activeEl && level <= 0) return;
 
   const h = (player.crouching ? player.crouchBaseH : player.baseH) * scale;
   const cx = player.x;
   const cy = player.y - h * 0.52;
-  const primary = activeEl ? activeEl.primaryColor : evoTier >= 2 ? '#c084fc' : '#fde047';
+  const primary = activeEl ? activeEl.primaryColor : '#fde047';
   const secondary = activeEl ? activeEl.secondaryColor : '#f97316';
   const glow = activeEl ? activeEl.glowColor : '#fef9c3';
   const isCombined = Boolean(activeEl?.isCombined);
-  const resScale = 1 + Math.min(0.4, player.elementResonance * 0.12);
+  const resScale = 1 + Math.min(1.7, Math.max(0, level - 1) * 0.34 + player.elementResonance * 0.06);
 
   ctx.save();
   ctx.translate(cx, cy);
 
   // Soft radiant elemental halo behind the hero
-  const haloR = (34 + (isCombined ? 10 : 0) + evoTier * 4) * scale * resScale;
+  const haloR = (34 + (isCombined ? 14 : 0) + level * 6) * scale * resScale;
   const grad = ctx.createRadialGradient(0, 0, 4 * scale, 0, 0, haloR);
   grad.addColorStop(0, `${primary}44`);
   grad.addColorStop(0.55, `${secondary}22`);
@@ -4479,8 +4531,7 @@ export function drawElementalPlayerAura(
       ctx.restore();
     }
 
-    // Orbiting elemental motes (4 for Base Element, 6 dual-color spiral for Combined Element)
-    const moteCount = isCombined ? 6 : 4;
+    const moteCount = (isCombined ? 7 : 5) + Math.max(0, level - 1);
     for (let i = 0; i < moteCount; i++) {
       const ang = time * (isCombined ? 3.4 : 2.6) + (i * Math.PI * 2) / moteCount;
       const rx = (28 + (i % 2) * 6) * scale * resScale;
@@ -4500,6 +4551,18 @@ export function drawElementalPlayerAura(
       ctx.globalAlpha = 0.95;
       ctx.beginPath();
       ctx.arc(mx, my, mSize * 0.48, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    const sparks = 4 + level * 3;
+    for (let i = 0; i < sparks; i++) {
+      const t = (time * (0.28 + level * 0.04) + i / sparks) % 1;
+      const sx = Math.sin(time * 1.7 + i * 1.3) * (14 + level * 5) * scale * resScale;
+      const sy = t * (28 + level * 16) * scale;
+      ctx.globalAlpha = (1 - t) * 0.9;
+      ctx.fillStyle = i % 2 === 0 ? glow : primary;
+      ctx.beginPath();
+      ctx.arc(sx, -sy, (1.4 + level * 0.45) * scale, 0, Math.PI * 2);
       ctx.fill();
     }
   }

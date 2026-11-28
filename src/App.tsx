@@ -832,12 +832,35 @@ export default function App() {
       // Debug hook for tuning / automated smoke tests: open the game with ?debug in the URL.
       if (typeof window !== 'undefined') {
         const params = new URLSearchParams(window.location.search);
-        if (params.has('debug') || params.has('elementsPreview')) {
+        if (
+          params.has('debug') ||
+          params.has('elementsPreview') ||
+          params.has('doubleDown') ||
+          params.has('weaponPower') ||
+          params.has('itemAltar') ||
+          params.has('finalRelic') ||
+          params.has('fusionAura')
+        ) {
           (window as unknown as { __nocturneEngine?: GameEngine }).__nocturneEngine = engineRef.current;
           (window as unknown as { __nocturneSound?: unknown }).__nocturneSound = { sound, director: soundDirector };
         }
         if (params.has('elementsPreview')) {
           window.setTimeout(() => engineRef.current?.showcaseElements(), 400);
+        }
+        if (params.has('doubleDown')) {
+          window.setTimeout(() => engineRef.current?.previewDoubleDown(), 500);
+        }
+        if (params.has('weaponPower')) {
+          window.setTimeout(() => engineRef.current?.previewWeaponPower(), 500);
+        }
+        if (params.has('itemAltar')) {
+          window.setTimeout(() => engineRef.current?.previewItemAltar(), 500);
+        }
+        if (params.has('finalRelic')) {
+          window.setTimeout(() => engineRef.current?.previewFinalRelic(), 500);
+        }
+        if (params.has('fusionAura')) {
+          window.setTimeout(() => engineRef.current?.previewFusionAura(), 500);
         }
       }
     }

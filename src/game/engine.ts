@@ -51,6 +51,7 @@ import {
   WEAPON_ORDER,
 } from './defaults';
 import { CAMP_HERO_SPOTS, CAMP_STAGE, ENEMY_SPECS, isFlyingEnemyType } from './level';
+import { fusionGift } from './fusionGifts';
 import { LORE_BY_ID, LORE_BY_RAID, loadCollectedLoreIds, saveCollectedLoreIds } from './lore';
 import {
   defenseAgainst,
@@ -77,6 +78,7 @@ import {
   BossHudBar,
   CameraState,
   CharacterId,
+  CombinedElementId,
   CharacterUnlockState,
   CharmSynergyId,
   DamageNumber,
@@ -287,6 +289,11 @@ export class GameEngine {
   private levelUpDelayTimer = 0;
   private elementalHitCounter = 0;
   private lastHitRelation: 'weak' | 'resist' | 'neutral' = 'neutral';
+  private castingWeaponSkill = false;
+  private raidsSinceItemAltar = 0;
+  private itemAltarArmed = false;
+  private itemAltarPlaced = false;
+  private leechKills = 0;
   private elementalKillCounter = 0;
 
   public time = 0;
@@ -753,12 +760,14 @@ export class GameEngine {
       elementResonance: 0,
       affinityLevel: 0,
       affinityLockedSingle: false,
-      weaponPowerLevel: cDef.bonusWeaponDamage + art.weaponTier,
+      weaponPowerLevel: 1,
       potionPowerBonus: 0,
       itemExtraUsesBonus: 0,
       specialItemPowerBonus: 0,
       specialItemMaxChargesBonus: 0,
       alchemistBeltLevel: 0,
+      cooldownRank: 0,
+      lifestealRank: 0,
       cursedRelics: [],
       mirrorCrownHitCounter: 0,
       voidEdgeMpCooldown: 0,
@@ -1069,6 +1078,14 @@ export class GameEngine {
     this.raidMapRelicsCollected = 0;
     // Choose 1 random standard room (Room 1, 2, or 3) where defeating the boss unlocks BOTH a Normal Door & a Cursed Door!
     this.cursedDoorRoomIndex = Math.floor(Math.random() * 3);
+    this.itemAltarPlaced = false;
+    if (this.raidsSinceItemAltar >= 1 && (this.raidsSinceItemAltar >= 2 || Math.random() < 0.5)) {
+      this.itemAltarArmed = true;
+      this.raidsSinceItemAltar = 0;
+    } else {
+      this.itemAltarArmed = false;
+      this.raidsSinceItemAltar += 1;
+    }
 
     // Schedule at most 1 uncollected lore fragment for this raid run (in a random room 1..4)
     const raidLore = LORE_BY_RAID[targetRaid] ?? [];
@@ -1145,7 +1162,6 @@ export class GameEngine {
     next.hpRegenLevel += extraHpRegen;
     next.mpRegenLevel += extraMpRegen;
     next.weaponDamageBonus += extraWeaponTier;
-    next.weaponPowerLevel = next.weaponDamageBonus;
     next.runRelicLevels = { ...prev.runRelicLevels };
 
     // Apply this hero's permanent Boss-Shard unlocks + carried universal/class-eligible run gear
@@ -1210,6 +1226,8 @@ export class GameEngine {
     next.specialItemPowerBonus = prev.specialItemPowerBonus;
     next.specialItemMaxChargesBonus = prev.specialItemMaxChargesBonus;
     next.alchemistBeltLevel = prev.alchemistBeltLevel;
+    next.cooldownRank = prev.cooldownRank;
+    next.lifestealRank = prev.lifestealRank;
     next.cursedRelics = [...prev.cursedRelics];
     // If the bound Phantom Tag Partner is the hero we just swapped into, swap partner to the previous hero!
     next.tagPartner = prev.tagPartner === charId ? prev.characterId : prev.tagPartner;
@@ -1285,7 +1303,6 @@ export class GameEngine {
       p.mpRegenLevel += 1;
     } else if (artifactId === 'soul_anvil') {
       p.weaponDamageBonus += 1;
-      p.weaponPowerLevel = p.weaponDamageBonus;
     } else if (artifactId === 'everflask') {
       p.itemCounts.health_potion += 1;
       p.itemCounts.mana_potion += 1;
@@ -1378,7 +1395,6 @@ export class GameEngine {
     // Apply permanent stat bonuses granted by the newly forged Sacrifice Artifact
     if (artifactId === 'bloodsteel_edge') {
       p.weaponDamageBonus += 1;
-      p.weaponPowerLevel = p.weaponDamageBonus;
     } else if (artifactId === 'undying_heart') {
       p.maxHp += 1;
       p.hp = p.maxHp;
@@ -2098,6 +2114,19 @@ export class GameEngine {
       });
     }
 
+    if (this.itemAltarArmed && !this.itemAltarPlaced && clamped === 1 && !this.currentStage.isCamp) {
+      this.itemAltarPlaced = true;
+      const altarX = Math.max(280, Math.min(this.currentStage.bossZoneStartX - 280, Math.round(this.currentStage.worldWidth * 0.36)));
+      this.interactables.push({
+        id: `item-altar-${clamped}`,
+        kind: 'item_altar',
+        x: altarX,
+        y: this.currentStage.floorY,
+        label: 'Item Relic Altar (rare)',
+        used: false,
+      });
+    }
+
     if (!preservePlayer) {
       this.player = this.createFreshPlayer(this.currentStage.floorY, this.selectedCharacter);
       this.player.x = 120;
@@ -2188,10 +2217,14 @@ export class GameEngine {
       }
 
       // Earth / Crystal Elemental Bastion grants free Armor Shield entering every chamber!
-      if (this.hasElement('earth')) {
-        const shieldGrant = p.combinedElement === 'crystal' ? 2 : 1;
+        if (this.hasElement('earth')) {
+        const shieldGrant = Math.max(1, p.affinityLevel);
         p.armorShield = Math.max(p.armorShield, shieldGrant);
         p.armorTimer = Math.max(p.armorTimer, 18);
+        const roomGift = fusionGift(p.combinedElement);
+        if (roomGift?.stat === 'armor') {
+          p.armorShield += roomGift.amount;
+        }
         this.spawnDamageNumber(
           p.x,
           p.y - p.baseH - 32,
@@ -2530,24 +2563,82 @@ export class GameEngine {
       }
       case 'weapon_damage': {
         p.weaponDamageBonus += 1;
-        p.weaponPowerLevel = p.weaponDamageBonus;
         p.runRelicLevels.weapon += 1;
-        // affinity-v1: the evolution moment (every 5 upgrades) is fired by the FX system on the next live frame.
         break;
       }
+      case 'weapon_power': {
+        if (p.weaponPowerLevel < 25) {
+          p.weaponPowerLevel += 1;
+          if (p.weaponPowerLevel % 5 === 0) {
+            const tier = p.weaponPowerLevel / 5;
+            sound.playWeaponEvolution(tier);
+            this.spawnDamageNumber(
+              p.x,
+              p.y - p.baseH * tuning.playerScale - 36,
+              `WEAPON POWER ${p.weaponPowerLevel} · ASCENDED`,
+              '#e5a93c',
+              1.2,
+              'SKILL [3] GREW'
+            );
+          }
+        }
+        break;
+      }
+      case 'tri_arsenal_relic': {
+        if (p.unlockedAbilitySlots < 3) p.unlockedAbilitySlots += 1;
+        p.specialItemMaxChargesBonus += 1;
+        const extraSpecial = (['smoke_vial', 'fire_bomb', 'hero_tag_horn', 'eclipse_hourglass'] as SpecialItemId[]).find(
+          (id) => !this.characterUnlocks[p.characterId].specials.includes(id)
+        );
+        if (extraSpecial) this.characterUnlocks[p.characterId].specials.push(extraSpecial);
+        const extraWeapon = WEAPON_ORDER.find(
+          (w) => canCharacterUseWeapon(p.characterId, w) && !p.unlockedWeapons.includes(w)
+        );
+        if (extraWeapon) p.unlockedWeapons.push(extraWeapon);
+        break;
+      }
+      case 'item_potion_power':
+        p.potionPowerBonus += 1;
+        break;
+      case 'item_extra_uses':
+        p.itemExtraUsesBonus += 1;
+        p.itemCounts.health_potion += 1;
+        p.itemCounts.mana_potion += 1;
+        break;
+      case 'item_special_power':
+        p.specialItemPowerBonus += 1;
+        break;
+      case 'item_special_charges':
+        p.specialItemMaxChargesBonus += 1;
+        break;
+      case 'item_free_sip':
+        p.hp = Math.min(p.maxHp, p.hp + 1);
+        p.mp = Math.min(p.maxMp, p.mp + 1);
+        break;
+      case 'item_refill_all':
+        p.itemCounts.health_potion += 1;
+        p.itemCounts.mana_potion += 1;
+        p.itemCounts.armor_potion += 1;
+        break;
+      case 'armor_relic':
+        p.armorShield += 1;
+        p.armorTimer = Math.max(p.armorTimer, 20);
+        break;
+      case 'cooldown_relic':
+        p.cooldownRank += 1;
+        break;
+      case 'lifesteal_relic':
+        p.lifestealRank += 1;
+        break;
       case 'max_hp': {
         p.runRelicLevels.hp += 1;
-        if (p.runRelicLevels.hp % 2 === 0) {
-          p.maxHp += 1;
-        }
+        p.maxHp += 1;
         p.hp = Math.min(p.maxHp, p.hp + 1);
         break;
       }
       case 'max_mp': {
         p.runRelicLevels.mp += 1;
-        if (p.runRelicLevels.mp % 2 === 0) {
-          p.maxMp += 1;
-        }
+        p.maxMp += 1;
         p.mp = Math.min(p.maxMp, p.mp + 1);
         break;
       }
@@ -2573,19 +2664,25 @@ export class GameEngine {
       }
       case 'element_affinity': {
         if (opt.elementId && !p.baseElements.includes(opt.elementId)) {
+          const wasSingle = p.baseElements.length === 1 && !p.combinedElement;
           p.baseElements = [...p.baseElements, opt.elementId];
           let isFusion = false;
           if (p.baseElements.length === 1) {
-            p.affinityLevel = Math.max(1, p.affinityLevel);
+            p.affinityLevel = 1;
             p.affinityLockedSingle = true;
+            if (opt.elementId === 'earth') {
+              p.maxHp += 1;
+              p.hp += 1;
+            }
           }
-          if (p.baseElements.length >= 2 && !p.combinedElement) {
+          if (wasSingle && !p.combinedElement) {
             const fused = getCombinedElementId(p.baseElements[0], p.baseElements[1]);
             if (fused) {
               p.combinedElement = fused;
               isFusion = true;
-              p.affinityLevel = Math.max(2, p.affinityLevel);
+              p.affinityLevel = 1;
               p.affinityLockedSingle = false;
+              this.applyFusionImmediate(fused);
             }
           }
           const activeDef = getActiveElementDef(p.baseElements, p.combinedElement);
@@ -2638,8 +2735,8 @@ export class GameEngine {
             );
           }
           // Immediate Armor Shield grant if Earth or Crystal was just awakened
-          if (opt.elementId === 'earth' || p.combinedElement === 'crystal') {
-            const grant = p.combinedElement === 'crystal' ? 2 : 1;
+          if (opt.elementId === 'earth' || this.hasElement('earth')) {
+            const grant = Math.max(1, p.affinityLevel);
             p.armorShield = Math.max(p.armorShield, grant);
             p.armorTimer = Math.max(p.armorTimer, 18);
           }
@@ -2647,9 +2744,14 @@ export class GameEngine {
         break;
       }
       case 'element_resonance': {
-        p.elementResonance += 1;
-        const affinityCap = p.combinedElement ? 4 : 5;
-        p.affinityLevel = Math.min(affinityCap, Math.max(p.affinityLevel, 1) + 1);
+        const cap = p.combinedElement ? 4 : 5;
+        if (p.affinityLevel < cap) p.affinityLevel += 1;
+        if (p.combinedElement) p.elementResonance += 1;
+        else p.affinityLockedSingle = true;
+        if (!p.combinedElement && p.baseElements[0] === 'earth') {
+          p.maxHp += 1;
+          p.hp += 1;
+        }
         const activeDef = getActiveElementDef(p.baseElements, p.combinedElement);
         if (activeDef) {
           sound.playElementalAwaken(true, activeDef.id);
@@ -2706,7 +2808,6 @@ export class GameEngine {
       }
       case 'cursed_glass_cannon': {
         p.weaponDamageBonus += 3;
-        p.weaponPowerLevel = p.weaponDamageBonus;
         p.maxHp = Math.max(2, p.maxHp - 2);
         p.hp = Math.min(p.hp, p.maxHp);
         sound.playCursedShrine();
@@ -2864,6 +2965,75 @@ export class GameEngine {
     }
   }
 
+  private applyFusionImmediate(id: CombinedElementId): void {
+    const gift = fusionGift(id);
+    if (!gift) return;
+    const p = this.player;
+    if (gift.stat === 'hp') {
+      p.maxHp += gift.amount;
+      p.hp += gift.amount;
+    } else if (gift.stat === 'mp') {
+      p.maxMp += gift.amount;
+      p.mp += gift.amount;
+    }
+    this.spawnDamageNumber(p.x, p.y - p.baseH - 18, gift.blurb, '#fde047', 0.85, gift.name.toUpperCase());
+  }
+
+  private buildItemRelicOptions(): UpgradeOption[] {
+    const p = this.player;
+    const pool: UpgradeOption[] = [
+      {
+        id: `item-pot-${p.potionPowerBonus + 1}`,
+        kind: 'item_potion_power',
+        category: 'Item Relic',
+        title: 'Stronger potions',
+        description: 'Health and mana potions restore 1 more.',
+        accent: '#f472b6',
+      },
+      {
+        id: `item-uses-${p.itemExtraUsesBonus + 1}`,
+        kind: 'item_extra_uses',
+        category: 'Item Relic',
+        title: 'Extra potion',
+        description: 'Gain 1 health potion and 1 mana potion. Later sips sometimes do not spend a use.',
+        accent: '#fb7185',
+      },
+      {
+        id: `item-spow-${p.specialItemPowerBonus + 1}`,
+        kind: 'item_special_power',
+        category: 'Item Relic',
+        title: 'Stronger items',
+        description: 'Bombs, smoke, the tag horn, and the hourglass deal 1 more damage.',
+        accent: '#f59e0b',
+      },
+      {
+        id: `item-sch-${p.specialItemMaxChargesBonus + 1}`,
+        kind: 'item_special_charges',
+        category: 'Item Relic',
+        title: 'More item uses',
+        description: 'Special items can hold 1 extra charge.',
+        accent: '#fbbf24',
+      },
+      {
+        id: `item-sip-${p.alchemistBeltLevel + 1}`,
+        kind: 'item_free_sip',
+        category: 'Item Relic',
+        title: 'Alchemist sip',
+        description: 'Restore 1 HP and 1 MP right now.',
+        accent: '#a3e635',
+      },
+      {
+        id: 'item-refill',
+        kind: 'item_refill_all',
+        category: 'Item Relic',
+        title: 'Refill belt',
+        description: 'Gain one health potion, one mana potion, and one armor potion.',
+        accent: '#34d399',
+      },
+    ];
+    return shuffle(pool).slice(0, 3);
+  }
+
   private buildElementAffinityOptions(): UpgradeOption[] {
     const p = this.player;
 
@@ -2884,139 +3054,184 @@ export class GameEngine {
       });
     }
 
-    // 2nd Elemental Affinity (Lv 10): Player chooses 1 from 6 randomly drawn remaining Base Elements to FUSE!
-    if (p.baseElements.length === 1) {
+    // Level 10 and later: deepen the element you have, or fuse with a different one.
+    if (p.baseElements.length === 1 && !p.combinedElement) {
       const firstEl = p.baseElements[0];
-      const remaining = shuffle(BASE_ELEMENT_ORDER.filter((id) => id !== firstEl)).slice(0, 6);
-      return remaining.map((elId) => {
+      const firstDef = BASE_ELEMENTS[firstEl];
+      const cards: UpgradeOption[] = [];
+      if (p.affinityLevel < 5) {
+        cards.push({
+          id: `affinity-deepen-${firstEl}-${p.affinityLevel + 1}`,
+          kind: 'element_resonance',
+          category: `Deepen · ${firstDef.name} ${p.affinityLevel}/5`,
+          title: `Deepen ${firstDef.name}`,
+          description: `Stay with ${firstDef.name} and raise it to level ${p.affinityLevel + 1} of 5. A single affinity can reach 5. Fusing later spends one level and caps at 4.`,
+          accent: firstDef.primaryColor,
+          elementId: firstEl,
+        });
+      }
+      const fuseCount = Math.max(1, 6 - cards.length);
+      const remaining = shuffle(BASE_ELEMENT_ORDER.filter((id) => id !== firstEl)).slice(0, fuseCount);
+      for (const elId of remaining) {
         const baseDef = BASE_ELEMENTS[elId];
         const fusedId = getCombinedElementId(firstEl, elId);
         const fusedDef = fusedId ? COMBINED_ELEMENTS[fusedId] : null;
-        return {
+        cards.push({
           id: `affinity-fuse-${elId}`,
           kind: 'element_affinity',
-          category: fusedDef
-            ? `Fusion · ${BASE_ELEMENTS[firstEl].name} + ${baseDef.name}`
-            : `Elemental Affinity · ${baseDef.title}`,
-          title: fusedDef ? `${baseDef.name} → ${fusedDef.name}` : `${baseDef.name} Affinity`,
-          description: fusedDef ? fusedDef.description : baseDef.description,
+          category: fusedDef ? `Fuse · ${firstDef.name} + ${baseDef.name}` : `Element · ${baseDef.name}`,
+          title: fusedDef ? `Fuse into ${fusedDef.name}` : baseDef.name,
+          description: fusedDef
+            ? `${fusedDef.description} Fusing spends this level. A fused affinity then maxes at 4.`
+            : baseDef.description,
           accent: fusedDef ? fusedDef.primaryColor : baseDef.primaryColor,
           elementId: elId,
           combinedElementId: fusedId ?? undefined,
-        };
-      });
+        });
+      }
+      return cards;
     }
 
-    // Lv 15, 20, 25+: Amplify Combined Element Resonance + Weapon & Spell Evolution boosts!
     const activeDef = getActiveElementDef(p.baseElements, p.combinedElement);
-    const nextRes = p.elementResonance + 1;
-    const nextWepLv = 2 + p.weaponDamageBonus;
-    const wepInfo = getWeaponMilestoneInfo(nextWepLv);
+    const cap = p.combinedElement ? 4 : 5;
+    const nextLv = p.affinityLevel + 1;
     const equippedSpell = p.abilitySlots[0];
     const nextSpellLv = p.abilitySlotLevels[0] + 1;
     const spInfo = getSpellMilestoneInfo(equippedSpell, nextSpellLv);
-
-    return [
-      {
-        id: `affinity-res-${nextRes}`,
+    const nextPower = Math.min(25, p.weaponPowerLevel + 1);
+    const cards: UpgradeOption[] = [];
+    if (p.affinityLevel < cap) {
+      cards.push({
+        id: `affinity-res-${nextLv}`,
         kind: 'element_resonance',
-        category: activeDef ? `${activeDef.name} Resonance +${nextRes}` : `Elemental Resonance +${nextRes}`,
-        title: activeDef ? `${activeDef.name} Mastery Lv ${nextRes}` : `Elemental Resonance Lv ${nextRes}`,
-        description: `Amplifies your ${activeDef?.name ?? 'Elemental'} strike damage (+1 AoE), wave reach, and glowing elemental aura!`,
+        category: activeDef ? `${activeDef.name} · ${p.affinityLevel}/${cap}` : `Affinity ${p.affinityLevel}/${cap}`,
+        title: activeDef ? `Deepen ${activeDef.name}` : 'Deepen affinity',
+        description: `Raise this affinity to level ${nextLv} of ${cap}. The aura grows, and its gift stays the same.`,
         accent: activeDef?.primaryColor ?? '#c084fc',
         combinedElementId: p.combinedElement ?? undefined,
-      },
-      {
-        id: `lvl-wep-res-${nextWepLv}`,
-        kind: 'weapon_damage',
-        category: `Weapon · ${wepInfo.tag}`,
-        title: wepInfo.title,
-        description: wepInfo.description,
+      });
+    }
+    if (p.weaponPowerLevel < 25) {
+      cards.push({
+        id: `wp-${nextPower}`,
+        kind: 'weapon_power',
+        category: `Weapon Power [3] · ${p.weaponPowerLevel}/25`,
+        title: `Weapon Power ${nextPower}`,
+        description:
+          nextPower % 5 === 0
+            ? 'Your cooldown skill [3] ascends a tier. It stays between spells and basic swings.'
+            : 'Raises only skill [3]. It costs no mana and keeps its cooldown. Basic attacks are unchanged.',
         accent: '#e5a93c',
-        weaponId: p.weapon,
-      },
-      {
-        id: `lvl-spell-res-${nextSpellLv}`,
-        kind: 'upgrade_ability_slot',
-        category: `Spell [4] · ${spInfo.tag}`,
-        title: `${ABILITIES[equippedSpell].shortName} Lv ${nextSpellLv}`,
-        description: spInfo.summary,
-        accent: ABILITIES[equippedSpell].accent,
-        abilityId: equippedSpell,
-        slotIndex: 0,
-      },
-    ];
+      });
+    }
+    cards.push({
+      id: `lvl-spell-res-${nextSpellLv}`,
+      kind: 'upgrade_ability_slot',
+      category: `Spell [4] · ${spInfo.tag}`,
+      title: `${ABILITIES[equippedSpell].shortName} Lv ${nextSpellLv}`,
+      description: `${spInfo.summary} Spells stay the strongest hits.`,
+      accent: ABILITIES[equippedSpell].accent,
+      abilityId: equippedSpell,
+      slotIndex: 0,
+    });
+    return cards;
   }
 
   private buildLevelUpOptions(): UpgradeOption[] {
     const p = this.player;
-
-    // Level-ups focus on HP & MP Relics + Utility/Regen/Shadow/Agility.
-    // Weapon & Spell Relics are reserved exclusively for defeating Bosses!
-    const nextHpLv = p.runRelicLevels.hp + 1;
-    const nextMpLv = p.runRelicLevels.mp + 1;
-
-    const hpOpt: UpgradeOption = {
-      id: `lvl-hp-${nextHpLv}`,
-      kind: 'max_hp',
-      category: `Vitality Relic · Lv ${nextHpLv}/10`,
-      title: nextHpLv % 2 === 0 ? '+1 Max HP & Heal' : 'Vitality Relic (+1 HP Heal)',
-      description:
-        nextHpLv % 2 === 0
-          ? 'Gain +1 Max HP & restore +1 HP. (Sacrifice 10 HP Relics at Camp Altar for +1 permanent HP!)'
-          : 'Restore +1 HP & advance toward +1 Max HP next level. (10 levels can be sacrificed at Camp Altar.)',
-      accent: '#ef4444',
-    };
-
-    const mpOpt: UpgradeOption = {
-      id: `lvl-mp-${nextMpLv}`,
-      kind: 'max_mp',
-      category: `Arcane Relic · Lv ${nextMpLv}/10`,
-      title: nextMpLv % 2 === 0 ? '+1 Max MP & Restore' : 'Arcane Relic (+1 MP Restore)',
-      description:
-        nextMpLv % 2 === 0
-          ? 'Gain +1 Max MP & restore +1 MP. (Sacrifice 10 MP Relics at Camp Altar for +1 permanent MP!)'
-          : 'Restore +1 MP & advance toward +1 Max MP next level. (10 levels can be sacrificed at Camp Altar.)',
-      accent: '#60a5fa',
-    };
-
-    const thirdPool: UpgradeOption[] = [
+    const pool: UpgradeOption[] = [
+      {
+        id: `lvl-hp-${p.runRelicLevels.hp + 1}`,
+        kind: 'max_hp',
+        category: 'Vitality',
+        title: '+1 Max HP',
+        description: 'Your maximum health goes up by 1, and you heal 1. Every HP pick raises the max.',
+        accent: '#ef4444',
+      },
+      {
+        id: `lvl-mp-${p.runRelicLevels.mp + 1}`,
+        kind: 'max_mp',
+        category: 'Focus',
+        title: '+1 Max MP',
+        description: 'Your maximum mana goes up by 1, and you restore 1. Every MP pick raises the max.',
+        accent: '#60a5fa',
+      },
       {
         id: `lvl-hp-regen-${p.hpRegenLevel + 1}`,
         kind: 'hp_regen',
-        category: `HP Recovery · Lv ${p.hpRegenLevel + 1}`,
-        title: `Room HP Regen Lv ${p.hpRegenLevel + 1}`,
-        description: `Restore +${p.hpRegenLevel + 1} HP automatically whenever you enter a new raid room.`,
+        category: 'Recovery',
+        title: `HP regen ${p.hpRegenLevel + 1}`,
+        description: `Restore +${p.hpRegenLevel + 1} HP at the start of each room.`,
         accent: '#f87171',
       },
       {
         id: `lvl-mp-regen-${p.mpRegenLevel + 1}`,
         kind: 'mp_regen',
-        category: `MP Recovery · Lv ${p.mpRegenLevel + 1}`,
-        title: `Room MP Regen Lv ${p.mpRegenLevel + 1}`,
-        description: `Restore +${p.mpRegenLevel + 1} MP automatically whenever you enter a new raid room.`,
+        category: 'Recovery',
+        title: `MP regen ${p.mpRegenLevel + 1}`,
+        description: `Restore +${p.mpRegenLevel + 1} MP at the start of each room.`,
         accent: '#38bdf8',
       },
       {
-        id: `lvl-assassin-${p.assassinTrainingLevel + 1}`,
+        id: `lvl-armor-${p.armorShield + 1}`,
+        kind: 'armor_relic',
+        category: 'Guard',
+        title: '+1 Armor',
+        description: 'Gain 1 armor shield for this room.',
+        accent: '#cbd5e1',
+      },
+      {
+        id: `lvl-speed-${p.swiftFootworkLevel + 1}`,
+        kind: 'swift_footwork',
+        category: 'Tempo',
+        title: `Speed +${p.swiftFootworkLevel + 1}`,
+        description: '+4% move speed.',
+        accent: '#22d3ee',
+      },
+      {
+        id: `lvl-crit-${p.assassinTrainingLevel + 1}`,
         kind: 'assassin_training',
-        category: `Shadow Relic · Lv ${p.runRelicLevels.agility + 1}/10`,
-        title: `Shadow Assassin +${p.assassinTrainingLevel + 1}`,
-        description: '+6% Crit Chance, +12% Assassination Damage & longer Shadow Chain burst.',
+        category: 'Edge',
+        title: `Crit +${p.assassinTrainingLevel + 1}`,
+        description: '+6% crit chance.',
         accent: '#f43f5e',
       },
       {
-        id: `lvl-swift-${p.swiftFootworkLevel + 1}`,
-        kind: 'swift_footwork',
-        category: `Agility Relic · Lv ${p.runRelicLevels.agility + 1}/10`,
-        title: `Swift Footwork +${p.swiftFootworkLevel + 1}`,
-        description: '+4% Move Speed & 5% faster Skill and Spell cooldowns.',
-        accent: '#22d3ee',
+        id: `lvl-cd-${p.cooldownRank + 1}`,
+        kind: 'cooldown_relic',
+        category: 'Tempo',
+        title: `Cooldown +${p.cooldownRank + 1}`,
+        description: 'Skills and spells recover a little faster.',
+        accent: '#a78bfa',
+      },
+      {
+        id: `lvl-leech-${p.lifestealRank + 1}`,
+        kind: 'lifesteal_relic',
+        category: 'Sustain',
+        title: `Lifesteal +${p.lifestealRank + 1}`,
+        description: 'Kills restore 1 HP a little more often.',
+        accent: '#fb7185',
+      },
+      {
+        id: `lvl-pot-${p.potionPowerBonus + 1}`,
+        kind: 'item_potion_power',
+        category: 'Items',
+        title: `Potion power +${p.potionPowerBonus + 1}`,
+        description: 'Potions restore 1 more HP or MP.',
+        accent: '#f472b6',
       },
     ];
-
-    const pickedThird = shuffle(thirdPool)[0];
-    return [hpOpt, mpOpt, pickedThird];
+    if (p.weaponPowerLevel < 25) {
+      pool.push({
+        id: `lvl-wp-${p.weaponPowerLevel + 1}`,
+        kind: 'weapon_power',
+        category: 'Weapon Power [3]',
+        title: `Weapon Power ${p.weaponPowerLevel + 1}/25`,
+        description: 'Raises only your cooldown skill. It does not raise basic swings. Every 5th level ascends it.',
+        accent: '#e5a93c',
+      });
+    }
+    return shuffle(pool).slice(0, 3);
   }
 
   private updateCrumblingPlatforms(dt: number): void {
@@ -4100,7 +4315,9 @@ export class GameEngine {
       this.permAltarBonuses.agility * 0.04 +
       (this.hasBossCharm('paradox_hourglass') ? 0.25 : 0) +
       (this.hasCharmSynergy('neon_paradox') ? 0.18 : 0) +
-      (p.cursedRelics.includes('shattered_hourglass') ? 0.3 : 0);
+      (p.cursedRelics.includes('shattered_hourglass') ? 0.3 : 0) +
+      p.cooldownRank * 0.04 +
+      (fusionGift(p.combinedElement)?.stat === 'cd' ? (fusionGift(p.combinedElement)?.amount ?? 0) / 100 : 0);
     this.frameInput = input;
     p.animTime += dt;
     if (p.landTimer > 0) p.landTimer = Math.max(0, p.landTimer - dt);
@@ -5229,7 +5446,8 @@ export class GameEngine {
     const charmJumpMult =
       (this.hasBossCharm('jade_feather_pearl') ? 1.12 : 1.0) *
       (this.hasBossCharm('abyssal_trident_pearl') ? 1.14 : 1.0);
-    let effectiveMoveSpeed = tuning.moveSpeed * cDef.speedMult * (swiftMult + elSpeedBonus + charmSpeedBonus) * chainSpeedMult;
+    const giftSpeed = fusionGift(p.combinedElement)?.stat === 'speed' ? (fusionGift(p.combinedElement)?.amount ?? 0) / 100 : 0;
+    let effectiveMoveSpeed = tuning.moveSpeed * cDef.speedMult * (swiftMult + elSpeedBonus + charmSpeedBonus + giftSpeed) * chainSpeedMult;
     if (p.statusSoakedTimer > 0) effectiveMoveSpeed *= 0.62;
     const effectiveJumpForce = tuning.jumpForce * cDef.jumpMult * chainJumpMult * charmJumpMult;
     const maxHeroAirJumps =
@@ -5723,14 +5941,15 @@ export class GameEngine {
     const scale = tuning.playerScale;
     const h = (p.crouching ? p.crouchBaseH : p.baseH) * scale;
     const wDef = WEAPONS[p.weapon];
-    const weaponLv = 1 + p.weaponDamageBonus;
-    const evoTier = this.getWeaponEvoTier();
+    const weaponLv = Math.max(1, Math.min(25, p.weaponPowerLevel));
+    const evoTier = Math.floor(weaponLv / 5);
     const flatBonus = this.getWeaponFlatBonus(weaponLv);
 
     // Weapon skill cancels attack startup/recovery for crisp responsiveness
     p.attackState = 'idle';
     p.attackTimer = 0;
-
+    this.castingWeaponSkill = true;
+    try {
     switch (p.weapon) {
       case 'whip': {
         // Whip Weapon Skill: Backdash (Every 5 upgrades expands Explosive Parting Shock Snap!)
@@ -6532,6 +6751,10 @@ export class GameEngine {
         return true;
       }
     }
+    } finally {
+      this.castingWeaponSkill = false;
+    }
+    return false;
   }
 
   private findMinstrelWhipAnchor(
@@ -9088,7 +9311,11 @@ export class GameEngine {
           return;
         }
         p.itemCounts[itemId] -= 1;
-        const heal = Math.min(2 + p.potionPowerBonus + p.alchemistBeltLevel, p.maxHp - p.hp);
+        const potGift = fusionGift(p.combinedElement)?.stat === 'pot' ? fusionGift(p.combinedElement)!.amount : 0;
+        const heal = Math.min(2 + p.potionPowerBonus + p.alchemistBeltLevel + potGift, p.maxHp - p.hp);
+        if (p.itemExtraUsesBonus > 0 && Math.random() < Math.min(0.45, p.itemExtraUsesBonus * 0.12)) {
+          p.itemCounts[itemId] += 1;
+        }
         p.hp += heal;
         if (p.cursedRelics.includes('bloodglass_chalice')) {
           p.armorShield += 1;
@@ -9106,7 +9333,11 @@ export class GameEngine {
           return;
         }
         p.itemCounts[itemId] -= 1;
-        const gain = Math.min(2 + p.potionPowerBonus + p.alchemistBeltLevel, p.maxMp - p.mp);
+        const potGift = fusionGift(p.combinedElement)?.stat === 'pot' ? fusionGift(p.combinedElement)!.amount : 0;
+        const gain = Math.min(2 + p.potionPowerBonus + p.alchemistBeltLevel + potGift, p.maxMp - p.mp);
+        if (p.itemExtraUsesBonus > 0 && Math.random() < Math.min(0.45, p.itemExtraUsesBonus * 0.12)) {
+          p.itemCounts[itemId] += 1;
+        }
         p.mp = Math.min(p.maxMp, p.mp + gain);
         if (p.cursedRelics.includes('bloodglass_chalice')) {
           p.armorShield += 1;
@@ -9152,11 +9383,15 @@ export class GameEngine {
     }
 
     p.specialItemCounts[id] -= 1;
+    if (p.itemExtraUsesBonus > 0 && Math.random() < Math.min(0.45, p.itemExtraUsesBonus * 0.12)) {
+      p.specialItemCounts[id] += 1;
+    }
     p.specialItemCooldown = def.cooldown;
+    const itemPower = p.specialItemPowerBonus;
 
     if (id === 'smoke_vial') {
       // SHADOW SMOKE VIAL: Obscuring smoke bomb — instant 3.5s Ambush Stealth + blinds & stuns nearby foes!
-      this.chipNearby(tuning, p.x, p.y - h * 0.5, 120, 1);
+      this.chipNearby(tuning, p.x, p.y - h * 0.5, 120, 1 + itemPower);
       p.ambushTimer = Math.max(p.ambushTimer, 3.5);
       p.shadowChainTimer = Math.max(p.shadowChainTimer, 3.5);
       p.invulnTimer = Math.max(p.invulnTimer, 0.55);
@@ -9217,7 +9452,7 @@ export class GameEngine {
         if (enemy.dead) continue;
         if (Math.hypot(enemy.x - p.x, enemy.y - p.y) <= 250) {
           const ey = enemy.y - (enemy.baseH * tuning.enemyScale) / 2;
-          const dmg = 5 + this.getWeaponFlatBonus(1 + p.weaponDamageBonus);
+          const dmg = 5 + itemPower + this.getWeaponFlatBonus(1 + p.weaponDamageBonus);
           enemy.shieldActive = false;
           enemy.hp = Math.max(0, enemy.hp - dmg);
           this.raidDamageDealt += dmg;
@@ -9249,7 +9484,7 @@ export class GameEngine {
       this.triggerShake(10, 0.28);
       this.triggerImpactFlash('#38bdf8', 0.45, p.x, p.y - h * 0.5, 1.5, 0.28);
       this.spawnDamageNumber(p.x, p.y - h - 22, 'PHANTOM TAG-TEAM!', '#38bdf8', 1.25, 'TWIN ECHOES · +1 HP/+2 MP');
-      this.chipNearby(tuning, p.x, p.y - h * 0.5, 110, 1);
+      this.chipNearby(tuning, p.x, p.y - h * 0.5, 110, 1 + itemPower);
       return;
     }
 
@@ -9299,7 +9534,7 @@ export class GameEngine {
       if (enemy.dead) continue;
       if (Math.abs(enemy.x - p.x) > 760) continue;
       const ey = enemy.y - (enemy.baseH * tuning.enemyScale) / 2;
-      const dmg = 8;
+      const dmg = 8 + itemPower;
       enemy.hp = Math.max(0, enemy.hp - dmg);
       enemy.flashTimer = 0.24;
       enemy.hurtStunTimer = enemy.isBoss ? 0.15 : 0.45;
@@ -9720,6 +9955,30 @@ export class GameEngine {
       case 'upgrade_altar': {
         this.spawnSparkles(target.x, target.y - 52, 20, '#ffd166', '#ffffff', 1.2);
         this.openUpgradeDraft('Vitality & Arcane Shrine — Choose 1 of 3', 'altar');
+        break;
+      }
+      case 'item_altar': {
+        this.spawnSparkles(target.x, target.y - 52, 22, '#f472b6', '#fde047', 1.25);
+        this.pendingUpgrades = this.buildItemRelicOptions();
+        this.upgradePromptTitle = 'Item Relic Altar — Choose 1 of 3';
+        this.status = 'CHOOSING_UPGRADE';
+        break;
+      }
+      case 'arsenal_relic': {
+        this.spawnSparkles(target.x, target.y - 52, 28, '#fde047', '#c084fc', 1.4);
+        this.pendingUpgrades = [
+          {
+            id: 'eclipse-crown',
+            kind: 'tri_arsenal_relic',
+            category: 'Eclipse Crown',
+            title: '+1 spell, +1 special, +1 weapon',
+            description:
+              'One more spell slot, one more special you can bring, and one more weapon option.',
+            accent: '#fde047',
+          },
+        ];
+        this.upgradePromptTitle = 'Eclipse Crown — Final Boss Relic';
+        this.status = 'CHOOSING_UPGRADE';
         break;
       }
     }
@@ -14629,14 +14888,17 @@ export class GameEngine {
       if (seq.timer <= 0) {
         if (seq.spawnsRelic && !seq.relicSpawned) {
           seq.relicSpawned = true;
+          const eclipseCrown = Boolean(seq.isBigBoss && this.activeRaidId === 'eclipse_gauntlet');
           this.interactables.push({
             id: `boss-relic-${this.stageIndex}`,
-            kind: 'boss_relic',
+            kind: eclipseCrown ? 'arsenal_relic' : 'boss_relic',
             x: seq.x,
             y: seq.floorY,
-            label: seq.isBigBoss
-              ? `Claim Grand Raid Relic (+${seq.shardGain} Shards)`
-              : 'Claim Floating Boss Relic (1 of 3)',
+            label: eclipseCrown
+              ? 'Claim Eclipse Crown (+1 spell, +1 special, +1 weapon)'
+              : seq.isBigBoss
+                ? `Claim Grand Raid Relic (+${seq.shardGain} Shards)`
+                : 'Claim Floating Boss Relic (1 of 3)',
             used: false,
             relicColor: seq.color,
             isBigBossRelic: seq.isBigBoss,
@@ -14817,6 +15079,17 @@ export class GameEngine {
     enemy.markTimer = 0;
     enemy.dead = true;
     const isBig = Boolean(enemy.isBigBoss);
+    this.leechKills += 1;
+    const killGift = fusionGift(this.player.combinedElement);
+    const leechEvery = killGift?.stat === 'leech' ? killGift.amount : 0;
+    const rankEvery = this.player.lifestealRank > 0 ? Math.max(2, 6 - Math.min(4, this.player.lifestealRank)) : 0;
+    if (
+      this.player.hp < this.player.maxHp &&
+      ((leechEvery > 0 && this.leechKills % leechEvery === 0) || (rankEvery > 0 && this.leechKills % rankEvery === 0))
+    ) {
+      this.player.hp += 1;
+      this.spawnDamageNumber(this.player.x, this.player.y - this.player.baseH - 16, '+1 HP', '#fb7185', 0.9, 'LIFEBLOOD');
+    }
 
     // Elaborate category-specific enemy dying sound + arterial blood eruption!
     sound.playEnemyDeath(enemy.type, enemy.isBoss, isBig, wasAssassination);
@@ -15192,7 +15465,18 @@ export class GameEngine {
       return;
     }
 
-    const weaponLv = 1 + p.weaponDamageBonus;
+    const skillHit =
+      this.castingWeaponSkill ||
+      source === 'hammer_meteor' ||
+      p.katanaMegaSlashTimer > 0 ||
+      p.monkDashTimer > 0 ||
+      p.minstrelDanceTimer > 0 ||
+      p.rapierLungeTimer > 0 ||
+      p.axeSpinTimer > 0 ||
+      p.naginataVaultTimer > 0;
+    const weaponLv = skillHit
+      ? Math.max(1, Math.min(25, p.weaponPowerLevel))
+      : 1 + p.weaponDamageBonus;
     const weaponFlat = this.getWeaponFlatBonus(weaponLv);
     const spellFlat = this.getSpellFlatBonus(abilityPower);
 
@@ -15292,6 +15576,7 @@ export class GameEngine {
     const charmCritBonus =
       (this.hasBossCharm('crimson_chalice') ? 15 : 0) +
       (this.hasBossCharm('velvet_signet') ? 18 : 0);
+    const giftCrit = fusionGift(p.combinedElement)?.stat === 'crit' ? fusionGift(p.combinedElement)!.amount : 0;
     const effectiveCritChance =
       source === 'gas'
         ? 0
@@ -15305,7 +15590,8 @@ export class GameEngine {
               assassinCritBonus +
               weaponCritBonus +
               elementCritBonus +
-              charmCritBonus
+              charmCritBonus +
+              giftCrit
           );
 
     const isCrit =
@@ -15354,6 +15640,21 @@ export class GameEngine {
 
     const fireBonus = fireBonusActive ? 1 + this.getSpellFlatBonus(p.fireWeaponLevel) : 0;
     let damage = baseDamage + fireBonus + Math.max(0, Math.round((opts?.bonusDamage ?? 0) + aMods.bonusDamage));
+    const spellHit = source === 'fireball' || source === 'gas' || source === 'grapple' || source === 'dash';
+    const gift = fusionGift(p.combinedElement);
+    if (spellHit) {
+      damage = Math.max(1, Math.round(damage * 1.25) + (gift?.stat === 'spell' ? gift.amount : 0));
+    } else if (skillHit) {
+      damage = Math.max(1, Math.round(damage * 1.05) + (gift?.stat === 'skill' ? gift.amount : 0));
+    } else if (source === 'weapon') {
+      damage = Math.max(1, Math.round(damage * 0.85) + (gift?.stat === 'basic' ? gift.amount : 0));
+    }
+    if (gift?.stat === 'boss' && enemy.isBoss) {
+      damage = Math.max(1, Math.round(damage * (1 + gift.amount / 100)));
+    }
+    if (gift?.stat === 'knock' && opts) {
+      opts.kbX = (opts.kbX ?? 120) * (1 + gift.amount / 100);
+    }
 
     // Boss Charm Global & Aerial Damage Modifiers!
     if (this.hasBossCharm('astral_eclipse_prism')) {
@@ -15904,6 +16205,11 @@ export class GameEngine {
     if (this.hasElement('blood') && this.elementalHitCounter % 6 === 0 && p.hp < p.maxHp) {
       p.hp = Math.min(p.maxHp, p.hp + 1);
       this.spawnDamageNumber(p.x, p.y - p.baseH * tuning.playerScale - 18, '+1 HP', '#dc2626', 0.9, 'BLOOD SIPHON');
+    }
+    const manaGift = fusionGift(p.combinedElement);
+    if (manaGift?.stat === 'mana' && this.elementalHitCounter % manaGift.amount === 0 && p.mp < p.maxMp) {
+      p.mp = Math.min(p.maxMp, p.mp + 1);
+      this.spawnDamageNumber(p.x, p.y - p.baseH * tuning.playerScale - 16, '+1 MP', '#67e8f9', 0.85, 'MANA FLOW');
     }
 
     // 3. MP Flow (Water / Steam / Prism / Aether / Abyss crits)
@@ -16823,6 +17129,18 @@ export class GameEngine {
       default:
         break;
     }
+    const gift = fusionGift(this.player.combinedElement);
+    if (!gift) return;
+    if (gift.stat === 'burn' && (enemy.burnTimer ?? 0) > 0) enemy.burnTimer = (enemy.burnTimer ?? 0) + gift.amount;
+    if (gift.stat === 'freeze' && (enemy.chillTimer ?? 0) > 0) enemy.chillTimer = (enemy.chillTimer ?? 0) + gift.amount;
+    if (gift.stat === 'stun' && (enemy.stunTimer ?? 0) > 0) {
+      enemy.stunTimer = (enemy.stunTimer ?? 0) + gift.amount * 0.1;
+      enemy.hurtStunTimer += gift.amount * 0.1;
+    }
+    if (gift.stat === 'blind' && (enemy.blindTimer ?? 0) > 0) enemy.blindTimer = (enemy.blindTimer ?? 0) + gift.amount;
+    if (gift.stat === 'poison' && (enemy.poisonStacks ?? 0) > 0) {
+      enemy.poisonStacks = Math.min(5, (enemy.poisonStacks ?? 0) + gift.amount);
+    }
   }
 
   private applyElementStatusToPlayer(el: BaseElementId): void {
@@ -16982,6 +17300,120 @@ export class GameEngine {
     this.camera.targetX = p.x + 20;
     this.camera.y = p.y - 40;
     this.camera.targetY = p.y - 40;
+  }
+
+  /** Level 10 offer: deepen the current element, or fuse into a different one. */
+  public previewDoubleDown(): void {
+    const tuning = this.tuning;
+    this.activeRaidId = 'nocturne_castle';
+    this.loadStage(0, tuning, true, false, false);
+    this.transitionPhase = 'none';
+    this.transitionAlpha = 0;
+    const p = this.player;
+    p.baseElements = ['fire'];
+    p.combinedElement = null;
+    p.affinityLevel = 1;
+    p.affinityLockedSingle = true;
+    p.level = 10;
+    this.pendingUpgrades = this.buildElementAffinityOptions();
+    this.upgradePromptTitle = 'Level 10 — Deepen Fire or fuse';
+    this.status = 'CHOOSING_UPGRADE';
+  }
+
+  /** Weapon Power is its own ladder, separate from basic weapon level. */
+  public previewWeaponPower(): void {
+    const tuning = this.tuning;
+    this.activeRaidId = 'nocturne_castle';
+    this.loadStage(0, tuning, true, false, false);
+    this.transitionPhase = 'none';
+    this.transitionAlpha = 0;
+    const p = this.player;
+    p.weaponPowerLevel = 4;
+    p.weaponDamageBonus = 0;
+    this.pendingUpgrades = [
+      {
+        id: 'wp-5',
+        kind: 'weapon_power',
+        category: 'Weapon Power [3] · 4/25',
+        title: 'Weapon Power 5',
+        description:
+          'Its own levels, from 1 to 25. Every 5th level ascends the cooldown skill. Spells stay strongest, this skill stays in the middle, and basic swings stay weakest.',
+        accent: '#e5a93c',
+      },
+    ];
+    this.upgradePromptTitle = 'Weapon Power route — skill [3]';
+    this.status = 'CHOOSING_UPGRADE';
+  }
+
+  /** Rare mid-raid altar that offers item relics. */
+  public previewItemAltar(): void {
+    const tuning = this.tuning;
+    this.activeRaidId = 'nocturne_castle';
+    this.itemAltarArmed = true;
+    this.itemAltarPlaced = false;
+    this.loadStage(1, tuning, true, false, false);
+    this.transitionPhase = 'none';
+    this.transitionAlpha = 0;
+    const altar = this.interactables.find((it) => it.kind === 'item_altar');
+    const p = this.player;
+    if (altar) {
+      p.x = altar.x;
+      p.y = altar.y;
+      p.onGround = true;
+    }
+    this.pendingUpgrades = this.buildItemRelicOptions();
+    this.upgradePromptTitle = 'Item Relic Altar — Choose 1 of 3';
+    this.status = 'CHOOSING_UPGRADE';
+    this.camera.x = p.x;
+    this.camera.targetX = p.x;
+    this.camera.y = p.y - 40;
+    this.camera.targetY = p.y - 40;
+  }
+
+  /** Eclipse final boss relic: +1 spell slot, +1 special, +1 weapon. */
+  public previewFinalRelic(): void {
+    const tuning = this.tuning;
+    this.activeRaidId = 'eclipse_gauntlet';
+    this.loadStage(0, tuning, true, false, false);
+    this.transitionPhase = 'none';
+    this.transitionAlpha = 0;
+    this.pendingUpgrades = [
+      {
+        id: 'eclipse-crown',
+        kind: 'tri_arsenal_relic',
+        category: 'Eclipse Crown',
+        title: '+1 spell, +1 special, +1 weapon',
+        description:
+          'The final raid boss drops this. One more spell slot, one more special you can bring, and one more weapon option.',
+        accent: '#fde047',
+      },
+    ];
+    this.upgradePromptTitle = 'Eclipse Crown — Final Boss Relic';
+    this.status = 'CHOOSING_UPGRADE';
+  }
+
+  /** Fused affinity at level 4, so the aura is at full size. */
+  public previewFusionAura(): void {
+    const tuning = this.tuning;
+    this.activeRaidId = 'nocturne_castle';
+    this.loadStage(0, tuning, true, false, false);
+    this.transitionPhase = 'none';
+    this.transitionAlpha = 0;
+    this.status = 'PLAYING';
+    const p = this.player;
+    p.baseElements = ['fire', 'storm'];
+    p.combinedElement = 'plasma';
+    p.affinityLevel = 4;
+    p.affinityLockedSingle = false;
+    p.elementResonance = 3;
+    p.onGround = true;
+    p.x = this.currentStage.worldWidth * 0.42;
+    p.y = this.currentStage.floorY;
+    for (const enemy of this.enemies) enemy.dead = true;
+    this.camera.x = p.x;
+    this.camera.targetX = p.x;
+    this.camera.y = p.y - 80;
+    this.camera.targetY = p.y - 80;
   }
 
   /** Puts a weak hit, a resisted hit, and all five status effects on screen. Used by ?elementsPreview=1. */
@@ -17185,8 +17617,8 @@ export class GameEngine {
       elementResonance: this.player.elementResonance,
       affinityLevel: this.player.affinityLevel,
       affinityMaxLevel: this.player.combinedElement ? 4 : 5,
-      weaponPowerLevel: this.player.weaponDamageBonus,
-      weaponPowerEvolutionTier: this.getWeaponEvoTier(),
+      weaponPowerLevel: this.player.weaponPowerLevel,
+      weaponPowerEvolutionTier: Math.floor(this.player.weaponPowerLevel / 5),
       weaponEvolutionTier: this.getWeaponEvoTier(),
       spellEvolutionTier: this.getSpellEvoTier(this.player.abilitySlotLevels[0]),
       cursedRelics: [...this.player.cursedRelics],
