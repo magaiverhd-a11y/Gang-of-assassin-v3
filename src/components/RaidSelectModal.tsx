@@ -9,15 +9,28 @@ import {
   RAIDS,
   STANDARD_RAID_ORDER,
 } from '../game/defaults';
+import { BASE_ELEMENTS, ELEMENT_MATCHUPS, getEnemyElement } from '../game/elementFusions';
 import { LORE_BY_RAID, LORE_FRAGMENTS } from '../game/lore';
 import { RAIDS_BY_ID } from '../game/raids';
-import { HudSnapshot, RaidId } from '../game/types';
+import { BaseElementId, HudSnapshot, RaidId } from '../game/types';
 
 interface RaidSelectModalProps {
   hud: HudSnapshot;
   onStartRaid: (raidId: RaidId) => void;
   onOpenLore: (raidId: RaidId) => void;
   onClose: () => void;
+}
+
+function elementNames(ids: BaseElementId[]): string {
+  return ids.map((id) => BASE_ELEMENTS[id].name).join(', ');
+}
+
+/** The element this raid's foes share, written out in full. */
+function raidElementText(raidId: RaidId): string {
+  const el = getEnemyElement('scout', raidId);
+  const def = BASE_ELEMENTS[el];
+  const match = ELEMENT_MATCHUPS[el];
+  return `${def.name}. Weak to ${elementNames(match.weakTo)}. Resists ${elementNames(match.resists)}. Their hits inflict ${match.statusName.toLowerCase()}.`;
 }
 
 const RAID_BTN_BG: Record<RaidId, string> = {
@@ -267,7 +280,7 @@ export function RaidSelectModal({
   const selectedCharm = selectedCharmId ? BOSS_CHARMS[selectedCharmId] : null;
   const selectedCharmOwned = selectedCharmId ? hud.bossCharms.includes(selectedCharmId) : false;
   const selectedSynergies = selectedCharmId
-    ? CHARM_SYNERGIES.filter((s) => s.charms.includes(selectedCharmId)).slice(0, 2)
+    ? CHARM_SYNERGIES.filter((s) => s.charms.includes(selectedCharmId))
     : [];
   const selectedRooms = RAIDS_BY_ID[activeRaidId];
   const selectedLoreAll = LORE_BY_RAID[activeRaidId] ?? [];
@@ -324,10 +337,10 @@ export function RaidSelectModal({
   }, [activeRaidId, displayedRaids, onClose, onStartRaid, selectedIsLocked, viewAll]);
 
   return (
-    <div className="absolute inset-0 bg-[#080a10]/88 flex items-center justify-center p-2.5 sm:p-4 z-20">
-      <div className="max-w-5xl w-full bg-[#11141f] border border-[#2f3750] p-3.5 sm:p-4 space-y-3">
+    <div className="absolute inset-0 bg-[#080a10]/88 overflow-y-auto z-20">
+      <div className="max-w-5xl w-full mx-auto my-2 sm:my-4 bg-[#11141f] border border-[#2f3750] p-3 sm:p-4 space-y-3">
         {/* Clean Compact Header */}
-        <div className="flex items-center justify-between gap-3 border-b border-[#23293d] pb-2.5">
+        <div className="flex flex-wrap items-start justify-between gap-3 border-b border-[#23293d] pb-2.5">
           <div className="min-w-0">
             <h2
               className="text-base sm:text-lg font-bold tracking-wide text-[#f3efe6] leading-tight"
@@ -357,7 +370,7 @@ export function RaidSelectModal({
             </div>
           </div>
 
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
               onClick={() => onOpenLore(activeRaidId)}
@@ -449,20 +462,20 @@ export function RaidSelectModal({
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center justify-between gap-1">
                         <span
-                          className="text-xs font-bold text-[#f3efe6] truncate"
+                          className="text-xs font-bold text-[#f3efe6] break-words whitespace-normal"
                           style={{ fontFamily: 'var(--font-display)' }}
                         >
                           {raid.name}
                         </span>
                         {isCleared && <Check className="w-3 h-3 text-[#34d399] shrink-0" />}
                       </div>
-                      <div className="text-[10px] text-[#9aa2b8] truncate">
-                        {isEndLocked ? `Clear ${remainingForEnd} more` : raid.gimmick}
+                      <div className="text-[10px] text-[#9aa2b8] break-words whitespace-normal leading-snug">
+                        {isEndLocked ? `Clear ${remainingForEnd} more raids to unlock` : raid.gimmick}
                       </div>
                     </div>
                   </div>
                   <div className="flex items-center justify-between gap-1 pt-1 border-t border-[#22283d] text-[10px]">
-                    <span className="truncate font-medium" style={{ color: charm?.color ?? '#cbd5e1' }}>
+                    <span className="break-words whitespace-normal font-medium leading-snug" style={{ color: charm?.color ?? '#cbd5e1' }}>
                       {charm?.name ?? 'Boss Relic'}
                     </span>
                     <span className="font-mono text-[#9aa2b8] tabular-nums shrink-0">
@@ -530,20 +543,20 @@ export function RaidSelectModal({
                     >
                       {raid.name}
                     </div>
-                    <div className="text-[11px] text-[#cbd5e1] truncate">{raid.gimmick}</div>
-                    <div className="text-[11px] text-[#9aa2b8] truncate">Boss: {finalBoss}</div>
+                    <div className="text-[11px] text-[#cbd5e1] break-words whitespace-normal leading-snug">{raid.gimmick}</div>
+                    <div className="text-[11px] text-[#9aa2b8] break-words whitespace-normal leading-snug">Boss: {finalBoss}</div>
                   </div>
 
                   {charm && (
                     <div className="w-full pt-2 border-t border-[#22283d]">
                       <div
-                        className="text-xs font-semibold truncate"
+                        className="text-xs font-semibold break-words whitespace-normal leading-snug"
                         style={{ color: charm.color }}
                       >
                         {charm.name}
                         {charmOwned ? ' · Owned' : ''}
                       </div>
-                      <div className="text-[11px] text-[#8c95ad] line-clamp-1">
+                      <div className="text-[11px] text-[#8c95ad] break-words whitespace-normal leading-snug">
                         {charm.effectSummary}
                       </div>
                     </div>
@@ -554,89 +567,114 @@ export function RaidSelectModal({
           </div>
         )}
 
-        {/* Click-to-Inspect Full Info Strip (fits cleanly on the same 1 screen!) */}
-        <div className="bg-[#0d1019] border border-[#2c344d] p-3 sm:p-3.5 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-          <div className="flex items-start gap-3 min-w-0 flex-1">
+        {/* Selected raid: full text, wraps, and scrolls on a short screen. */}
+        <div className="bg-[#0d1019] border border-[#2c344d] p-3 sm:p-3.5 space-y-3">
+          <div className="flex items-start gap-3">
             <div
-              className="w-14 h-14 shrink-0 flex items-center justify-center border border-[#343e5c]"
+              className="w-12 h-12 sm:w-14 sm:h-14 shrink-0 flex items-center justify-center border border-[#343e5c]"
               style={{
                 background: `radial-gradient(circle at center, ${selectedRaid.accent}30, #0b0e17 78%)`,
               }}
             >
-              <RaidEmblem id={selectedRaid.id} className="w-11 h-11" />
+              <RaidEmblem id={selectedRaid.id} className="w-10 h-10 sm:w-11 sm:h-11" />
             </div>
-
-            <div className="min-w-0 flex-1 space-y-1">
-              <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                <h3
-                  className="text-sm sm:text-base font-bold text-[#f3efe6]"
-                  style={{ fontFamily: 'var(--font-display)' }}
-                >
-                  {selectedRaid.name}
-                </h3>
-                <span className="text-xs text-[#9aa2b8]">{selectedRaid.subtitle}</span>
-              </div>
-              <p className="text-xs text-[#cbd5e1] leading-relaxed line-clamp-2">
-                {selectedRaid.description}
+            <div className="min-w-0 flex-1">
+              <h3
+                className="text-base sm:text-lg font-bold text-[#f3efe6] break-words whitespace-normal leading-snug"
+                style={{ fontFamily: 'var(--font-display)' }}
+              >
+                {selectedRaid.name}
+              </h3>
+              <p className="text-xs text-[#9aa2b8] break-words whitespace-normal leading-snug mt-0.5">
+                {selectedRaid.subtitle}
               </p>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-0.5 text-[11px] pt-0.5">
-                <div className="text-[#9aa2b8] truncate">
-                  <span className="text-[#e5a93c] font-semibold">Enemies:</span>{' '}
-                  {selectedRaid.enemySummary}
-                </div>
-                <div className="text-[#9aa2b8] truncate">
-                  <span className="text-[#e5a93c] font-semibold">Final Boss:</span>{' '}
-                  {selectedRooms[selectedRooms.length - 1]?.bossName ?? selectedRaid.finalBossName}
-                </div>
-                {selectedCharm && (
-                  <div className="text-[#9aa2b8] truncate md:col-span-2">
-                    <span className="font-semibold" style={{ color: selectedCharm.color }}>
-                      {selectedCharm.name}
-                      {selectedCharmOwned ? ' (Owned)' : ''}:
-                    </span>{' '}
-                    {selectedCharm.effectSummary}
-                    {selectedSynergies.length > 0 && (
-                      <span className="text-[#8c95ad]">
-                        {' '}
-                        · Synergizes with{' '}
-                        {selectedSynergies
-                          .map((s) => {
-                            const otherId = s.charms[0] === selectedCharm.id ? s.charms[1] : s.charms[0];
-                            return BOSS_CHARMS[otherId]?.name ?? s.name;
-                          })
-                          .join(', ')}
-                      </span>
-                    )}
-                  </div>
-                )}
-              </div>
             </div>
           </div>
 
-          <div className="flex sm:flex-col items-center sm:items-end justify-between gap-2 shrink-0 sm:min-w-[164px]">
+          <div className="space-y-2.5">
+            <p className="text-xs sm:text-sm text-[#cbd5e1] leading-relaxed break-words whitespace-normal">
+              {selectedRaid.description}
+            </p>
+            <dl className="space-y-2 text-xs sm:text-[13px]">
+              <div>
+                <dt className="text-[#e5a93c] font-semibold">Place</dt>
+                <dd className="text-[#c5cede] break-words whitespace-normal leading-relaxed">{selectedRaid.gimmick}</dd>
+              </div>
+              <div>
+                <dt className="text-[#e5a93c] font-semibold">Enemies</dt>
+                <dd className="text-[#c5cede] break-words whitespace-normal leading-relaxed">{selectedRaid.enemySummary}</dd>
+              </div>
+              <div>
+                <dt className="text-[#e5a93c] font-semibold">Element</dt>
+                <dd className="text-[#c5cede] break-words whitespace-normal leading-relaxed">{raidElementText(activeRaidId)}</dd>
+              </div>
+              <div>
+                <dt className="text-[#e5a93c] font-semibold">Final boss</dt>
+                <dd className="text-[#c5cede] break-words whitespace-normal leading-relaxed">
+                  {selectedRooms[selectedRooms.length - 1]?.bossName ?? selectedRaid.finalBossName}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-[#e5a93c] font-semibold">Reward</dt>
+                <dd className="text-[#c5cede] break-words whitespace-normal leading-relaxed">
+                  {selectedCharm ? (
+                    <>
+                      <span className="font-semibold" style={{ color: selectedCharm.color }}>
+                        {selectedCharm.name}
+                        {selectedCharmOwned ? ' (already owned)' : ''}
+                      </span>
+                      {'. '}
+                      {selectedCharm.effectSummary}
+                      {selectedSynergies.length > 0 && (
+                        <>
+                          {' '}
+                          Synergizes with{' '}
+                          {selectedSynergies
+                            .map((s) => {
+                              const otherId = s.charms[0] === selectedCharm.id ? s.charms[1] : s.charms[0];
+                              return `${BOSS_CHARMS[otherId]?.name ?? s.name} (${s.name})`;
+                            })
+                            .join(', ')}
+                          .
+                        </>
+                      )}{' '}
+                    </>
+                  ) : (
+                    'Boss charm. '
+                  )}
+                  Lore scrolls {selectedLoreFound}/4.
+                </dd>
+              </div>
+              <div>
+                <dt className="text-[#e5a93c] font-semibold">Difficulty</dt>
+                <dd className="text-[#c5cede] break-words whitespace-normal leading-relaxed">
+                  {scaling.label}. {scaling.detail}
+                </dd>
+              </div>
+            </dl>
+          </div>
+
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-end gap-2 pt-1 border-t border-[#23293d]">
             <button
               type="button"
               onClick={() => onOpenLore(selectedRaid.id)}
-              className="text-xs text-[#fde68a] hover:text-white underline underline-offset-2 cursor-pointer whitespace-nowrap"
+              className="text-xs text-[#fde68a] hover:text-white underline underline-offset-2 cursor-pointer text-left break-words"
             >
-              Lore: {selectedLoreFound}/4 Collected
+              Lore: {selectedLoreFound}/4 collected
             </button>
-
             <button
               type="button"
               data-snd="chunky"
               disabled={selectedIsLocked}
               onClick={() => !selectedIsLocked && onStartRaid(selectedRaid.id)}
-              className={`w-full py-2.5 px-4 text-xs sm:text-sm font-bold text-white text-center whitespace-nowrap transition-opacity ${
+              className={`sm:min-w-[180px] py-2.5 px-4 text-xs sm:text-sm font-bold text-white text-center whitespace-normal leading-snug transition-opacity ${
                 selectedIsLocked
                   ? 'bg-[#22273a] text-[#7c859e] cursor-not-allowed'
                   : 'hover:opacity-95 cursor-pointer'
               }`}
               style={!selectedIsLocked ? { backgroundColor: RAID_BTN_BG[selectedRaid.id] } : undefined}
             >
-              {selectedIsLocked
-                ? `Clear ${remainingForEnd} More Raids`
-                : 'Enter Raid [0]'}
+              {selectedIsLocked ? `Clear ${remainingForEnd} more raids` : 'Enter Raid [0]'}
             </button>
           </div>
         </div>

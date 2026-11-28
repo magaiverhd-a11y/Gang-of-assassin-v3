@@ -17,9 +17,11 @@ import {
   Users,
   Volume2,
   VolumeX,
+  Sparkles,
   Zap,
 } from 'lucide-react';
 import { CraftingModal } from './components/CraftingModal';
+import { ElementPickerModal, nextElementOfferLevel } from './components/ElementPickerModal';
 import { AbilityIcon, SpecialItemIcon, WeaponIcon } from './components/GameIcons';
 import { InventoryModal } from './components/InventoryModal';
 import { LoreModal } from './components/LoreModal';
@@ -49,6 +51,7 @@ import { renderGame } from './game/renderer';
 import {
   AbilityId,
   ArtifactId,
+  BaseElementId,
   CharacterId,
   HeroSkinId,
   HudSnapshot,
@@ -136,6 +139,7 @@ export default function App() {
   const [muted, setMuted] = useState<boolean>(false);
   const [showCredits, setShowCredits] = useState<boolean>(false);
   const [showLore, setShowLore] = useState<boolean>(false);
+  const [showElements, setShowElements] = useState<boolean>(false);
   const showLoreRef = useRef<boolean>(false);
   showLoreRef.current = showLore;
   const [loreInitialRaid, setLoreInitialRaid] = useState<RaidId | undefined>(undefined);
@@ -242,6 +246,10 @@ export default function App() {
     baseElements: [],
     combinedElement: null,
     elementResonance: 0,
+    affinityLevel: 0,
+    affinityMaxLevel: 5,
+    weaponPowerLevel: 0,
+    weaponPowerEvolutionTier: 0,
     weaponEvolutionTier: 0,
     spellEvolutionTier: 0,
     shadowChainTimer: 0,
@@ -273,6 +281,8 @@ export default function App() {
     bossCharms: [],
     activeCharmSynergies: [],
     lastBossCharmDrop: null,
+    cursedRelics: [],
+    playerStatuses: {},
     collectedLoreIds: [],
     lastLoreToast: null,
   });
@@ -512,6 +522,13 @@ export default function App() {
 
   const handleReleaseFreeze = useCallback(() => {
     engineRef.current?.releaseKillFreeze();
+  }, []);
+
+  const handleChooseElement = useCallback((id: BaseElementId) => {
+    if (engineRef.current?.chooseStartingElement(id)) {
+      setHud(engineRef.current.getHudSnapshot());
+      setShowElements(false);
+    }
   }, []);
 
   const handleOpenCrafting = useCallback(() => {
@@ -813,9 +830,38 @@ export default function App() {
     if (!engineRef.current) {
       engineRef.current = new GameEngine(tuningRef.current);
       // Debug hook for tuning / automated smoke tests: open the game with ?debug in the URL.
-      if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('debug')) {
-        (window as unknown as { __nocturneEngine?: GameEngine }).__nocturneEngine = engineRef.current;
-        (window as unknown as { __nocturneSound?: unknown }).__nocturneSound = { sound, director: soundDirector };
+      if (typeof window !== 'undefined') {
+        const params = new URLSearchParams(window.location.search);
+        if (
+          params.has('debug') ||
+          params.has('elementsPreview') ||
+          params.has('doubleDown') ||
+          params.has('weaponPower') ||
+          params.has('itemAltar') ||
+          params.has('finalRelic') ||
+          params.has('fusionAura')
+        ) {
+          (window as unknown as { __nocturneEngine?: GameEngine }).__nocturneEngine = engineRef.current;
+          (window as unknown as { __nocturneSound?: unknown }).__nocturneSound = { sound, director: soundDirector };
+        }
+        if (params.has('elementsPreview')) {
+          window.setTimeout(() => engineRef.current?.showcaseElements(), 400);
+        }
+        if (params.has('doubleDown')) {
+          window.setTimeout(() => engineRef.current?.previewDoubleDown(), 500);
+        }
+        if (params.has('weaponPower')) {
+          window.setTimeout(() => engineRef.current?.previewWeaponPower(), 500);
+        }
+        if (params.has('itemAltar')) {
+          window.setTimeout(() => engineRef.current?.previewItemAltar(), 500);
+        }
+        if (params.has('finalRelic')) {
+          window.setTimeout(() => engineRef.current?.previewFinalRelic(), 500);
+        }
+        if (params.has('fusionAura')) {
+          window.setTimeout(() => engineRef.current?.previewFusionAura(), 500);
+        }
       }
     }
 
@@ -957,6 +1003,14 @@ export default function App() {
           {hud.status === 'MAP' && <MapModal hud={hud} onClose={handleCloseModal} />}
 
           {/* Lore Codex Modal */}
+          {showElements && (
+            <ElementPickerModal
+              hud={hud}
+              onChoose={handleChooseElement}
+              onClose={() => setShowElements(false)}
+            />
+          )}
+
           {showLore && (
             <LoreModal
               collectedLoreIds={hud.collectedLoreIds}
@@ -1004,7 +1058,7 @@ export default function App() {
                   </h2>
                   <p className="text-xs text-[#9aa2b8]">
                     {hud.pendingUpgrades.length > 3
-                      ? 'Use WASD to highlight 1 of 6 affinities and press 0 to awaken or fuse (or click / press 1–6).'
+                      ? 'This list appears every 5 levels (5, 10, 15, 20, 25). You can also pick a starting element from the Element button in camp. WASD, then 0, or click a card.'
                       : 'Use WASD to highlight a relic and press 0 to choose (or click / press 1, 2, 3).'}
                   </p>
                 </div>
@@ -1331,6 +1385,13 @@ export default function App() {
               active: showLore,
               accent: '#e5a93c',
             })}
+            {iconBtn(
+              'element',
+              hud.baseElements.length ? 'Elem' : 'Elem',
+              <Sparkles className="w-4 h-4" />,
+              () => setShowElements(true),
+              { active: showElements, accent: '#c084fc' }
+            )}
             {hud.inCamp &&
               iconBtn('craft', 'Forge', <Hammer className="w-4 h-4" />, handleOpenCrafting, {
                 active: hud.status === 'CRAFTING',
@@ -1603,26 +1664,37 @@ export default function App() {
 
           {(() => {
             const activeEl = getActiveElementDef(hud.baseElements, hud.combinedElement);
-            if (!activeEl) return null;
+            const nextLv = nextElementOfferLevel(hud.level);
+            const label = activeEl
+              ? `${activeEl.name.toUpperCase()} · next Lv ${nextLv}`
+              : `ELEMENT · camp or Lv ${nextLv}`;
             return (
               <>
-                <span className="text-[#353c52]" aria-hidden="true">·</span>
+              <span className="text-[#353c52]" aria-hidden="true">·</span>
+              <button
+                type="button"
+                onClick={() => setShowElements(true)}
+                className="whitespace-nowrap shrink-0 inline-flex items-center gap-1.5 font-mono text-[11px] font-bold hover:opacity-90"
+                style={{ color: activeEl?.primaryColor ?? '#c084fc' }}
+                title={
+                  activeEl
+                    ? `${activeEl.name}: ${activeEl.shortDesc} Next element offer at level ${nextLv}.`
+                    : `No element yet. Choose one in camp, or when you reach level ${nextLv} in a raid.`
+                }
+              >
                 <span
-                  className="whitespace-nowrap shrink-0 inline-flex items-center gap-1.5 font-mono text-[11px] font-bold"
-                  style={{ color: activeEl.primaryColor }}
-                  title={`${activeEl.name} (${activeEl.title}) — ${activeEl.shortDesc}`}
-                >
-                  <span
-                    className="w-2.5 h-2.5 rounded-full inline-block border border-white/75"
-                    style={{
-                      background: activeEl.isCombined
+                  className="w-2.5 h-2.5 rounded-full inline-block border border-white/75"
+                  style={{
+                    background: activeEl
+                      ? activeEl.isCombined
                         ? `linear-gradient(135deg, ${activeEl.primaryColor}, ${activeEl.secondaryColor})`
-                        : activeEl.primaryColor,
-                      boxShadow: `0 0 7px ${activeEl.primaryColor}`,
-                    }}
-                  />
-                  {activeEl.name.toUpperCase()}
-                </span>
+                        : activeEl.primaryColor
+                      : '#6b21a8',
+                    boxShadow: `0 0 7px ${activeEl?.primaryColor ?? '#c084fc'}`,
+                  }}
+                />
+                {label}
+              </button>
               </>
             );
           })()}

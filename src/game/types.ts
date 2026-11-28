@@ -559,7 +559,10 @@ export type UpgradeKind =
   | 'max_hp'
   | 'max_mp'
   | 'hp_regen'
-  | 'mp_regen';
+  | 'mp_regen'
+  | 'armor_relic'
+  | 'cooldown_relic'
+  | 'lifesteal_relic';
 
 export interface UpgradeOption {
   id: string;
@@ -919,6 +922,8 @@ export type InteractableKind =
   | 'brazier'
   | 'shrine'
   | 'upgrade_altar'
+  | 'item_altar'
+  | 'arsenal_relic'
   | 'camp_hero_hunter'
   | 'camp_hero_brute'
   | 'camp_hero_ronin'
@@ -1322,6 +1327,10 @@ export interface Player {
   specialItemPowerBonus: number;
   specialItemMaxChargesBonus: number;
   alchemistBeltLevel: number;
+  /** Extra cooldown recovery from level-up relics. */
+  cooldownRank: number;
+  /** Kill-heal rank from level-up relics. */
+  lifestealRank: number;
   cursedRelics: CursedRelicId[];
   mirrorCrownHitCounter: number;
   voidEdgeMpCooldown: number;
@@ -1385,6 +1394,8 @@ export interface Player {
   statusStunTimer: number;
   statusPoisonTimer: number;
   statusPoisonTickTimer: number;
+  /** Poison stacks, 1–3. Each stack is one damage per tick. */
+  statusPoisonStacks: number;
   statusBlindTimer: number;
   statusBleedTimer: number;
   statusSoakedTimer: number;
@@ -1439,9 +1450,10 @@ export interface Enemy {
   chillTimer?: number;
   witherTimer?: number;
   witherTickTimer?: number;
-  /** Assassin poison (Venom Needles): damage over time. */
+  /** Assassin poison and elemental poison: damage over time. Stacks raise the tick. */
   poisonTimer?: number;
   poisonTickTimer?: number;
+  poisonStacks?: number;
   /** Mark for Death: seconds left; boss marks add damage taken. */
   markTimer?: number;
   markMaxTimer?: number;

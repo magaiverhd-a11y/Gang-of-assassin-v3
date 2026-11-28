@@ -704,6 +704,33 @@ export function RightHud({ hud, onOpenMap }: RightHudProps) {
               ? 'Open Inventory [I] in Camp to change your Spell [4] or Item [5].'
               : 'Swap your Spell [4] or Item [5] back in Base Camp [I].'}
           </div>
+          {Object.keys(hud.playerStatuses).length > 0 && (
+            <div className="flex flex-wrap gap-1">
+              {(
+                [
+                  ['burn', 'BURN', '#fb923c'],
+                  ['freeze', 'FREEZE', '#7dd3fc'],
+                  ['soaked', 'CHILL', '#38bdf8'],
+                  ['stun', 'STUN', '#fde047'],
+                  ['poison', 'POISON', '#84cc16'],
+                  ['blind', 'BLIND', '#e879f9'],
+                ] as const
+              ).map(([key, label, color]) => {
+                const secs = hud.playerStatuses[key];
+                if (!secs || secs <= 0) return null;
+                return (
+                  <span
+                    key={key}
+                    className="px-1.5 py-0.5 text-[9px] font-mono border"
+                    style={{ color, borderColor: color }}
+                    title={`${label} ${secs.toFixed(1)}s`}
+                  >
+                    {label} {Math.ceil(secs)}s
+                  </span>
+                );
+              })}
+            </div>
+          )}
         </section>
 
         <div className="h-px bg-[#1f2435]" />
@@ -757,10 +784,10 @@ export function RightHud({ hud, onOpenMap }: RightHudProps) {
                     </div>
                     <span className="font-mono text-[9px] text-[#cbd5e1] shrink-0">
                       {activeEl.isCombined
-                        ? hud.elementResonance > 0
-                          ? `FUSED +${hud.elementResonance}`
-                          : 'FUSED'
-                        : `Fuse @ Lv ${nextAffinityLv}`}
+                        ? `Lv ${hud.affinityLevel}/${hud.affinityMaxLevel}`
+                        : hud.affinityLevel > 0
+                          ? `Lv ${hud.affinityLevel}/${hud.affinityMaxLevel}`
+                          : `Fuse @ Lv ${nextAffinityLv}`}
                     </span>
                   </div>
                   <p className="text-[9.5px] text-[#9aa2b8] leading-snug">
@@ -769,7 +796,7 @@ export function RightHud({ hud, onOpenMap }: RightHudProps) {
                 </div>
               ) : (
                 <p className="text-[10px] text-[#7f88a3] leading-snug">
-                  1 XP/foe (+1 Assassinate). Choose an <strong className="text-[#c084fc]">Elemental Affinity</strong> at Lv 5!
+                  No element yet. Open Element in camp, or wait for the raid choice at level 5 (then every 5 levels).
                 </p>
               )}
             </section>
