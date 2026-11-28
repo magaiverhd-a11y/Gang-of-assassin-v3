@@ -31,6 +31,8 @@ import {
   computeActiveCharmSynergies,
   DEFAULT_TUNING,
   CRAFT_RECIPES,
+  CURSED_RELIC_ORDER,
+  CURSED_RELICS,
   GOLD_PREP_RECIPES,
   HERO_SKINS,
   RAID_BOSS_CHARM,
@@ -50,6 +52,13 @@ import {
 } from './defaults';
 import { CAMP_HERO_SPOTS, CAMP_STAGE, ENEMY_SPECS, isFlyingEnemyType } from './level';
 import { LORE_BY_ID, LORE_BY_RAID, loadCollectedLoreIds, saveCollectedLoreIds } from './lore';
+import {
+  defenseAgainst,
+  ELEMENT_MATCHUPS,
+  evaluateElementalMatchup,
+  getEnemyElement,
+  getSpellIntrinsicElement,
+} from './elementFusions';
 import { RAIDS_BY_ID } from './raids';
 import {
   EnemyTuning,
@@ -277,6 +286,7 @@ export class GameEngine {
   private pendingLevelUpLevels: number[] = [];
   private levelUpDelayTimer = 0;
   private elementalHitCounter = 0;
+  private lastHitRelation: 'weak' | 'resist' | 'neutral' = 'neutral';
   private elementalKillCounter = 0;
 
   public time = 0;
@@ -741,6 +751,17 @@ export class GameEngine {
       baseElements: [],
       combinedElement: null,
       elementResonance: 0,
+      affinityLevel: 0,
+      affinityLockedSingle: false,
+      weaponPowerLevel: cDef.bonusWeaponDamage + art.weaponTier,
+      potionPowerBonus: 0,
+      itemExtraUsesBonus: 0,
+      specialItemPowerBonus: 0,
+      specialItemMaxChargesBonus: 0,
+      alchemistBeltLevel: 0,
+      cursedRelics: [],
+      mirrorCrownHitCounter: 0,
+      voidEdgeMpCooldown: 0,
       parryWindowTimer: 0,
       parryCooldownTimer: 0,
       weaponChargeTimer: 0,
@@ -837,6 +858,17 @@ export class GameEngine {
       isAirKnockback: false,
       invulnTimer: 0,
       flashTimer: 0,
+      statusBurnTimer: 0,
+      statusBurnTickTimer: 0,
+      statusFreezeTimer: 0,
+      statusStunTimer: 0,
+      statusPoisonTimer: 0,
+      statusPoisonTickTimer: 0,
+      statusPoisonStacks: 0,
+      statusBlindTimer: 0,
+      statusBleedTimer: 0,
+      statusSoakedTimer: 0,
+      statusHexTimer: 0,
       animTime: 0,
       landTimer: 0,
     };
@@ -1113,6 +1145,7 @@ export class GameEngine {
     next.hpRegenLevel += extraHpRegen;
     next.mpRegenLevel += extraMpRegen;
     next.weaponDamageBonus += extraWeaponTier;
+    next.weaponPowerLevel = next.weaponDamageBonus;
     next.runRelicLevels = { ...prev.runRelicLevels };
 
     // Apply this hero's permanent Boss-Shard unlocks + carried universal/class-eligible run gear
@@ -1169,6 +1202,15 @@ export class GameEngine {
     next.baseElements = [...prev.baseElements];
     next.combinedElement = prev.combinedElement;
     next.elementResonance = prev.elementResonance;
+    next.affinityLevel = prev.affinityLevel;
+    next.affinityLockedSingle = prev.affinityLockedSingle;
+    next.weaponPowerLevel = prev.weaponPowerLevel;
+    next.potionPowerBonus = prev.potionPowerBonus;
+    next.itemExtraUsesBonus = prev.itemExtraUsesBonus;
+    next.specialItemPowerBonus = prev.specialItemPowerBonus;
+    next.specialItemMaxChargesBonus = prev.specialItemMaxChargesBonus;
+    next.alchemistBeltLevel = prev.alchemistBeltLevel;
+    next.cursedRelics = [...prev.cursedRelics];
     // If the bound Phantom Tag Partner is the hero we just swapped into, swap partner to the previous hero!
     next.tagPartner = prev.tagPartner === charId ? prev.characterId : prev.tagPartner;
     next.tagPartnerCooldown = 0;
@@ -1243,6 +1285,7 @@ export class GameEngine {
       p.mpRegenLevel += 1;
     } else if (artifactId === 'soul_anvil') {
       p.weaponDamageBonus += 1;
+      p.weaponPowerLevel = p.weaponDamageBonus;
     } else if (artifactId === 'everflask') {
       p.itemCounts.health_potion += 1;
       p.itemCounts.mana_potion += 1;
@@ -1335,6 +1378,7 @@ export class GameEngine {
     // Apply permanent stat bonuses granted by the newly forged Sacrifice Artifact
     if (artifactId === 'bloodsteel_edge') {
       p.weaponDamageBonus += 1;
+      p.weaponPowerLevel = p.weaponDamageBonus;
     } else if (artifactId === 'undying_heart') {
       p.maxHp += 1;
       p.hp = p.maxHp;
@@ -1360,7 +1404,7 @@ export class GameEngine {
       p.itemCounts[recipe.itemId] += 1;
     } else if (recipe.category === 'special_item' && recipe.specialItemId) {
       const def = SPECIAL_ITEMS[recipe.specialItemId];
-      if ((p.specialItemCounts[recipe.specialItemId] ?? 0) >= def.maxCharges) return false;
+      if ((p.specialItemCounts[recipe.specialItemId] ?? 0) >= def.maxCharges + p.specialItemMaxChargesBonus) return false;
       this.gold -= recipe.goldCost;
       p.specialItemCounts[recipe.specialItemId] = (p.specialItemCounts[recipe.specialItemId] ?? 0) + 1;
       const unlocks = this.characterUnlocks[p.characterId];
@@ -1886,7 +1930,14 @@ export class GameEngine {
     this.platforms = this.currentStage.platforms;
     this.enemies = this.currentStage.createEnemies(scaling.hpMult, scaling.flatHpBonus);
     this.tuning = tuning;
-    for (const e of this.enemies) this.applyEnemyHpTuning(e);
+    for (const e of this.enemies) {
+      this.applyEnemyHpTuning(e);
+      if (!e.element) e.element = getEnemyElement(e.type, this.activeRaidId);
+    }
+    if (this.player.cursedRelics.includes('cathedral_aegis_shard')) {
+      this.player.armorShield += 2;
+      this.player.armorTimer = Math.max(this.player.armorTimer, 25);
+    }
     if (this.isCursedChamber) {
       for (const e of this.enemies) {
         const bonus = Math.max(1, Math.round(e.maxHp * 0.25));
@@ -2479,6 +2530,7 @@ export class GameEngine {
       }
       case 'weapon_damage': {
         p.weaponDamageBonus += 1;
+        p.weaponPowerLevel = p.weaponDamageBonus;
         p.runRelicLevels.weapon += 1;
         // affinity-v1: the evolution moment (every 5 upgrades) is fired by the FX system on the next live frame.
         break;
@@ -2523,11 +2575,17 @@ export class GameEngine {
         if (opt.elementId && !p.baseElements.includes(opt.elementId)) {
           p.baseElements = [...p.baseElements, opt.elementId];
           let isFusion = false;
+          if (p.baseElements.length === 1) {
+            p.affinityLevel = Math.max(1, p.affinityLevel);
+            p.affinityLockedSingle = true;
+          }
           if (p.baseElements.length >= 2 && !p.combinedElement) {
             const fused = getCombinedElementId(p.baseElements[0], p.baseElements[1]);
             if (fused) {
               p.combinedElement = fused;
               isFusion = true;
+              p.affinityLevel = Math.max(2, p.affinityLevel);
+              p.affinityLockedSingle = false;
             }
           }
           const activeDef = getActiveElementDef(p.baseElements, p.combinedElement);
@@ -2590,6 +2648,8 @@ export class GameEngine {
       }
       case 'element_resonance': {
         p.elementResonance += 1;
+        const affinityCap = p.combinedElement ? 4 : 5;
+        p.affinityLevel = Math.min(affinityCap, Math.max(p.affinityLevel, 1) + 1);
         const activeDef = getActiveElementDef(p.baseElements, p.combinedElement);
         if (activeDef) {
           sound.playElementalAwaken(true, activeDef.id);
@@ -2624,8 +2684,29 @@ export class GameEngine {
         }
         break;
       }
+      case 'cursed_unique_relic': {
+        if (opt.cursedRelicId && !p.cursedRelics.includes(opt.cursedRelicId)) {
+          p.cursedRelics = [...p.cursedRelics, opt.cursedRelicId];
+          const relic = CURSED_RELICS[opt.cursedRelicId];
+          if (opt.cursedRelicId === 'cathedral_aegis_shard') {
+            p.armorShield += 2;
+            p.armorTimer = Math.max(p.armorTimer, 25);
+          }
+          sound.playCursedShrine();
+          this.spawnDamageNumber(
+            p.x,
+            p.y - p.baseH * tuning.playerScale - 36,
+            relic.name.toUpperCase(),
+            relic.accent,
+            1.2,
+            'CURSED RELIC'
+          );
+        }
+        break;
+      }
       case 'cursed_glass_cannon': {
         p.weaponDamageBonus += 3;
+        p.weaponPowerLevel = p.weaponDamageBonus;
         p.maxHp = Math.max(2, p.maxHp - 2);
         p.hp = Math.min(p.hp, p.maxHp);
         sound.playCursedShrine();
@@ -3993,13 +4074,33 @@ export class GameEngine {
     const p = this.player;
     const cDef = this.cdef(p.characterId);
     const scale = tuning.playerScale;
+    this.tickHeroStatuses(dt, tuning);
+    if (p.statusFreezeTimer > 0 || p.statusStunTimer > 0) {
+      input = {
+        ...input,
+        left: false,
+        right: false,
+        up: false,
+        down: false,
+        jumpHeld: false,
+        jumpJustPressed: false,
+        attackJustPressed: false,
+        attackHeld: false,
+        backdashJustPressed: false,
+        interactJustPressed: false,
+        spellJustPressed: false,
+        itemJustPressed: false,
+        specialItemJustPressed: false,
+      };
+    }
     const cdSpeedMult =
       1 +
       p.swiftFootworkLevel * 0.05 +
       Math.max(0, p.abilitySlotLevels[0] - 1) * 0.03 +
       this.permAltarBonuses.agility * 0.04 +
       (this.hasBossCharm('paradox_hourglass') ? 0.25 : 0) +
-      (this.hasCharmSynergy('neon_paradox') ? 0.18 : 0);
+      (this.hasCharmSynergy('neon_paradox') ? 0.18 : 0) +
+      (p.cursedRelics.includes('shattered_hourglass') ? 0.3 : 0);
     this.frameInput = input;
     p.animTime += dt;
     if (p.landTimer > 0) p.landTimer = Math.max(0, p.landTimer - dt);
@@ -5108,9 +5209,12 @@ export class GameEngine {
     const elSpeedBonus =
       p.combinedElement === 'aether' || p.combinedElement === 'phantom' || p.combinedElement === 'tempest'
         ? 0.2
-        : p.combinedElement === 'lightning' || p.combinedElement === 'crimson_storm'
+        : p.combinedElement === 'void_thunder' || p.combinedElement === 'crimson_storm'
           ? 0.18
-          : p.combinedElement === 'frost' || p.combinedElement === 'sandstorm' || this.hasElement('storm')
+          : p.combinedElement === 'blizzard' ||
+              p.combinedElement === 'permafrost' ||
+              p.combinedElement === 'sandstorm' ||
+              this.hasElement('storm')
             ? 0.14
             : this.hasElement('air')
               ? 0.16
@@ -5125,7 +5229,8 @@ export class GameEngine {
     const charmJumpMult =
       (this.hasBossCharm('jade_feather_pearl') ? 1.12 : 1.0) *
       (this.hasBossCharm('abyssal_trident_pearl') ? 1.14 : 1.0);
-    const effectiveMoveSpeed = tuning.moveSpeed * cDef.speedMult * (swiftMult + elSpeedBonus + charmSpeedBonus) * chainSpeedMult;
+    let effectiveMoveSpeed = tuning.moveSpeed * cDef.speedMult * (swiftMult + elSpeedBonus + charmSpeedBonus) * chainSpeedMult;
+    if (p.statusSoakedTimer > 0) effectiveMoveSpeed *= 0.62;
     const effectiveJumpForce = tuning.jumpForce * cDef.jumpMult * chainJumpMult * charmJumpMult;
     const maxHeroAirJumps =
       (cDef.airJumps > 0 ? Math.max(cDef.airJumps, tuning.airJumps) : 0) +
@@ -7241,7 +7346,7 @@ export class GameEngine {
           return false;
         }
         p.wizardCastTimer = 0.3;
-        sound.playElementalProc('lightning');
+        sound.playElementalProc('storm');
         sound.playWizardBolt(spellEvo, true);
         this.triggerShake(5 + spellEvo * 2, 0.16);
         this.triggerImpactFlash(el.c1, 0.16, p.x, p.y - h * 0.6, 1.0, 0.14);
@@ -8977,8 +9082,12 @@ export class GameEngine {
           return;
         }
         p.itemCounts[itemId] -= 1;
-        const heal = Math.min(2, p.maxHp - p.hp);
+        const heal = Math.min(2 + p.potionPowerBonus + p.alchemistBeltLevel, p.maxHp - p.hp);
         p.hp += heal;
+        if (p.cursedRelics.includes('bloodglass_chalice')) {
+          p.armorShield += 1;
+          p.armorTimer = Math.max(p.armorTimer, 8);
+        }
         sound.playBuff();
         this.spawnSparkles(p.x, p.y - h * 0.5, 12, '#ef4444', '#fecaca', 0.9);
         this.spawnDamageNumber(p.x, p.y - h - 12, `+${heal} HP`, '#f87171', 1.05);
@@ -8991,8 +9100,12 @@ export class GameEngine {
           return;
         }
         p.itemCounts[itemId] -= 1;
-        const gain = Math.min(2, p.maxMp - p.mp);
+        const gain = Math.min(2 + p.potionPowerBonus + p.alchemistBeltLevel, p.maxMp - p.mp);
         p.mp = Math.min(p.maxMp, p.mp + gain);
+        if (p.cursedRelics.includes('bloodglass_chalice')) {
+          p.armorShield += 1;
+          p.armorTimer = Math.max(p.armorTimer, 8);
+        }
         sound.playBuff();
         this.spawnSparkles(p.x, p.y - h * 0.5, 12, '#3b82f6', '#bfdbfe', 0.9);
         this.spawnDamageNumber(p.x, p.y - h - 12, `+${gain} MP`, '#60a5fa', 1.05);
@@ -9001,7 +9114,7 @@ export class GameEngine {
 
       case 'armor_potion': {
         p.itemCounts[itemId] -= 1;
-        p.armorShield = 2;
+        p.armorShield = 2 + (p.cursedRelics.includes('bloodglass_chalice') ? 1 : 0);
         p.armorTimer = 14.0;
         sound.playBuff();
         this.spawnSparkles(p.x, p.y - h * 0.5, 14, '#cbd5e1', '#ffffff', 0.9);
@@ -10369,6 +10482,19 @@ export class GameEngine {
         enemy.chillTimer = Math.max(0, enemy.chillTimer - dt);
         enemy.vx *= Math.pow(0.28, dt);
       }
+      if ((enemy.freezeTimer ?? 0) > 0) {
+        enemy.freezeTimer = Math.max(0, (enemy.freezeTimer ?? 0) - dt);
+        enemy.vx = 0;
+        enemy.hurtStunTimer = Math.max(enemy.hurtStunTimer, 0.05);
+      }
+      if ((enemy.stunTimer ?? 0) > 0) {
+        enemy.stunTimer = Math.max(0, (enemy.stunTimer ?? 0) - dt);
+        enemy.vx = 0;
+        enemy.hurtStunTimer = Math.max(enemy.hurtStunTimer, 0.05);
+      }
+      if ((enemy.blindTimer ?? 0) > 0) {
+        enemy.blindTimer = Math.max(0, (enemy.blindTimer ?? 0) - dt);
+      }
       const isChilled = Boolean(enemy.chillTimer && enemy.chillTimer > 0);
       const enemyPace = (enemy.enraged ? pace * (et.enrageSpeed ?? 1.24) : pace) * (isChilled ? 0.58 : 1.0);
 
@@ -10426,14 +10552,16 @@ export class GameEngine {
       if (enemy.poisonTimer && enemy.poisonTimer > 0) {
         enemy.poisonTimer = Math.max(0, enemy.poisonTimer - dt);
         enemy.poisonTickTimer = (enemy.poisonTickTimer ?? 0.6) - dt;
-        if (enemy.poisonTickTimer <= 0) {
-          enemy.poisonTickTimer = 0.6;
+        if (enemy.poisonTimer === 0) enemy.poisonStacks = 0;
+        if (enemy.poisonTickTimer <= 0 && enemy.poisonTimer > 0) {
+          enemy.poisonTickTimer = 0.9;
+          const stacks = Math.max(1, Math.min(3, enemy.poisonStacks ?? 1));
           const qx = enemy.x;
           const qy = enemy.y - enemy.baseH * eScale * 0.55;
-          enemy.hp = Math.max(0, enemy.hp - (enemy.isBoss ? 1 : 1));
+          enemy.hp = Math.max(0, enemy.hp - stacks);
           enemy.flashTimer = 0.08;
           this.spawnSparkles(qx, qy, 4, '#4d7c0f', '#a3e635', 0.55);
-          this.spawnDamageNumber(qx, qy - 12, '1', '#84cc16', 0.82, 'POISON');
+          this.spawnDamageNumber(qx, qy - 12, `${stacks}`, '#84cc16', 0.82, stacks > 1 ? `POISON x${stacks}` : 'POISON');
           if (enemy.hp <= 0) {
             this.handleEnemyKilled(enemy, qx, qy);
             continue;
@@ -15086,6 +15214,11 @@ export class GameEngine {
         p.weapon === 'shield_mace') &&
         source === 'weapon');
 
+    if (!isAssassination && p.statusBlindTimer > 0 && source !== 'gas' && Math.random() < 0.35) {
+      this.spawnDamageNumber(hitX, hitY - 14, 'MISS', '#fde047', 1.05, 'BLINDED');
+      return;
+    }
+
     // Front-Shield Guard for armored Knights & Obsidian Guards!
     // Light frontal strikes clang off the shield; flank behind, use heavy Hammer/Greataxe, or cast Spells to shatter guard!
     if (!enemy.isBoss && enemy.shieldActive && source === 'weapon' && !isBehindEnemy && !isAssassination) {
@@ -15130,7 +15263,7 @@ export class GameEngine {
     const elementCritBonus =
       p.combinedElement === 'eclipse' || p.combinedElement === 'bloodmoon'
         ? 25
-        : p.combinedElement === 'phantom' || p.combinedElement === 'glacial_light'
+        : p.combinedElement === 'phantom' || p.combinedElement === 'aurora' || p.combinedElement === 'celestial'
           ? 22
           : p.combinedElement === 'hellfire' || p.combinedElement === 'crimson_storm'
             ? 20
@@ -15255,6 +15388,10 @@ export class GameEngine {
         p.mp = Math.min(p.maxMp, p.mp + 1);
         p.shadowChainTimer = Math.max(p.shadowChainTimer, 3.0);
       }
+      if (p.cursedRelics.includes('void_mirror_edge') && p.voidEdgeMpCooldown <= 0 && p.mp < p.maxMp) {
+        p.mp += 1;
+        p.voidEdgeMpCooldown = 2;
+      }
     }
 
     // Blackpowder Idol (Explosive AoE blast on Crits & Assassinations) + Singularity Core (Gravity Pull on Spells & Crits)!
@@ -15332,6 +15469,24 @@ export class GameEngine {
         }
       }
     }
+
+    if (source === 'weapon' && p.cursedRelics.includes('mirror_prism_crown')) {
+      p.mirrorCrownHitCounter += 1;
+      if (p.mirrorCrownHitCounter % 3 === 0) {
+        damage = Math.max(damage + 1, Math.round(damage * 1.6));
+      }
+    }
+
+    const attackElements = this.heroAttackElements(source);
+    const matchup = evaluateElementalMatchup(attackElements, enemy.element);
+    this.lastHitRelation = matchup.relation;
+    if (matchup.relation === 'weak') {
+      damage = Math.max(damage + 1, Math.round(damage * matchup.mult));
+    } else if (matchup.relation === 'resist' && damage > 0) {
+      damage = Math.max(1, Math.round(damage * matchup.mult));
+    }
+    const relationNote = matchup.relation === 'weak' ? 'WEAK' : matchup.relation === 'resist' ? 'RESIST' : '';
+    const withRelation = (base?: string) => [relationNote, base].filter(Boolean).join(' · ') || undefined;
 
     // Assassin: Mark for Death makes a marked boss take extra damage from every hit.
     if (enemy.isBoss && (enemy.markTimer ?? 0) > 0 && source !== 'gas' && damage > 0) {
@@ -15570,7 +15725,16 @@ export class GameEngine {
           ? `SHADOW CHAIN x${p.shadowChainCount}!`
           : funnyCallouts[Math.floor(Math.random() * funnyCallouts.length)];
       const mpTag = mpReward > 0 ? ` · +${mpReward} MP` : '';
-      this.spawnDamageNumber(hitX, hitY - 18, `${damage}`, '#ff334b', 1.55, `${callout}${mpTag}`);
+      this.spawnDamageNumber(hitX, hitY - 18, `${damage}`, relationNote === 'WEAK' ? '#fde047' : '#ff334b', 1.55, withRelation(`${callout}${mpTag}`));
+      if (p.cursedRelics.includes('phantom_veil_cloak')) {
+        for (const other of this.enemies) {
+          if (other.dead || other === enemy) continue;
+          if (Math.hypot(other.x - hitX, other.y - hitY) <= 160) {
+            other.stunTimer = Math.max(other.stunTimer ?? 0, other.isBoss ? 0.25 : 0.7);
+            other.hurtStunTimer = Math.max(other.hurtStunTimer, 0.7);
+          }
+        }
+      }
       // ASSASSINATION FREEZE (fully tunable in the Kill FX tab)
       this.triggerKillFreeze(hitX, hitY, enemy.isBoss, tuning);
 
@@ -15592,7 +15756,7 @@ export class GameEngine {
       this.spawnSparkles(hitX, hitY, 26, '#ffd166', '#ffffff', 1.55);
       this.spawnSlashLine(hitX, hitY, pushDir > 0 ? -0.52 : Math.PI + 0.52, 180, 9, '#ffd166', '#ffffff', 0.26);
       this.spawnSlashLine(hitX, hitY, pushDir > 0 ? 0.55 : Math.PI - 0.55, 130, 5, '#ff4d6d', '#ffffff', 0.22);
-      this.spawnDamageNumber(hitX, hitY - 14, `${damage}`, '#ffd166', 1.38, 'CRITICAL');
+      this.spawnDamageNumber(hitX, hitY - 14, `${damage}`, '#ffd166', 1.38, withRelation('CRITICAL'));
       this.triggerShake(Math.max(12, tuning.critShakeIntensity * 1.25) * fxFeel.shakeMul + fxFeel.extraShake, 0.3);
       this.hitstopTimer = Math.max((tuning.hitstopMs / 1000) * 3.0, 0.175) + fxFeel.hitstopAddMs / 1000;
       this.cameraZoomPunch = Math.max(this.cameraZoomPunch, 0.085);
@@ -15630,7 +15794,7 @@ export class GameEngine {
       }
     } else if (source === 'gas') {
       this.spawnSparkles(hitX, hitY, 6, '#4ade80', '#bbf7d0', 0.65);
-      this.spawnDamageNumber(hitX, hitY - 8, `${damage}`, '#4ade80', 0.92);
+      this.spawnDamageNumber(hitX, hitY - 8, `${damage}`, relationNote === 'RESIST' ? '#93c5fd' : '#4ade80', 0.92, withRelation());
     } else {
       // Crisp, tactile normal hit: distinct hit audio + guaranteed micro hit-freeze + small shake + slash streak!
       sound.playHit(isHeavyHit, p.weapon);
@@ -15651,8 +15815,15 @@ export class GameEngine {
         hitX,
         hitY - 10,
         `${damage}`,
-        source === 'hammer_meteor' || fireBonusActive || source === 'fireball' ? '#fdba74' : '#f3efe6',
-        isHeavyHit ? 1.24 : 1.02
+        relationNote === 'WEAK'
+          ? '#fde047'
+          : relationNote === 'RESIST'
+            ? '#93c5fd'
+            : source === 'hammer_meteor' || fireBonusActive || source === 'fireball'
+              ? '#fdba74'
+              : '#f3efe6',
+        isHeavyHit ? 1.24 : 1.02,
+        withRelation()
       );
       if (source === 'weapon' || source === 'dash' || source === 'hammer_meteor' || source === 'grapple') {
         const minFreeze = isHeavyHit ? 0.068 : 0.044;
@@ -15662,6 +15833,9 @@ export class GameEngine {
       }
     }
 
+    if (enemy.hp > 0) {
+      for (const el of attackElements) this.applyElementStatusToEnemy(enemy, el);
+    }
     if (source !== 'gas') {
       this.applyElementalHitEffect(enemy, hitX, hitY, tuning, isCrit, isAssassination);
       this.applyAffinityAfterHit(enemy, hitX, hitY, tuning, aFlags, aMods);
@@ -15699,7 +15873,7 @@ export class GameEngine {
     if ((this.hasElement('water') || this.hasElement('glacial')) && enemy.hp > 0) {
       enemy.chillTimer = Math.max(
         enemy.chillTimer ?? 0,
-        id === 'frost' || id === 'permafrost' || id === 'glacial' ? 4.0 : 2.6
+        id === 'permafrost' || id === 'blizzard' || id === 'glacial' ? 4.0 : 2.6
       );
     }
 
@@ -15720,7 +15894,7 @@ export class GameEngine {
     // 3. MP Flow (Water / Steam / Prism / Aether / Abyss crits)
     const mpInterval = id === 'steam' || id === 'prism' || id === 'aether' ? 3 : 4;
     if (
-      (this.hasElement('water') || id === 'aether' || id === 'arcane_blood') &&
+      (this.hasElement('water') || id === 'aether' || id === 'hemomancy') &&
       this.elementalHitCounter % mpInterval === 0 &&
       p.mp < p.maxMp
     ) {
@@ -15759,7 +15933,7 @@ export class GameEngine {
       }
     };
 
-    if (id === 'lightning' || id === 'storm' || id === 'tempest' || id === 'crimson_storm' || id === 'storm_earth') {
+    if (id === 'storm' || id === 'tempest' || id === 'crimson_storm' || id === 'void_thunder' || id === 'thunderquake') {
       // Jagged Chain Lightning jumping up to 3 nearby enemies!
       let prevX = hitX;
       let prevY = hitY;
@@ -15936,6 +16110,25 @@ export class GameEngine {
         title: "Reaper's Ambush",
         description: 'Claim +1 Boss Core & +8 Relic Shards right now — awakens a Cursed Blood Champion!',
         accent: '#f59e0b',
+      },
+      ...this.buildCursedRelicOption(),
+    ];
+  }
+
+  private buildCursedRelicOption(): UpgradeOption[] {
+    const owned = new Set(this.player.cursedRelics);
+    const id = CURSED_RELIC_ORDER.find((relicId) => !owned.has(relicId));
+    if (!id) return [];
+    const relic = CURSED_RELICS[id];
+    return [
+      {
+        id: `pact_relic_${id}`,
+        kind: 'cursed_unique_relic',
+        category: 'Cursed Unique Relic',
+        title: relic.name,
+        description: relic.description,
+        accent: relic.accent,
+        cursedRelicId: id,
       },
     ];
   }
@@ -16266,6 +16459,13 @@ export class GameEngine {
 
     // Balanced combat hits: normal enemies deal 1 dmg throughout the game; bosses start at 1 on early stages and grow to 2!
     const isPitFall = !isBossAttack && Math.abs(sourceX - p.x) < 1;
+    const attacker = isPitFall
+      ? null
+      : this.enemies.find((e) => !e.dead && Math.abs(e.x - sourceX) < 96) ?? null;
+    if (attacker && (attacker.blindTimer ?? 0) > 0 && Math.random() < 0.45) {
+      this.spawnDamageNumber(p.x, p.y - p.baseH * tuning.playerScale - 12, 'MISS', '#fde047', 1.05, 'BLINDED');
+      return;
+    }
     const baseCap = isPitFall ? 1 : isBossAttack ? this.getBossBaseDamage() : 1;
     const tuneMult = isPitFall
       ? 1
@@ -16280,6 +16480,18 @@ export class GameEngine {
     if (p.cursedGlassVulnerable) {
       finalDamage = finalDamage * 2;
       p.cursedGlassVulnerable = false;
+    }
+    let takenTag = '';
+    if (attacker?.element && p.baseElements.length > 0) {
+      const ev = defenseAgainst(p.baseElements, attacker.element);
+      if (ev.relation === 'weak') {
+        finalDamage = Math.max(finalDamage + 1, Math.round(finalDamage * ev.mult));
+        takenTag = 'WEAK';
+      } else if (ev.relation === 'resist') {
+        finalDamage = Math.max(1, Math.round(finalDamage * ev.mult));
+        takenTag = 'RESIST';
+      }
+      this.applyElementStatusToPlayer(attacker.element);
     }
 
     p.hp = Math.max(0, p.hp - finalDamage);
@@ -16342,9 +16554,10 @@ export class GameEngine {
     this.spawnDamageNumber(
       p.x,
       p.y - p.baseH * tuning.playerScale - 8,
-      `-${damage}`,
-      isBossAttack && damage > 1 ? '#ff334b' : '#f87171',
-      isBossAttack && damage > 1 ? 1.15 : 1.0
+      `-${finalDamage}`,
+      takenTag === 'WEAK' ? '#fde047' : takenTag === 'RESIST' ? '#93c5fd' : isBossAttack && finalDamage > 1 ? '#ff334b' : '#f87171',
+      isBossAttack && finalDamage > 1 ? 1.15 : 1.0,
+      takenTag || undefined
     );
 
     if (p.hp <= 0) {
@@ -16549,6 +16762,186 @@ export class GameEngine {
     }
   }
 
+  private heroAttackElements(
+    source: 'weapon' | 'fireball' | 'dash' | 'grapple' | 'gas' | 'hammer_meteor'
+  ): BaseElementId[] {
+    const p = this.player;
+    const els = [...p.baseElements];
+    if (source === 'fireball' || source === 'dash' || source === 'grapple' || source === 'gas') {
+      const intrinsic = getSpellIntrinsicElement(p.abilitySlots[0]);
+      if (intrinsic && !els.includes(intrinsic)) els.push(intrinsic);
+    }
+    return els;
+  }
+
+  private applyElementStatusToEnemy(enemy: Enemy, el: BaseElementId): void {
+    if (enemy.dead) return;
+    const rule = ELEMENT_MATCHUPS[el];
+    if (!rule) return;
+    switch (rule.status) {
+      case 'burn':
+        this.applyBurn(enemy, 3.2);
+        break;
+      case 'freeze': {
+        const alreadySlow = (enemy.chillTimer ?? 0) > 0;
+        enemy.chillTimer = Math.max(enemy.chillTimer ?? 0, el === 'glacial' ? 3.2 : 2.4);
+        if (alreadySlow || el === 'glacial') {
+          enemy.freezeTimer = Math.max(enemy.freezeTimer ?? 0, el === 'glacial' ? 0.7 : 0.5);
+        }
+        break;
+      }
+      case 'stun': {
+        const dur = el === 'earth' ? 0.48 : el === 'metal' ? 0.4 : el === 'storm' ? 0.36 : 0.3;
+        enemy.stunTimer = Math.max(enemy.stunTimer ?? 0, dur);
+        enemy.hurtStunTimer = Math.max(enemy.hurtStunTimer, dur);
+        break;
+      }
+      case 'poison': {
+        enemy.poisonStacks = Math.min(3, (enemy.poisonStacks ?? 0) + 1);
+        enemy.poisonTimer = Math.max(enemy.poisonTimer ?? 0, 4.2);
+        if ((enemy.poisonTickTimer ?? 0) <= 0) enemy.poisonTickTimer = 0.9;
+        break;
+      }
+      case 'blind':
+        enemy.blindTimer = Math.max(enemy.blindTimer ?? 0, 2.6);
+        break;
+      default:
+        break;
+    }
+  }
+
+  private applyElementStatusToPlayer(el: BaseElementId): void {
+    const p = this.player;
+    const rule = ELEMENT_MATCHUPS[el];
+    if (!rule) return;
+    switch (rule.status) {
+      case 'burn':
+        p.statusBurnTimer = Math.max(p.statusBurnTimer, 3.2);
+        if (p.statusBurnTickTimer <= 0) p.statusBurnTickTimer = 0.85;
+        break;
+      case 'freeze': {
+        const alreadySlow = p.statusSoakedTimer > 0;
+        p.statusSoakedTimer = Math.max(p.statusSoakedTimer, el === 'glacial' ? 3.2 : 2.4);
+        if (alreadySlow || el === 'glacial') {
+          p.statusFreezeTimer = Math.max(p.statusFreezeTimer, el === 'glacial' ? 0.65 : 0.45);
+        }
+        break;
+      }
+      case 'stun':
+        p.statusStunTimer = Math.max(p.statusStunTimer, el === 'earth' ? 0.45 : 0.32);
+        break;
+      case 'poison':
+        p.statusPoisonStacks = Math.min(3, p.statusPoisonStacks + 1);
+        p.statusPoisonTimer = Math.max(p.statusPoisonTimer, 4.2);
+        if (p.statusPoisonTickTimer <= 0) p.statusPoisonTickTimer = 1;
+        break;
+      case 'blind':
+        p.statusBlindTimer = Math.max(p.statusBlindTimer, 2.6);
+        break;
+      default:
+        break;
+    }
+  }
+
+  private tickHeroStatuses(dt: number, tuning: TuningConfig): void {
+    const p = this.player;
+    const chip = (amount: number, label: string, color: string) => {
+      if (this.status !== 'PLAYING' || amount <= 0) return;
+      p.hp = Math.max(0, p.hp - amount);
+      this.spawnDamageNumber(p.x, p.y - p.baseH * tuning.playerScale - 10, `${amount}`, color, 0.8, label);
+      if (p.hp <= 0) this.status = 'GAME_OVER';
+    };
+    if (p.statusBurnTimer > 0) {
+      p.statusBurnTimer = Math.max(0, p.statusBurnTimer - dt);
+      p.statusBurnTickTimer -= dt;
+      if (p.statusBurnTickTimer <= 0 && p.statusBurnTimer > 0) {
+        p.statusBurnTickTimer = 0.85;
+        chip(1, 'BURN', '#fb923c');
+      }
+    }
+    if (p.statusPoisonTimer > 0) {
+      p.statusPoisonTimer = Math.max(0, p.statusPoisonTimer - dt);
+      p.statusPoisonTickTimer -= dt;
+      if (p.statusPoisonTickTimer <= 0 && p.statusPoisonTimer > 0) {
+        p.statusPoisonTickTimer = 1;
+        chip(Math.max(1, p.statusPoisonStacks), p.statusPoisonStacks > 1 ? `POISON x${p.statusPoisonStacks}` : 'POISON', '#84cc16');
+      }
+    } else {
+      p.statusPoisonStacks = 0;
+    }
+    if (p.statusFreezeTimer > 0) p.statusFreezeTimer = Math.max(0, p.statusFreezeTimer - dt);
+    if (p.statusSoakedTimer > 0) p.statusSoakedTimer = Math.max(0, p.statusSoakedTimer - dt);
+    if (p.statusStunTimer > 0) p.statusStunTimer = Math.max(0, p.statusStunTimer - dt);
+    if (p.statusBlindTimer > 0) p.statusBlindTimer = Math.max(0, p.statusBlindTimer - dt);
+    if (p.voidEdgeMpCooldown > 0) p.voidEdgeMpCooldown = Math.max(0, p.voidEdgeMpCooldown - dt);
+  }
+
+  /** Puts a weak hit, a resisted hit, and all five status effects on screen. Used by ?elementsPreview=1. */
+  public showcaseElements(): void {
+    const tuning = { ...this.tuning, weaponCritChance: 0 };
+    this.activeRaidId = 'nocturne_castle';
+    this.status = 'PLAYING';
+    this.loadStage(0, tuning, true, false, false);
+    this.status = 'PLAYING';
+    this.transitionPhase = 'none';
+    this.transitionAlpha = 0;
+    const p = this.player;
+    p.baseElements = ['fire'];
+    p.combinedElement = null;
+    p.affinityLevel = 1;
+    p.affinityLockedSingle = true;
+    p.onGround = true;
+    p.hp = p.maxHp;
+    p.invulnTimer = 0;
+    const foes = this.enemies.filter((e) => !e.dead && !e.isBoss);
+    const weak = foes[0];
+    const resist = foes[1] ?? foes[0];
+    if (!weak) return;
+    p.x = weak.x - 70;
+    p.y = weak.y;
+    p.facing = 1;
+    weak.element = 'glacial';
+    weak.alerted = true;
+    weak.facing = -1;
+    weak.hp = weak.maxHp;
+    this.handlePlayerHitEnemy(weak, tuning, 'weapon', 1, { noAssassinate: true });
+    if (resist && resist !== weak) {
+      resist.element = 'fire';
+      resist.alerted = true;
+      resist.facing = -1;
+      resist.x = weak.x + 150;
+      resist.y = weak.y;
+      resist.hp = resist.maxHp;
+      this.handlePlayerHitEnemy(resist, tuning, 'weapon', 1, { noAssassinate: true });
+    }
+    const samples: BaseElementId[] = ['fire', 'glacial', 'earth', 'venom', 'light'];
+    foes.slice(0, samples.length).forEach((enemy, i) => {
+      enemy.hp = Math.max(enemy.hp, 6);
+      this.applyElementStatusToEnemy(enemy, samples[i]);
+      if (samples[i] === 'water' || samples[i] === 'glacial') {
+        this.applyElementStatusToEnemy(enemy, samples[i]);
+      }
+    });
+    p.statusBurnTimer = 12;
+    p.statusBurnTickTimer = 8;
+    p.statusSoakedTimer = 12;
+    p.statusFreezeTimer = 4;
+    p.statusStunTimer = 4;
+    p.statusPoisonTimer = 12;
+    p.statusPoisonTickTimer = 8;
+    p.statusPoisonStacks = 3;
+    p.statusBlindTimer = 12;
+    for (const dn of this.damageNumbers) {
+      dn.life = 8;
+      dn.maxLife = 8;
+      dn.vy = -18;
+    }
+    this.camera.x = p.x + 40;
+    this.camera.targetX = p.x + 40;
+    this.camera.y = p.y - 80;
+    this.camera.targetY = p.y - 80;
+  }
+
   public getHudSnapshot(): HudSnapshot {
     const alive = this.enemies.filter((e) => !e.dead);
     const activeBosses: BossHudBar[] = this.enemies
@@ -16682,8 +17075,13 @@ export class GameEngine {
       baseElements: [...this.player.baseElements],
       combinedElement: this.player.combinedElement,
       elementResonance: this.player.elementResonance,
+      affinityLevel: this.player.affinityLevel,
+      affinityMaxLevel: this.player.combinedElement ? 4 : 5,
+      weaponPowerLevel: this.player.weaponDamageBonus,
+      weaponPowerEvolutionTier: this.getWeaponEvoTier(),
       weaponEvolutionTier: this.getWeaponEvoTier(),
       spellEvolutionTier: this.getSpellEvoTier(this.player.abilitySlotLevels[0]),
+      cursedRelics: [...this.player.cursedRelics],
       shadowChainTimer: this.player.shadowChainTimer,
       shadowChainCount: this.player.shadowChainCount,
       minstrelSlowMo: this.player.minstrelZipActive,
@@ -16697,6 +17095,14 @@ export class GameEngine {
       maxBounces: 2 + Math.floor((1 + this.player.weaponDamageBonus) / 5),
       collectedLoreIds: [...this.collectedLoreIds],
       lastLoreToast: this.lastLoreToast ? { ...this.lastLoreToast } : null,
+      playerStatuses: {
+        ...(this.player.statusBurnTimer > 0 ? { burn: this.player.statusBurnTimer } : {}),
+        ...(this.player.statusFreezeTimer > 0 ? { freeze: this.player.statusFreezeTimer } : {}),
+        ...(this.player.statusSoakedTimer > 0 ? { soaked: this.player.statusSoakedTimer } : {}),
+        ...(this.player.statusStunTimer > 0 ? { stun: this.player.statusStunTimer } : {}),
+        ...(this.player.statusPoisonTimer > 0 ? { poison: this.player.statusPoisonTimer } : {}),
+        ...(this.player.statusBlindTimer > 0 ? { blind: this.player.statusBlindTimer } : {}),
+      },
     };
   }
 }

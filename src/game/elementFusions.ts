@@ -1016,8 +1016,8 @@ export const ELEMENT_MATCHUPS: Record<BaseElementId, ElementMatchupDef> = {
   water: {
     weakTo: ['storm', 'glacial', 'venom'],
     resists: ['water', 'fire', 'earth'],
-    status: 'soaked',
-    statusName: 'SOAKED',
+    status: 'freeze',
+    statusName: 'CHILL',
     statusColor: '#38bdf8',
   },
   air: {
@@ -1072,22 +1072,22 @@ export const ELEMENT_MATCHUPS: Record<BaseElementId, ElementMatchupDef> = {
   blood: {
     weakTo: ['light', 'glacial', 'metal'],
     resists: ['blood', 'shadow', 'venom'],
-    status: 'bleed',
+    status: 'poison',
     statusName: 'BLEED',
     statusColor: '#f43f5e',
   },
   metal: {
     weakTo: ['fire', 'storm', 'water'],
     resists: ['metal', 'glacial', 'air'],
-    status: 'bleed',
-    statusName: 'REND',
+    status: 'stun',
+    statusName: 'STAGGER',
     statusColor: '#cbd5e1',
   },
   arcane: {
     weakTo: ['shadow', 'metal', 'blood'],
     resists: ['arcane', 'light', 'storm'],
-    status: 'hex',
-    statusName: 'HEXED',
+    status: 'blind',
+    statusName: 'HEX',
     statusColor: '#e879f9',
   },
 };
@@ -1130,6 +1130,23 @@ export function evaluateElementalMatchup(
     return { mult: 0.65, relation: 'resist', triggerEl: resistedEl };
   }
   return { mult: 1, relation: 'neutral', triggerEl: attackElements[0] };
+}
+
+/**
+ * How a defender with one or more elements takes a single incoming element.
+ * Any weakness wins. Otherwise any resistance reduces the hit.
+ */
+export function defenseAgainst(
+  defenderElements: BaseElementId[],
+  attackElement: BaseElementId
+): ElementDamageEval {
+  let best: ElementDamageEval = { mult: 1, relation: 'neutral' };
+  for (const defender of defenderElements) {
+    const ev = evaluateElementalMatchup([attackElement], defender);
+    if (ev.relation === 'weak') return ev;
+    if (ev.relation === 'resist') best = ev;
+  }
+  return best;
 }
 
 /** Natural element of an enemy based on its archetype and active raid theme. */

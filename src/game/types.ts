@@ -1385,6 +1385,8 @@ export interface Player {
   statusStunTimer: number;
   statusPoisonTimer: number;
   statusPoisonTickTimer: number;
+  /** Poison stacks, 1–3. Each stack is one damage per tick. */
+  statusPoisonStacks: number;
   statusBlindTimer: number;
   statusBleedTimer: number;
   statusSoakedTimer: number;
@@ -1439,9 +1441,10 @@ export interface Enemy {
   chillTimer?: number;
   witherTimer?: number;
   witherTickTimer?: number;
-  /** Assassin poison (Venom Needles): damage over time. */
+  /** Assassin poison and elemental poison: damage over time. Stacks raise the tick. */
   poisonTimer?: number;
   poisonTickTimer?: number;
+  poisonStacks?: number;
   /** Mark for Death: seconds left; boss marks add damage taken. */
   markTimer?: number;
   markMaxTimer?: number;

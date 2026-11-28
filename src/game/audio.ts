@@ -760,7 +760,11 @@ class SoundBank {
     if (!ctx) return;
     const now = ctx.currentTime;
     switch (elementId) {
-      case 'lightning':
+      case 'storm':
+      case 'tempest':
+      case 'void_thunder':
+      case 'thunderquake':
+      case 'crimson_storm':
         this.playNoiseBurst(now, 0.14, 'highpass', 3400, 1400, 1.2, 0.22, 0.38, 0.002, true);
         this.playMetallicRing(now, 1960, 0.14, 0.065, [1, 1.47, 2.63], 0.42);
         break;
@@ -772,7 +776,9 @@ class SoundBank {
         this.playSubPunch(now, 140, 44, 0.12, 0.18, true, 0.22);
         break;
       case 'water':
-      case 'frost':
+      case 'glacial':
+      case 'permafrost':
+      case 'blizzard':
       case 'abyss':
         this.playNoiseBurst(now, 0.16, 'bandpass', 2200, 620, 2.2, 0.15, 0.4, 0.004);
         this.playHarpNote(now, 1046.5, 0.24, 0.06);

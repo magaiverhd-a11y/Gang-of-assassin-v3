@@ -31,7 +31,57 @@ import {
   drawWeaponAttack,
   drawWorldPickup,
 } from './sprites';
-import { Platform, StageDef, StageTheme, TuningConfig } from './types';
+import { Enemy, Platform, Player, StageDef, StageTheme, TuningConfig } from './types';
+
+function drawUnitStatuses(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  pips: { label: string; color: string }[]
+): void {
+  if (pips.length === 0) return;
+  ctx.save();
+  ctx.font = 'bold 8px "JetBrains Mono", monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const w = 28;
+  const start = x - (pips.length * (w + 3)) / 2;
+  pips.forEach((pip, i) => {
+    const px = start + i * (w + 3);
+    ctx.fillStyle = 'rgba(8, 10, 16, 0.82)';
+    ctx.fillRect(px, y, w, 12);
+    ctx.strokeStyle = pip.color;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(px, y, w, 12);
+    ctx.fillStyle = pip.color;
+    ctx.fillText(pip.label, px + w / 2, y + 6);
+  });
+  ctx.restore();
+}
+
+function enemyStatusPips(enemy: Enemy): { label: string; color: string }[] {
+  const pips: { label: string; color: string }[] = [];
+  if (enemy.burnTimer > 0) pips.push({ label: `BRN ${Math.ceil(enemy.burnTimer)}`, color: '#fb923c' });
+  if ((enemy.freezeTimer ?? 0) > 0) pips.push({ label: `ICE ${Math.ceil(enemy.freezeTimer ?? 0)}`, color: '#7dd3fc' });
+  else if ((enemy.chillTimer ?? 0) > 0) pips.push({ label: `SLW ${Math.ceil(enemy.chillTimer ?? 0)}`, color: '#38bdf8' });
+  if ((enemy.stunTimer ?? 0) > 0) pips.push({ label: `STN ${Math.ceil(enemy.stunTimer ?? 0)}`, color: '#fde047' });
+  if ((enemy.poisonTimer ?? 0) > 0) {
+    pips.push({ label: `PSN${enemy.poisonStacks ?? 1} ${Math.ceil(enemy.poisonTimer ?? 0)}`, color: '#84cc16' });
+  }
+  if ((enemy.blindTimer ?? 0) > 0) pips.push({ label: `BLD ${Math.ceil(enemy.blindTimer ?? 0)}`, color: '#e879f9' });
+  return pips;
+}
+
+function playerStatusPips(p: Player): { label: string; color: string }[] {
+  const pips: { label: string; color: string }[] = [];
+  if (p.statusBurnTimer > 0) pips.push({ label: `BRN ${Math.ceil(p.statusBurnTimer)}`, color: '#fb923c' });
+  if (p.statusFreezeTimer > 0) pips.push({ label: `ICE ${Math.ceil(p.statusFreezeTimer)}`, color: '#7dd3fc' });
+  else if (p.statusSoakedTimer > 0) pips.push({ label: `SLW ${Math.ceil(p.statusSoakedTimer)}`, color: '#38bdf8' });
+  if (p.statusStunTimer > 0) pips.push({ label: `STN ${Math.ceil(p.statusStunTimer)}`, color: '#fde047' });
+  if (p.statusPoisonTimer > 0) pips.push({ label: `PSN${p.statusPoisonStacks} ${Math.ceil(p.statusPoisonTimer)}`, color: '#84cc16' });
+  if (p.statusBlindTimer > 0) pips.push({ label: `BLD ${Math.ceil(p.statusBlindTimer)}`, color: '#e879f9' });
+  return pips;
+}
 
 export function renderGame(
   ctx: CanvasRenderingContext2D,
@@ -399,6 +449,8 @@ export function renderGame(
       !enemy.isBoss &&
       Math.hypot(engine.player.x - enemy.x, engine.player.y - enemy.y) < 245;
 
+    drawUnitStatuses(ctx, enemy.x, enemy.y - enemy.baseH * tuning.enemyScale - 18, enemyStatusPips(enemy));
+
     if (enemy.chillTimer && enemy.chillTimer > 0) {
       const ew = enemy.baseW * tuning.enemyScale;
       const eh = enemy.baseH * tuning.enemyScale;
@@ -491,6 +543,11 @@ export function renderGame(
     drawPhantomAlly(ctx, ally, tuning.playerScale, engine.time);
   }
   drawPlayerSprite(ctx, engine.player, tuning.playerScale);
+  {
+    const p = engine.player;
+    const ph = (p.crouching ? p.crouchBaseH : p.baseH) * tuning.playerScale;
+    drawUnitStatuses(ctx, p.x, p.y - ph - 16, playerStatusPips(p));
+  }
   drawWeaponAttack(ctx, engine.player, tuning.playerScale, engine.effectiveTuning?.attackRange ?? tuning.attackRange);
   drawFxFront(ctx, engine.fx, engine.player, engine.enemies, tuning, engine.time);
 
@@ -817,6 +874,23 @@ export function renderGame(
       ctx.fillStyle = vig;
       ctx.fillRect(0, 0, viewportW, viewportH);
     }
+    ctx.restore();
+  }
+
+  if (engine.player.statusBlindTimer > 0) {
+    ctx.save();
+    const vig = ctx.createRadialGradient(
+      viewportW / 2,
+      viewportH / 2,
+      Math.min(viewportW, viewportH) * 0.18,
+      viewportW / 2,
+      viewportH / 2,
+      Math.max(viewportW, viewportH) * 0.62
+    );
+    vig.addColorStop(0, 'rgba(20, 12, 32, 0.05)');
+    vig.addColorStop(1, 'rgba(8, 6, 16, 0.72)');
+    ctx.fillStyle = vig;
+    ctx.fillRect(0, 0, viewportW, viewportH);
     ctx.restore();
   }
 

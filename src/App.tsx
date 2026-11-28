@@ -242,6 +242,10 @@ export default function App() {
     baseElements: [],
     combinedElement: null,
     elementResonance: 0,
+    affinityLevel: 0,
+    affinityMaxLevel: 5,
+    weaponPowerLevel: 0,
+    weaponPowerEvolutionTier: 0,
     weaponEvolutionTier: 0,
     spellEvolutionTier: 0,
     shadowChainTimer: 0,
@@ -273,6 +277,8 @@ export default function App() {
     bossCharms: [],
     activeCharmSynergies: [],
     lastBossCharmDrop: null,
+    cursedRelics: [],
+    playerStatuses: {},
     collectedLoreIds: [],
     lastLoreToast: null,
   });
@@ -813,9 +819,15 @@ export default function App() {
     if (!engineRef.current) {
       engineRef.current = new GameEngine(tuningRef.current);
       // Debug hook for tuning / automated smoke tests: open the game with ?debug in the URL.
-      if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('debug')) {
-        (window as unknown as { __nocturneEngine?: GameEngine }).__nocturneEngine = engineRef.current;
-        (window as unknown as { __nocturneSound?: unknown }).__nocturneSound = { sound, director: soundDirector };
+      if (typeof window !== 'undefined') {
+        const params = new URLSearchParams(window.location.search);
+        if (params.has('debug') || params.has('elementsPreview')) {
+          (window as unknown as { __nocturneEngine?: GameEngine }).__nocturneEngine = engineRef.current;
+          (window as unknown as { __nocturneSound?: unknown }).__nocturneSound = { sound, director: soundDirector };
+        }
+        if (params.has('elementsPreview')) {
+          window.setTimeout(() => engineRef.current?.showcaseElements(), 400);
+        }
       }
     }
 
