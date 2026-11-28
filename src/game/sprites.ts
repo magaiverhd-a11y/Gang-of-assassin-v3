@@ -1557,40 +1557,44 @@ export function drawWeaponAttack(
     ctx.restore();
   }
 
-  // 0C-2. MONK KEY [3] — Pyre Dash: tall ash-and-ember wake with a pale chi spearhead.
+  // 0C-2. MONK KEY [3] — Pyre Dash: ash-and-ember wake that follows the 8-way dash direction.
   if (player.monkDashTimer > 0) {
     const h = player.baseH * scale;
     const cy = player.y - h * 0.55;
-    const f = player.facing;
+    const dx = player.monkDashDirX ?? player.facing;
+    const dy = player.monkDashDirY ?? 0;
+    const ang = Math.atan2(dy, dx || player.facing);
     const len = 150 * scale;
     ctx.save();
-    const grad = ctx.createLinearGradient(player.x - f * len, cy, player.x + f * 30 * scale, cy);
+    ctx.translate(player.x, cy);
+    ctx.rotate(ang);
+    const grad = ctx.createLinearGradient(-len, 0, 30 * scale, 0);
     grad.addColorStop(0, 'rgba(41, 37, 36, 0)');
     grad.addColorStop(0.45, evoTier >= 1 ? 'rgba(194, 65, 12, 0.28)' : 'rgba(87, 83, 78, 0.32)');
     grad.addColorStop(1, evoTier >= 2 ? 'rgba(253, 230, 138, 0.55)' : 'rgba(214, 211, 209, 0.5)');
     ctx.fillStyle = grad;
     ctx.beginPath();
-    ctx.ellipse(player.x - f * len * 0.4, cy, len * 0.75, h * 0.72, 0, 0, Math.PI * 2);
+    ctx.ellipse(-len * 0.4, 0, len * 0.75, h * 0.72, 0, 0, Math.PI * 2);
     ctx.fill();
-    // Wind streaks
+    // Wind streaks trailing behind the dash
     ctx.strokeStyle = evoTier >= 2 ? 'rgba(253, 230, 138, 0.7)' : 'rgba(231, 229, 228, 0.55)';
     ctx.lineWidth = Math.max(1.5, 2 * scale);
     ctx.lineCap = 'round';
     for (let i = -2; i <= 2; i++) {
-      const yy = cy + i * h * 0.22;
+      const yy = i * h * 0.22;
       const jitter = ((player.animTime * 37 + i * 13) % 1) * 30 * scale;
       ctx.beginPath();
-      ctx.moveTo(player.x - f * (len - jitter), yy);
-      ctx.lineTo(player.x - f * (20 * scale + jitter * 0.3), yy);
+      ctx.moveTo(-(len - jitter), yy);
+      ctx.lineTo(-(20 * scale + jitter * 0.3), yy);
       ctx.stroke();
     }
-    // Chi spearhead in front of the fist
+    // Chi spearhead in front of the leading fist
     ctx.fillStyle = evoTier >= 1 ? 'rgba(234, 88, 12, 0.55)' : 'rgba(231, 229, 228, 0.5)';
     ctx.beginPath();
-    ctx.moveTo(player.x + f * 52 * scale, cy);
-    ctx.quadraticCurveTo(player.x + f * 18 * scale, cy - h * 0.62, player.x - f * 6 * scale, cy - h * 0.66);
-    ctx.lineTo(player.x - f * 6 * scale, cy + h * 0.5);
-    ctx.quadraticCurveTo(player.x + f * 18 * scale, cy + h * 0.46, player.x + f * 52 * scale, cy);
+    ctx.moveTo(52 * scale, 0);
+    ctx.quadraticCurveTo(18 * scale, -h * 0.62, -6 * scale, -h * 0.66);
+    ctx.lineTo(-6 * scale, h * 0.5);
+    ctx.quadraticCurveTo(18 * scale, h * 0.46, 52 * scale, 0);
     ctx.fill();
     ctx.restore();
   }
