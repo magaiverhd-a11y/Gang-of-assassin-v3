@@ -234,7 +234,7 @@ export function drawHeldWeaponEvo(ctx: CanvasRenderingContext2D, weapon: WeaponI
   if (weapon === 'whip' || weapon === 'ribbon_whip' || weapon === 'silk_whip') {
     const ribbon = weapon !== 'whip';
     // dangling evolved tail with barbs
-    const tail: Pt[] = ribbon ? [[0, 8], [-4, 14], [3, 19], [-5, 24], [-2, 28 + t * 2]] : [[1, 13], [3, 17], [0, 21], [2, 25 + t * 2]];
+    const tail: Pt[] = ribbon ? [[0, 8], [-3, 12], [2, 15], [-3, 18], [-1, 20 + t]] : [[1, 12], [2.5, 14.5], [0.5, 17], [1.5, 19 + t]];
     ctx.strokeStyle = t >= 3 ? ev.dark : t >= 2 ? ev.look.metal : ev.glow;
     ctx.lineWidth = (ribbon ? 1.6 : 1.3) * s;
     strokePts(ctx, tail, s);
@@ -300,7 +300,7 @@ export function drawFistEvo(ctx: CanvasRenderingContext2D, hx: number, hy: numbe
   // runes on the forearm wraps
   const mx = (hx + ex) / 2;
   const my = (hy + ey) / 2;
-  drawGlyph(ctx, mx, my, 1.6 * s, t, t >= 2 ? ev.core : ev.glow, Math.max(0.6, 0.45 * s));
+  drawGlyph(ctx, mx, my, 2.2 * s, t, t >= 2 ? ev.core : ev.glow, Math.max(0.8, 0.6 * s));
   if (t >= 2) {
     // iron knuckle band + spikes
     const ang = Math.atan2(hy - ey, hx - ex);
@@ -308,13 +308,13 @@ export function drawFistEvo(ctx: CanvasRenderingContext2D, hx: number, hy: numbe
     ctx.translate(hx, hy);
     ctx.rotate(ang);
     ctx.fillStyle = ev.look.metal;
-    ctx.fillRect(-1.5 * s, -4 * s, 3 * s, 8 * s);
+    ctx.fillRect(-2 * s, -5 * s, 4 * s, 10 * s);
     ctx.fillStyle = ev.look.metalEdge;
     for (let i = -1; i <= 1; i++) {
       ctx.beginPath();
-      ctx.moveTo(1.5 * s, (i * 2.6 - 1) * s);
-      ctx.lineTo(4.6 * s, i * 2.6 * s);
-      ctx.lineTo(1.5 * s, (i * 2.6 + 1) * s);
+      ctx.moveTo(2 * s, (i * 3.2 - 1.3) * s);
+      ctx.lineTo(6.5 * s, i * 3.2 * s);
+      ctx.lineTo(2 * s, (i * 3.2 + 1.3) * s);
       ctx.fill();
     }
     ctx.restore();
@@ -326,7 +326,7 @@ export function drawFistEvo(ctx: CanvasRenderingContext2D, hx: number, hy: numbe
     ctx.stroke();
   }
   ctx.globalCompositeOperation = 'lighter';
-  halo(ctx, hx, hy, (5 + t * 3) * s, ev.glow, Math.min(0.9, 0.3 * t * ev.glowMul));
+  halo(ctx, hx, hy, (7 + t * 4) * s, ev.glow, Math.min(0.9, 0.35 * t * ev.glowMul));
   if (t >= 3) {
     // gauntlet of flame: licking tongues around fist and forearm
     ctx.fillStyle = rgba(ev.glow, 0.55);
@@ -334,11 +334,11 @@ export function drawFistEvo(ctx: CanvasRenderingContext2D, hx: number, hy: numbe
       const k = i / 3;
       const px = ex + (hx - ex) * (0.4 + k * 0.6);
       const py = ey + (hy - ey) * (0.4 + k * 0.6);
-      const fh = (5 + Math.sin(ev.time * 14 + i * 2) * 2) * s;
+      const fh = (8 + Math.sin(ev.time * 14 + i * 2) * 3) * s;
       ctx.beginPath();
-      ctx.moveTo(px - 2 * s, py);
-      ctx.quadraticCurveTo(px - 2.4 * s, py - fh * 0.6, px + Math.sin(ev.time * 9 + i) * 1.2 * s, py - fh);
-      ctx.quadraticCurveTo(px + 2.4 * s, py - fh * 0.6, px + 2 * s, py);
+      ctx.moveTo(px - 3 * s, py);
+      ctx.quadraticCurveTo(px - 3.4 * s, py - fh * 0.6, px + Math.sin(ev.time * 9 + i) * 1.6 * s, py - fh);
+      ctx.quadraticCurveTo(px + 3.4 * s, py - fh * 0.6, px + 3 * s, py);
       ctx.fill();
     }
     ctx.globalCompositeOperation = 'source-over';
@@ -347,7 +347,7 @@ export function drawFistEvo(ctx: CanvasRenderingContext2D, hx: number, hy: numbe
       const a = ev.time * 3 + (i / 3) * Math.PI * 2;
       ctx.fillStyle = i === 0 ? ev.core : ev.glow;
       ctx.beginPath();
-      ctx.arc(hx + Math.cos(a) * 7 * s, hy + Math.sin(a) * 3.5 * s, 1.2 * s, 0, Math.PI * 2);
+      ctx.arc(hx + Math.cos(a) * 10 * s, hy + Math.sin(a) * 5 * s, 1.6 * s, 0, Math.PI * 2);
       ctx.fill();
     }
   }

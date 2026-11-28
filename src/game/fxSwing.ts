@@ -204,24 +204,24 @@ export function drawAffinitySwing(ctx: CanvasRenderingContext2D, p: Player, scal
       }
       ctx.closePath();
       ctx.fill();
-      ctx.globalAlpha = 0.3 * glowMul;
+      ctx.globalAlpha = Math.min(1, 0.42 * glowMul);
       ctx.strokeStyle = glow;
-      ctx.lineWidth = 6 * scale;
+      ctx.lineWidth = 8 * scale;
       ctx.beginPath();
       ctx.arc(cx, cy, R * 0.92, startA - f * 0.3, endA - f * 0.3);
       ctx.stroke();
     }
     if (tier >= 3) {
-      ctx.globalAlpha = 0.8;
+      ctx.globalAlpha = 0.85;
       ctx.strokeStyle = '#0b080d';
-      ctx.lineWidth = 7 * scale;
+      ctx.lineWidth = 10 * scale;
       ctx.beginPath();
       ctx.arc(cx, cy, R * 1.22, startA + 0.1, endA - 0.1);
       ctx.stroke();
       ctx.globalCompositeOperation = 'lighter';
       ctx.globalAlpha = Math.min(1, 0.95 * glowMul);
       ctx.strokeStyle = core;
-      ctx.lineWidth = 1.4 * scale;
+      ctx.lineWidth = 2 * scale;
       ctx.beginPath();
       const n = 22;
       for (let i = 0; i <= n; i++) {
