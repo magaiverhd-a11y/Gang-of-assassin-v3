@@ -9,6 +9,7 @@ import {
   drawElementalArc,
   drawElementalPlayerAura,
   drawEnemySprite,
+  drawDeathMark,
   drawExecutionMark,
   drawGasCloud,
   drawGrappleHook,
@@ -200,10 +201,32 @@ export function renderGame(
     ) {
       drawExecutionMark(ctx, enemy, tuning.enemyScale, engine.time);
     }
+
+    if ((enemy.markTimer ?? 0) > 0 && !enemy.dead) {
+      drawDeathMark(ctx, enemy, tuning.enemyScale, engine.time, engine.fx.mobile ? 'tap' : '0');
+    }
   }
 
   for (const seq of engine.bossDeathSequences) {
     drawBossDeathSequence(ctx, seq, engine.time);
+  }
+
+  // Assassin: brief crimson beam from the hero to a freshly branded foe.
+  for (const mb of engine.markBeams) {
+    const k = Math.max(0, mb.life / mb.maxLife);
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = `rgba(190, 18, 60, ${0.55 * k})`;
+    ctx.lineWidth = 6 * k + 1;
+    ctx.beginPath();
+    ctx.moveTo(mb.x1, mb.y1);
+    ctx.lineTo(mb.x2, mb.y2);
+    ctx.stroke();
+    ctx.strokeStyle = `rgba(254, 205, 211, ${0.9 * k})`;
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.restore();
   }
 
   for (const ghost of engine.afterimages) {

@@ -431,6 +431,73 @@ function computePose(
     return pose;
   }
 
+  // 0O. ASSASSIN SPECIALS (Shadow Blink, shadow-step strike, Mark for Death cast, dagger throw)
+  if (player.characterId === 'assassin' && player.hitStunTimer <= 0) {
+    if (player.assassinBlinkTimer > 0) {
+      pose.torsoTilt = 0.55;
+      pose.headTilt = 0.1;
+      pose.bodyOffsetY = -2 * scale;
+      pose.leftHipAngle = -0.75;
+      pose.leftKneeAngle = 0.35;
+      pose.rightHipAngle = -0.25;
+      pose.rightKneeAngle = 1.0;
+      pose.frontShoulderAngle = -1.15;
+      pose.frontElbowAngle = -0.2;
+      pose.backShoulderAngle = -1.5;
+      pose.backElbowAngle = -0.15;
+      pose.coatSweep = -1.1;
+      pose.hairLift = -0.9;
+      pose.squashX = 1.1;
+      pose.squashY = 0.92;
+      return pose;
+    }
+    if (player.assassinStepTimer > 0) {
+      const prog = 1 - player.assassinStepTimer / 0.34;
+      pose.torsoTilt = 0.5;
+      pose.bodyOffsetY = 5 * scale;
+      pose.leftHipAngle = 0.85;
+      pose.leftKneeAngle = 1.0;
+      pose.rightHipAngle = -0.75;
+      pose.rightKneeAngle = 0.3;
+      pose.frontShoulderAngle = prog < 0.3 ? 0.3 : 1.62;
+      pose.frontElbowAngle = prog < 0.3 ? -1.7 : 0.0;
+      pose.backShoulderAngle = -0.9;
+      pose.backElbowAngle = -0.5;
+      pose.coatSweep = -0.95;
+      pose.hairLift = -0.7;
+      return pose;
+    }
+    if (player.assassinMarkCastTimer > 0) {
+      pose.torsoTilt = 0.08;
+      pose.headTilt = -0.04;
+      pose.leftHipAngle = 0.35;
+      pose.leftKneeAngle = 0.3;
+      pose.rightHipAngle = -0.35;
+      pose.rightKneeAngle = 0.25;
+      pose.frontShoulderAngle = 1.45;
+      pose.frontElbowAngle = -0.05;
+      pose.backShoulderAngle = 0.5;
+      pose.backElbowAngle = -1.8;
+      pose.coatSweep = 0.2;
+      pose.hairLift = 0.4;
+      return pose;
+    }
+    if (player.assassinThrowTimer > 0 && player.attackState === 'idle') {
+      const prog = 1 - Math.min(1, player.assassinThrowTimer / 0.24);
+      pose.torsoTilt = prog < 0.35 ? -0.18 : 0.3;
+      pose.leftHipAngle = 0.4;
+      pose.leftKneeAngle = 0.4;
+      pose.rightHipAngle = -0.4;
+      pose.rightKneeAngle = 0.3;
+      pose.frontShoulderAngle = prog < 0.35 ? -2.3 : 1.5;
+      pose.frontElbowAngle = prog < 0.35 ? -0.8 : -0.05;
+      pose.backShoulderAngle = -0.4;
+      pose.backElbowAngle = -1.0;
+      pose.coatSweep = -0.5;
+      return pose;
+    }
+  }
+
   // 1. TAKING DAMAGE IN AIR (dramatic tumble recoil!)
   if (player.hitStunTimer > 0 && player.isAirKnockback) {
     pose.torsoTilt = -0.58;
@@ -689,6 +756,40 @@ function computePose(
           pose.frontElbowAngle = -1.7;
         }
         pose.coatSweep = -0.6;
+      }
+    } else if (weapon === 'shadow_daggers') {
+      // Twin daggers: low predatory stance; stab, back-hand slash, then a crossing double slash.
+      const step = player.assassinComboStep;
+      const st = player.attackState;
+      pose.bodyOffsetY += 2.4 * scale;
+      pose.leftHipAngle = 0.62;
+      pose.leftKneeAngle = 0.7;
+      pose.rightHipAngle = -0.5;
+      pose.rightKneeAngle = 0.45;
+      pose.coatSweep = -0.7;
+      if (step === 2) {
+        pose.torsoTilt = st === 'startup' ? -0.2 : 0.42;
+        pose.frontShoulderAngle = st === 'startup' ? -2.4 : st === 'active' ? 1.95 : 1.1;
+        pose.frontElbowAngle = st === 'startup' ? -0.6 : st === 'active' ? 0.05 : -0.45;
+        pose.backShoulderAngle = st === 'startup' ? -2.0 : st === 'active' ? 1.3 : 0.7;
+        pose.backElbowAngle = st === 'startup' ? -0.8 : st === 'active' ? 0.0 : -0.6;
+        pose.coatSweep = -0.95;
+      } else {
+        const lead = step === 0;
+        const extended = st === 'active' ? 1.62 : st === 'recovery' ? 1.0 : 0.25;
+        const elbow = st === 'active' ? 0.0 : st === 'recovery' ? -0.55 : -1.7;
+        pose.torsoTilt = 0.2 + (st === 'active' ? 0.14 : 0);
+        if (lead) {
+          pose.frontShoulderAngle = extended;
+          pose.frontElbowAngle = elbow;
+          pose.backShoulderAngle = 0.55;
+          pose.backElbowAngle = -1.7;
+        } else {
+          pose.backShoulderAngle = extended;
+          pose.backElbowAngle = elbow;
+          pose.frontShoulderAngle = 0.55;
+          pose.frontElbowAngle = -1.7;
+        }
       }
     } else if (weapon === 'spire_staff') {
       if (player.attackState === 'startup') {
@@ -2075,6 +2176,339 @@ function drawSableWizard(
   ctx.fill();
 }
 
+/** Assassin dagger in hand-local space (hand at origin, blade along +y) — same convention as weaponEvo. */
+function drawAssassinDagger(
+  ctx: CanvasRenderingContext2D,
+  hx: number,
+  hy: number,
+  limbAngle: number,
+  reverse: boolean,
+  scale: number,
+  flash: boolean,
+  accent: string,
+  evoOn: boolean
+): void {
+  ctx.save();
+  ctx.translate(hx, hy);
+  // Blade direction follows the forearm (forward grip) or doubles back along it (reverse grip).
+  ctx.rotate(reverse ? Math.PI - limbAngle : -limbAngle);
+  const s = scale * (evoOn ? heldScale() : 1);
+  // Grip
+  ctx.fillStyle = flash ? '#ffffff' : '#1c1917';
+  ctx.fillRect(-1.3 * s, -3.2 * s, 2.6 * s, 5.8 * s);
+  ctx.fillStyle = flash ? '#ffffff' : accent;
+  for (let i = 0; i < 3; i++) ctx.fillRect(-1.4 * s, (-2.8 + i * 1.8) * s, 2.8 * s, 0.7 * s);
+  // Pommel ring
+  ctx.strokeStyle = flash ? '#ffffff' : '#57534e';
+  ctx.lineWidth = 0.9 * s;
+  ctx.beginPath();
+  ctx.arc(0, -4.1 * s, 1.1 * s, 0, Math.PI * 2);
+  ctx.stroke();
+  // Cross-guard
+  ctx.fillStyle = flash ? '#ffffff' : '#44403c';
+  ctx.fillRect(-3.4 * s, 2.3 * s, 6.8 * s, 1.4 * s);
+  // Blade (leaf shaped, dark steel with a pale edge)
+  ctx.fillStyle = flash ? '#ffffff' : '#9ca3af';
+  ctx.beginPath();
+  ctx.moveTo(-1.7 * s, 3.6 * s);
+  ctx.lineTo(1.7 * s, 3.6 * s);
+  ctx.quadraticCurveTo(2.0 * s, 9 * s, 0.1 * s, 14 * s);
+  ctx.quadraticCurveTo(-1.8 * s, 9 * s, -1.7 * s, 3.6 * s);
+  ctx.closePath();
+  ctx.fill();
+  if (!flash) {
+    ctx.strokeStyle = '#f1f5f9';
+    ctx.lineWidth = 0.6 * s;
+    ctx.beginPath();
+    ctx.moveTo(1.5 * s, 4 * s);
+    ctx.quadraticCurveTo(1.8 * s, 9 * s, 0.1 * s, 13.6 * s);
+    ctx.stroke();
+    ctx.strokeStyle = '#374151';
+    ctx.beginPath();
+    ctx.moveTo(0, 4 * s);
+    ctx.lineTo(0, 12 * s);
+    ctx.stroke();
+    if (evoOn) drawHeldWeaponEvo(ctx, 'shadow_daggers', s);
+  }
+  ctx.restore();
+}
+
+function drawShadowAssassin(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+  scale: number,
+  pose: LimbPose,
+  flash: boolean,
+  isHurt: boolean,
+  weapon: WeaponId,
+  attackState: Player['attackState'],
+  glow: string,
+  glowPower: number,
+  reverseGrip: boolean,
+  evoOn: boolean
+): void {
+  const hipY = -h * 0.42 + pose.bodyOffsetY;
+  const shoulderY = -h * 0.75 + pose.bodyOffsetY;
+  const thighLen = h * 0.22;
+  const shinLen = h * 0.22;
+  const upperArmLen = h * 0.16;
+  const foreArmLen = h * 0.15;
+
+  ctx.scale(pose.squashX, pose.squashY);
+
+  const coal = flash ? '#ffffff' : '#0c0a09';
+  const char = flash ? '#ffffff' : '#1c1917';
+  const leather = flash ? '#ffffff' : '#292524';
+  const leatherHi = flash ? '#ffffff' : '#44403c';
+  const crimson = flash ? '#ffffff' : '#7f1d1d';
+  const crimsonBright = flash ? '#ffffff' : '#9f1239';
+  const glowCol = flash ? '#ffffff' : glow;
+
+  // Tattered cloak behind the body: ragged lower hem, sways with motion
+  ctx.save();
+  ctx.translate(-w * 0.1, shoulderY + 1 * scale);
+  ctx.rotate(pose.torsoTilt + pose.coatSweep * 0.7);
+  ctx.fillStyle = coal;
+  ctx.beginPath();
+  ctx.moveTo(-w * 0.18, 0);
+  ctx.quadraticCurveTo(-w * 0.72, h * 0.25, -w * 0.78 + pose.hairLift * 7 * scale, h * 0.78);
+  // jagged hem
+  const hemY = h * 0.78;
+  ctx.lineTo(-w * 0.62 + pose.hairLift * 5 * scale, hemY - 4 * scale);
+  ctx.lineTo(-w * 0.46, hemY + 3 * scale);
+  ctx.lineTo(-w * 0.3, hemY - 3 * scale);
+  ctx.lineTo(-w * 0.14, hemY + 2 * scale);
+  ctx.lineTo(w * 0.06, hemY - 5 * scale);
+  ctx.lineTo(w * 0.2, h * 0.04);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = crimson;
+  ctx.lineWidth = 1.2 * scale;
+  ctx.beginPath();
+  ctx.moveTo(-w * 0.6 + pose.hairLift * 5 * scale, hemY - 4 * scale);
+  ctx.lineTo(-w * 0.46, hemY + 3 * scale);
+  ctx.lineTo(-w * 0.3, hemY - 3 * scale);
+  ctx.stroke();
+  ctx.restore();
+
+  // Back arm (drawn behind the torso) + back dagger
+  const backShoulderX = -w * 0.08 + Math.sin(pose.torsoTilt) * 3 * scale;
+  const backElbow = drawLimbSegment(ctx, backShoulderX, shoulderY, pose.backShoulderAngle, upperArmLen, 5.4 * scale, char);
+  const backHand = drawLimbSegment(ctx, backElbow.x, backElbow.y, pose.backShoulderAngle + pose.backElbowAngle, foreArmLen, 5.0 * scale, leather);
+  ctx.fillStyle = coal;
+  ctx.beginPath();
+  ctx.arc(backHand.x, backHand.y, 2.3 * scale, 0, Math.PI * 2);
+  ctx.fill();
+  if (weapon === 'shadow_daggers') {
+    drawAssassinDagger(ctx, backHand.x, backHand.y, pose.backShoulderAngle + pose.backElbowAngle, reverseGrip, scale, flash, crimsonBright, evoOn);
+  }
+
+  // Legs: dark leggings, wrapped shins, soft boots
+  const backKnee = drawLimbSegment(ctx, -w * 0.05, hipY, pose.rightHipAngle, thighLen, 6 * scale, coal);
+  const backFoot = drawLimbSegment(ctx, backKnee.x, backKnee.y, pose.rightHipAngle - pose.rightKneeAngle, shinLen, 5 * scale, char);
+  ctx.fillStyle = coal;
+  ctx.fillRect(backFoot.x - 1.5 * scale, backFoot.y - 2.4 * scale, 7.5 * scale, 3.2 * scale);
+  const frontKnee = drawLimbSegment(ctx, w * 0.05, hipY, pose.leftHipAngle, thighLen, 6.4 * scale, char);
+  const frontFoot = drawLimbSegment(ctx, frontKnee.x, frontKnee.y, pose.leftHipAngle - pose.leftKneeAngle, shinLen, 5.2 * scale, leather, leatherHi);
+  ctx.fillStyle = coal;
+  ctx.fillRect(frontFoot.x - 1.5 * scale, frontFoot.y - 2.4 * scale, 8 * scale, 3.2 * scale);
+  // crimson knee wrap
+  ctx.strokeStyle = crimson;
+  ctx.lineWidth = 1.6 * scale;
+  ctx.beginPath();
+  ctx.moveTo(frontKnee.x - 3 * scale, frontKnee.y - 0.5 * scale);
+  ctx.lineTo(frontKnee.x + 3 * scale, frontKnee.y + 0.5 * scale);
+  ctx.stroke();
+
+  // Hip tassets / short tabard, swept by motion
+  ctx.save();
+  ctx.translate(0, hipY);
+  ctx.rotate(pose.torsoTilt * 0.6);
+  const sweep = pose.coatSweep * 6 * scale;
+  ctx.fillStyle = char;
+  ctx.beginPath();
+  ctx.moveTo(-w * 0.3, -2 * scale);
+  ctx.lineTo(w * 0.3, -2 * scale);
+  ctx.lineTo(w * 0.36 + sweep * 0.25, h * 0.2);
+  ctx.lineTo(w * 0.04, h * 0.25);
+  ctx.lineTo(-w * 0.1 + sweep * 0.5, h * 0.19);
+  ctx.lineTo(-w * 0.38 + sweep, h * 0.24);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = crimson;
+  ctx.lineWidth = 1 * scale;
+  ctx.beginPath();
+  ctx.moveTo(w * 0.36 + sweep * 0.25, h * 0.2);
+  ctx.lineTo(w * 0.04, h * 0.25);
+  ctx.lineTo(-w * 0.1 + sweep * 0.5, h * 0.19);
+  ctx.stroke();
+  ctx.restore();
+
+  // Torso (leather jerkin), straps, belt, bandolier, hood and mask
+  ctx.save();
+  ctx.translate(0, hipY);
+  ctx.rotate(pose.torsoTilt);
+  const torsoH = h * 0.34;
+  ctx.fillStyle = leather;
+  ctx.beginPath();
+  ctx.moveTo(-w * 0.34, -torsoH);
+  ctx.lineTo(w * 0.32, -torsoH);
+  ctx.lineTo(w * 0.28, 2 * scale);
+  ctx.lineTo(-w * 0.3, 2 * scale);
+  ctx.closePath();
+  ctx.fill();
+  // layered chest plates / stitching
+  ctx.fillStyle = char;
+  ctx.fillRect(-w * 0.3, -torsoH * 0.62, w * 0.58, 1.6 * scale);
+  ctx.fillRect(-w * 0.3, -torsoH * 0.3, w * 0.56, 1.4 * scale);
+  // diagonal bandolier with small throwing knives
+  ctx.strokeStyle = crimson;
+  ctx.lineWidth = 3.2 * scale;
+  ctx.beginPath();
+  ctx.moveTo(-w * 0.3, -torsoH * 0.95);
+  ctx.lineTo(w * 0.26, -torsoH * 0.06);
+  ctx.stroke();
+  if (!flash) {
+    ctx.fillStyle = '#cbd5e1';
+    for (let i = 0; i < 3; i++) {
+      const k = 0.25 + i * 0.25;
+      const kx = -w * 0.3 + (w * 0.56) * k;
+      const ky = -torsoH * 0.95 + torsoH * 0.89 * k;
+      ctx.beginPath();
+      ctx.moveTo(kx - 1.1 * scale, ky - 1 * scale);
+      ctx.lineTo(kx + 1.1 * scale, ky - 1 * scale);
+      ctx.lineTo(kx, ky + 4 * scale);
+      ctx.closePath();
+      ctx.fill();
+    }
+  }
+  // Belt with a crimson cloth sash and a skull buckle
+  ctx.fillStyle = coal;
+  ctx.fillRect(-w * 0.31, -4.5 * scale, w * 0.62, 4.6 * scale);
+  ctx.fillStyle = crimsonBright;
+  ctx.fillRect(w * 0.1, -4.2 * scale, 3.2 * scale, 4 * scale);
+  ctx.beginPath();
+  ctx.moveTo(w * 0.1, -0.5 * scale);
+  ctx.lineTo(w * 0.1 + 3.2 * scale, -0.5 * scale);
+  ctx.lineTo(w * 0.1 + 2 * scale + Math.sin(pose.coatSweep * 4) * 2.5 * scale, 7 * scale);
+  ctx.lineTo(w * 0.1 + 0.4 * scale, 5.5 * scale);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = flash ? '#ffffff' : '#d6d3d1';
+  ctx.beginPath();
+  ctx.arc(-1.2 * scale, -2.2 * scale, 1.5 * scale, 0, Math.PI * 2);
+  ctx.fill();
+  // Gorget / high collar
+  ctx.fillStyle = coal;
+  ctx.beginPath();
+  ctx.moveTo(-w * 0.4, -torsoH + 2 * scale);
+  ctx.quadraticCurveTo(0, -torsoH + 8 * scale, w * 0.38, -torsoH + 2 * scale);
+  ctx.lineTo(w * 0.28, -torsoH - 3 * scale);
+  ctx.lineTo(-w * 0.3, -torsoH - 3 * scale);
+  ctx.closePath();
+  ctx.fill();
+  // Leather pauldron
+  ctx.fillStyle = char;
+  ctx.beginPath();
+  ctx.ellipse(w * 0.06, -torsoH + 2 * scale, w * 0.24, 4.2 * scale, -0.15, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = leatherHi;
+  ctx.lineWidth = 0.9 * scale;
+  ctx.stroke();
+
+  // Head: deep hood with a long back tail, masked face, narrow glowing eyes
+  ctx.save();
+  ctx.translate(w * 0.04, -torsoH - 3 * scale);
+  ctx.rotate(pose.headTilt);
+  const hr = w * 0.3;
+  ctx.fillStyle = coal;
+  ctx.beginPath();
+  ctx.moveTo(-hr * 1.1, hr * 0.5);
+  ctx.quadraticCurveTo(-hr * 1.4, -hr * 1.0, -hr * 0.4, -hr * 1.75);
+  ctx.quadraticCurveTo(hr * 0.7, -hr * 1.65, hr * 1.12, -hr * 0.45);
+  ctx.lineTo(hr * 1.0, hr * 0.5);
+  ctx.closePath();
+  ctx.fill();
+  // hood tail streaming back
+  ctx.fillStyle = char;
+  ctx.beginPath();
+  ctx.moveTo(-hr * 1.0, -hr * 0.2);
+  ctx.quadraticCurveTo(-hr * 2.0 + pose.hairLift * 5 * scale, hr * 0.3, -hr * 2.5 + pose.hairLift * 9 * scale, hr * 1.0);
+  ctx.lineTo(-hr * 1.1, hr * 0.7);
+  ctx.closePath();
+  ctx.fill();
+  // face opening (deep shadow)
+  ctx.fillStyle = flash ? '#ffffff' : '#050404';
+  ctx.beginPath();
+  ctx.ellipse(hr * 0.38, -hr * 0.3, hr * 0.62, hr * 0.7, 0.12, 0, Math.PI * 2);
+  ctx.fill();
+  // mask: charcoal cloth covering nose and mouth with a crimson stitched edge
+  ctx.fillStyle = flash ? '#ffffff' : '#292524';
+  ctx.beginPath();
+  ctx.moveTo(-hr * 0.15, -hr * 0.05);
+  ctx.lineTo(hr * 1.0, -hr * 0.12);
+  ctx.lineTo(hr * 0.95, hr * 0.45);
+  ctx.lineTo(hr * 0.35, hr * 0.62);
+  ctx.lineTo(-hr * 0.1, hr * 0.4);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = crimsonBright;
+  ctx.lineWidth = 0.9 * scale;
+  ctx.beginPath();
+  ctx.moveTo(-hr * 0.12, -hr * 0.04);
+  ctx.lineTo(hr * 0.98, -hr * 0.1);
+  ctx.stroke();
+  // eyes: narrow, serious slits
+  if (!flash) {
+    ctx.strokeStyle = glowCol;
+    ctx.lineWidth = 1.5 * scale;
+    ctx.lineCap = 'round';
+    if (isHurt) {
+      ctx.beginPath();
+      ctx.moveTo(hr * 0.2, -hr * 0.5);
+      ctx.lineTo(hr * 0.5, -hr * 0.3);
+      ctx.moveTo(hr * 0.62, -hr * 0.3);
+      ctx.lineTo(hr * 0.9, -hr * 0.46);
+      ctx.stroke();
+    } else {
+      ctx.globalAlpha = 0.75 + glowPower * 0.25;
+      ctx.beginPath();
+      ctx.moveTo(hr * 0.22, -hr * 0.4);
+      ctx.lineTo(hr * 0.52, -hr * 0.3);
+      ctx.moveTo(hr * 0.64, -hr * 0.3);
+      ctx.lineTo(hr * 0.95, -hr * 0.38);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+  }
+  // hood rim
+  ctx.strokeStyle = crimson;
+  ctx.lineWidth = 1.2 * scale;
+  ctx.beginPath();
+  ctx.ellipse(hr * 0.38, -hr * 0.3, hr * 0.66, hr * 0.74, 0.12, -Math.PI * 0.62, Math.PI * 0.5);
+  ctx.stroke();
+  ctx.restore();
+  ctx.restore();
+
+  // Front arm: sleeve, leather bracer, glove, dagger
+  const fShoulderX = w * 0.08 + Math.sin(pose.torsoTilt) * 4 * scale;
+  const fElbow = drawLimbSegment(ctx, fShoulderX, shoulderY + 1 * scale, pose.frontShoulderAngle, upperArmLen, 5.8 * scale, char);
+  const fHand = drawLimbSegment(ctx, fElbow.x, fElbow.y, pose.frontShoulderAngle + pose.frontElbowAngle, foreArmLen, 5.4 * scale, leather, leatherHi);
+  ctx.fillStyle = crimson;
+  const bx = fElbow.x + (fHand.x - fElbow.x) * 0.45;
+  const by = fElbow.y + (fHand.y - fElbow.y) * 0.45;
+  ctx.fillRect(bx - 2.4 * scale, by - 1 * scale, 4.8 * scale, 1.6 * scale);
+  ctx.fillStyle = coal;
+  ctx.beginPath();
+  ctx.arc(fHand.x, fHand.y, 2.5 * scale, 0, Math.PI * 2);
+  ctx.fill();
+  if (weapon === 'shadow_daggers') {
+    drawAssassinDagger(ctx, fHand.x, fHand.y, pose.frontShoulderAngle + pose.frontElbowAngle, reverseGrip, scale, flash, crimsonBright, evoOn);
+  }
+  void attackState;
+}
+
 export function drawAnimatedPlayer(
   ctx: CanvasRenderingContext2D,
   player: Player,
@@ -2280,6 +2714,12 @@ export function drawAnimatedPlayer(
             ? 0.6 + evo * 0.2
             : 0;
     drawAshMonk(ctx, w, h, scale, pose, flash, isHurt, player.weapon, player.attackState, emberGlow);
+  } else if (player.characterId === 'assassin') {
+    const evo = visualTier(player);
+    const striking =
+      player.attackState !== 'idle' || player.assassinStepTimer > 0 || player.assassinMarkCastTimer > 0 || player.assassinThrowTimer > 0 || player.assassinBlinkTimer > 0;
+    const keen = striking ? 1 : 0.3 + evo * 0.2;
+    drawShadowAssassin(ctx, w, h, scale, pose, flash, isHurt, player.weapon, player.attackState, '#e11d48', keen, !striking && !player.isHidden && player.hitStunTimer <= 0 ? true : false, evo >= 1);
   } else if (player.characterId === 'wizard') {
     const vel = visualElement(player);
     const realEl = getActiveElementDef(player.baseElements, player.combinedElement);
@@ -2330,7 +2770,9 @@ export function drawCampHeroFigure(
         ? 2.8
         : characterId === 'minstrel'
           ? 4.2
-          : characterId === 'monk'
+          : characterId === 'assassin'
+            ? 2.2
+            : characterId === 'monk'
             ? 5.1
             : characterId === 'wizard'
               ? 0.7
@@ -2371,6 +2813,23 @@ export function drawCampHeroFigure(
       drawAshMonk(ctx, w, h, scale, { ...pose, frontShoulderAngle: 0.55, frontElbowAngle: -1.55, backShoulderAngle: 0.3, backElbowAngle: -1.6 }, false, false, 'ash_wraps', 'idle', 0);
     } else if (characterId === 'wizard') {
       drawSableWizard(ctx, w, h, scale, pose, false, false, 'spire_staff', 'idle', '#a5b4fc', 0.3 + Math.max(0, Math.sin(t30 * 2.2)) * 0.3);
+    } else if (characterId === 'assassin') {
+      // Crouched, watchful: hood low, daggers held reverse-grip at the hips
+      drawShadowAssassin(
+        ctx,
+        w,
+        h,
+        scale,
+        { ...pose, torsoTilt: 0.2, headTilt: -0.05, bodyOffsetY: pose.bodyOffsetY + 2 * scale, leftHipAngle: 0.4, leftKneeAngle: 0.55, rightHipAngle: -0.3, rightKneeAngle: 0.45, frontShoulderAngle: 0.5, frontElbowAngle: 1.0, backShoulderAngle: -0.1, backElbowAngle: 0.9 },
+        false,
+        false,
+        'shadow_daggers',
+        'idle',
+        '#e11d48',
+        0.3 + Math.max(0, Math.sin(t30 * 1.6)) * 0.4,
+        true,
+        false
+      );
     } else {
       drawAnimeVampireBoy(ctx, w, h, scale, pose, false, false, 'whip', 'idle');
     }

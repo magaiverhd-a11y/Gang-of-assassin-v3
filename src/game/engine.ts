@@ -768,7 +768,7 @@ export class GameEngine {
 
       const campSpawnX =
         this.selectedCharacter === 'assassin'
-          ? 1175
+          ? 1295
           : this.selectedCharacter === 'monk'
           ? 1080
           : this.selectedCharacter === 'wizard'

@@ -399,6 +399,14 @@ export const CAMP_STAGE: StageDef = {
       used: false,
     },
     {
+      id: 'camp-hero-assassin',
+      kind: 'camp_hero_assassin',
+      x: 1295,
+      y: CAMP_FLOOR,
+      label: 'Play The Hollow Assassin (Twin Daggers · Mark for Death · Shadow Blink)',
+      used: false,
+    },
+    {
       id: 'camp-hero-monk',
       kind: 'camp_hero_monk',
       x: 1100,

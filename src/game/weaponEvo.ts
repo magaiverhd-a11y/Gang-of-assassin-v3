@@ -43,6 +43,8 @@ function spineOf(weapon: WeaponId): { pts: Pt[]; w: number } | null {
       return { pts: [[0, 6], [2.2, 12], [2.8, 18], [1.5, 25]], w: 2.2 };
     case 'rapier':
       return { pts: [[0, 6], [0, 16], [0, 26]], w: 1.7 };
+    case 'shadow_daggers':
+      return { pts: [[0, 3.6], [0.3, 8.5], [0.1, 14]], w: 1.7 };
     case 'naginata':
       return { pts: [[-0.5, 18], [2, 23], [2, 28], [0.5, 32]], w: 2.6 };
     default:

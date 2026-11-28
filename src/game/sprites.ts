@@ -942,6 +942,20 @@ export function drawInteractable(
       break;
     }
 
+    case 'camp_hero_assassin': {
+      const isSelected = activeCharacterId === 'assassin';
+      if (!isSelected) {
+        drawCampHeroFigure(ctx, 'assassin', 0, 0, -1, playerScale, time, false);
+      } else {
+        // Scorched whetstone and a snuffed candle where the Assassin lurks when not active
+        ctx.fillStyle = '#1c1917';
+        ctx.fillRect(-14, -6, 28, 6);
+        ctx.fillStyle = '#9f1239';
+        ctx.fillRect(6, -12, 3, 6);
+      }
+      break;
+    }
+
     case 'camp_hero_wizard': {
       const isSelected = activeCharacterId === 'wizard';
       if (!isSelected) {
@@ -1122,7 +1136,8 @@ export function drawInteractable(
     (item.kind === 'camp_hero_ronin' && activeCharacterId === 'ronin') ||
     (item.kind === 'camp_hero_minstrel' && activeCharacterId === 'minstrel') ||
     (item.kind === 'camp_hero_monk' && activeCharacterId === 'monk') ||
-    (item.kind === 'camp_hero_wizard' && activeCharacterId === 'wizard');
+    (item.kind === 'camp_hero_wizard' && activeCharacterId === 'wizard') ||
+    (item.kind === 'camp_hero_assassin' && activeCharacterId === 'assassin');
 
   if (isNearby && !hidePrompt) {
     const bob = Math.sin(time * 6) * 2.5;
@@ -1279,6 +1294,86 @@ export function drawExecutionMark(
   ctx.textAlign = 'center';
   ctx.fillStyle = '#ff334b';
   ctx.fillText('EXECUTE', 0, -13);
+  ctx.restore();
+}
+
+/** Assassin's Death Mark: a crimson skull brand over the foe's head with a draining timer ring (and a brand on the body). */
+export function drawDeathMark(
+  ctx: CanvasRenderingContext2D,
+  enemy: Enemy,
+  scale: number,
+  time: number,
+  executeKey: string
+): void {
+  const timer = enemy.markTimer ?? 0;
+  if (timer <= 0 || enemy.dead) return;
+  const maxT = Math.max(0.1, enemy.markMaxTimer ?? timer);
+  const frac = Math.max(0, Math.min(1, timer / maxT));
+  const h = enemy.baseH * scale;
+  const cx = enemy.x;
+  const cy = enemy.y - h - 30 + Math.sin(time * 5) * 2;
+  const fading = timer < 1.6 && Math.floor(time * 10) % 2 === 0;
+  const boss = !!enemy.isBoss;
+
+  ctx.save();
+  ctx.globalAlpha = fading ? 0.45 : 1;
+  // Body brand: a glowing slashed sigil over the chest
+  ctx.save();
+  ctx.translate(cx, enemy.y - h * 0.55);
+  ctx.globalCompositeOperation = 'lighter';
+  const g = ctx.createRadialGradient(0, 0, 1, 0, 0, Math.max(14, h * 0.32));
+  g.addColorStop(0, 'rgba(244, 63, 94, 0.5)');
+  g.addColorStop(1, 'rgba(127, 29, 29, 0)');
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.arc(0, 0, Math.max(14, h * 0.32), 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.strokeStyle = 'rgba(254, 205, 211, 0.85)';
+  ctx.lineWidth = 1.6;
+  ctx.beginPath();
+  ctx.arc(0, 0, 8, 0, Math.PI * 2);
+  ctx.moveTo(-11, -11);
+  ctx.lineTo(11, 11);
+  ctx.moveTo(11, -11);
+  ctx.lineTo(-11, 11);
+  ctx.stroke();
+  ctx.restore();
+
+  ctx.translate(cx, cy);
+  // Timer ring
+  ctx.strokeStyle = 'rgba(28, 25, 23, 0.85)';
+  ctx.lineWidth = 4.5;
+  ctx.beginPath();
+  ctx.arc(0, 0, 13, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.strokeStyle = boss ? '#fbbf24' : '#f43f5e';
+  ctx.lineWidth = 3;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.arc(0, 0, 13, -Math.PI / 2, -Math.PI / 2 + frac * Math.PI * 2);
+  ctx.stroke();
+  // Skull
+  ctx.fillStyle = '#f5f5f4';
+  ctx.beginPath();
+  ctx.arc(0, -1.5, 6.2, Math.PI, 0);
+  ctx.lineTo(4.2, 4);
+  ctx.lineTo(-4.2, 4);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = '#7f1d1d';
+  ctx.beginPath();
+  ctx.arc(-2.4, -1, 1.7, 0, Math.PI * 2);
+  ctx.arc(2.4, -1, 1.7, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillRect(-0.6, 1.4, 1.2, 1.6);
+  ctx.fillStyle = '#44403c';
+  for (let i = -1; i <= 1; i++) ctx.fillRect(i * 2 - 0.4, 3.6, 0.8, 2);
+  // Label
+  ctx.font = '800 9px "JetBrains Mono", monospace';
+  ctx.textAlign = 'center';
+  ctx.fillStyle = boss ? '#fbbf24' : '#fb7185';
+  ctx.fillText(boss ? 'MARKED +DMG' : `EXECUTE [${executeKey}]`, 0, -19);
   ctx.restore();
 }
 
@@ -1761,6 +1856,57 @@ export function drawWeaponAttack(
       ctx.lineTo(endX, fy - st * 0.7);
       ctx.lineTo(endX - player.facing * st * 0.5, fy);
       ctx.lineTo(endX, fy + st * 0.7);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.restore();
+    return;
+  }
+
+  // 0X. ASSASSIN TWIN DAGGERS — quick steel streaks; the 3rd strike is a crossing double slash in crimson.
+  if (weapon === 'shadow_daggers') {
+    const cross = player.assassinComboStep === 2;
+    const stepN = player.assassinComboStep;
+    const fy = originY - h * 0.02 + (stepN === 1 ? 5 * scale : -2 * scale);
+    const dReach = reach * (cross ? 1.35 : 1.05);
+    const sx = player.x + player.facing * 6 * scale;
+    const ex = sx + player.facing * dReach;
+    const crimson = evoTier >= 2 ? '#fb7185' : '#be123c';
+    if (player.attackState === 'startup') {
+      ctx.fillStyle = cross ? 'rgba(159, 18, 57, 0.28)' : 'rgba(120, 113, 108, 0.22)';
+      ctx.beginPath();
+      ctx.arc(player.x - player.facing * 6 * scale, fy, (cross ? 11 : 6) * scale, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (player.attackState === 'active') {
+      ctx.lineCap = 'round';
+      const drawSlash = (y0: number, y1: number, widthMul: number, col: string, core: string) => {
+        ctx.strokeStyle = col;
+        ctx.lineWidth = Math.max(4, 8 * scale * widthMul);
+        ctx.beginPath();
+        ctx.moveTo(sx, y0);
+        ctx.quadraticCurveTo((sx + ex) / 2, (y0 + y1) / 2 - 10 * scale * widthMul, ex, y1);
+        ctx.stroke();
+        ctx.strokeStyle = core;
+        ctx.lineWidth = Math.max(1.5, 2.4 * scale * widthMul);
+        ctx.beginPath();
+        ctx.moveTo(sx + player.facing * dReach * 0.3, (y0 * 0.65 + y1 * 0.35));
+        ctx.quadraticCurveTo((sx + ex) / 2, (y0 + y1) / 2 - 10 * scale * widthMul, ex, y1);
+        ctx.stroke();
+      };
+      if (cross) {
+        drawSlash(fy - 16 * scale, fy + 12 * scale, 1.2, 'rgba(159, 18, 57, 0.5)', '#fecdd3');
+        drawSlash(fy + 16 * scale, fy - 12 * scale, 1.2, 'rgba(159, 18, 57, 0.5)', '#fecdd3');
+      } else {
+        const dir = stepN === 1 ? 1 : -1;
+        drawSlash(fy - dir * 8 * scale, fy + dir * 6 * scale, 1, 'rgba(168, 162, 158, 0.42)', evoTier >= 1 ? '#fda4af' : '#f5f5f4');
+      }
+      ctx.fillStyle = crimson;
+      const st = (cross ? 8 : 5) * scale;
+      ctx.beginPath();
+      ctx.moveTo(ex + player.facing * st, fy);
+      ctx.lineTo(ex, fy - st * 0.7);
+      ctx.lineTo(ex - player.facing * st * 0.5, fy);
+      ctx.lineTo(ex, fy + st * 0.7);
       ctx.closePath();
       ctx.fill();
     }
@@ -2395,6 +2541,57 @@ export function drawProjectile(ctx: CanvasRenderingContext2D, proj: Projectile):
     ctx.arc(-7, 2.5, 3, 0, Math.PI * 2);
     ctx.arc(7, -2.5, 3, 0, Math.PI * 2);
     ctx.arc(7, 2.5, 3, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (proj.kind === 'thrown_dagger') {
+    // Thrown dagger: spinning steel blade (spectral ones are crimson ghosts).
+    const ghost = !!proj.pierce;
+    const spin = ghost ? 0 : Math.sin(proj.life * 40) * 0.0;
+    ctx.rotate(spin);
+    if (ghost) {
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.fillStyle = 'rgba(190, 18, 60, 0.45)';
+      ctx.beginPath();
+      ctx.moveTo(-22, 0);
+      ctx.lineTo(0, -3.2);
+      ctx.lineTo(0, 3.2);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.fillStyle = ghost ? '#fda4af' : '#cbd5e1';
+    ctx.beginPath();
+    ctx.moveTo(-7, -2.2);
+    ctx.lineTo(7, 0);
+    ctx.lineTo(-7, 2.2);
+    ctx.lineTo(-9, 0);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = ghost ? '#be123c' : '#1c1917';
+    ctx.fillRect(-13, -1.3, 5, 2.6);
+    ctx.fillStyle = '#9f1239';
+    ctx.fillRect(-10, -1.3, 1.4, 2.6);
+    ctx.fillStyle = ghost ? '#44403c' : '#44403c';
+    ctx.fillRect(-9, -3.4, 1.6, 6.8);
+  } else if (proj.kind === 'venom_needle') {
+    const col = proj.color ?? '#65a30d';
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.fillStyle = col;
+    ctx.globalAlpha = 0.35;
+    ctx.beginPath();
+    ctx.moveTo(-16, 0);
+    ctx.lineTo(0, -2.4);
+    ctx.lineTo(0, 2.4);
+    ctx.closePath();
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.fillStyle = '#d6d3d1';
+    ctx.fillRect(-7, -0.9, 12, 1.8);
+    ctx.fillStyle = col;
+    ctx.beginPath();
+    ctx.moveTo(5, -1.4);
+    ctx.lineTo(10, 0);
+    ctx.lineTo(5, 1.4);
+    ctx.closePath();
     ctx.fill();
   } else if (proj.kind === 'arcane_bolt') {
     // Element-tinted bolt: dark halo, comet tail, bright core.
