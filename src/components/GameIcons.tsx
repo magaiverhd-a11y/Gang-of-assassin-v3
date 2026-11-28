@@ -113,6 +113,15 @@ export function AbilityIcon({
           <path d="M3 6.5L6 8M2.5 11H5.5M3.5 15.5L6 14.5" stroke="#ea580c" strokeWidth="1.6" strokeLinecap="round" />
         </svg>
       );
+    case 'venom_needles':
+      return (
+        <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
+          <path d="M3 17L19 8M3 12.5L20 12.5M3 8L19 17" stroke={color || '#a3e635'} strokeWidth="1.8" strokeLinecap="round" />
+          <path d="M19 8L22 6.5M20 12.5L23 12.5M19 17L22 18.5" stroke="#4d7c0f" strokeWidth="2.4" strokeLinecap="round" />
+          <circle cx="5" cy="21" r="1.2" fill="#84cc16" />
+          <circle cx="9" cy="22" r="0.9" fill="#84cc16" />
+        </svg>
+      );
     case 'chain_storm':
       return (
         <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
@@ -293,6 +302,14 @@ export function WeaponIcon({
           <path d="M8 8V5.5M11 8V5M14 8V5.5" stroke="#e7e5e4" strokeWidth="1.8" strokeLinecap="round" />
         </svg>
       );
+    case 'shadow_daggers':
+      return (
+        <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
+          <path d="M5 19L15 5L16.5 6.5L8.5 21Z" fill={color || '#cbd5e1'} />
+          <path d="M18.5 19L8.5 5L7 6.5L15 21Z" fill="#94a3b8" />
+          <path d="M3.8 19.8L7.2 17.6M20.2 19.8L16.8 17.6" stroke="#9f1239" strokeWidth="2" strokeLinecap="round" />
+        </svg>
+      );
     case 'spire_staff':
       return (
         <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
@@ -453,6 +470,17 @@ export function WeaponSkillIcon({
           <path d="M14 7.5V16.5M17 7.5V16.5" stroke="#78716c" strokeWidth="1" />
           <circle cx="7" cy="19.5" r="1" fill="#ea580c" />
           <circle cx="4.5" cy="5" r="0.9" fill="#ea580c" />
+        </svg>
+      );
+    case 'shadow_daggers':
+      // Mark for Death: a skull inside a crimson targeting reticle
+      return (
+        <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
+          <circle cx="12" cy="12" r="9" stroke="#e11d48" strokeWidth="1.6" />
+          <path d="M12 1.5V5M12 19V22.5M1.5 12H5M19 12H22.5" stroke="#fb7185" strokeWidth="1.6" strokeLinecap="round" />
+          <path d="M7.8 12.2C7.8 9.6 9.6 8 12 8C14.4 8 16.2 9.6 16.2 12.2V14.2H14.6V16H9.4V14.2H7.8Z" fill="#f5f5f4" />
+          <circle cx="10.2" cy="12.4" r="1.2" fill="#7f1d1d" />
+          <circle cx="13.8" cy="12.4" r="1.2" fill="#7f1d1d" />
         </svg>
       );
     case 'spire_staff':

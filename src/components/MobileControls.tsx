@@ -58,8 +58,8 @@ function describeAction(action: MobileAction, hud: HudSnapshot): ButtonVisual {
     case 'skill': {
       const ready = hud.weaponSkillCooldown <= 0;
       return {
-        label: hud.weapon === 'spire_staff' ? 'Nova' : 'Dash',
-        sub: ready ? WEAPONS[hud.weapon].skillName : `${hud.weaponSkillCooldown.toFixed(1)}s`,
+        label: hud.weapon === 'spire_staff' ? 'Nova' : hud.weapon === 'shadow_daggers' ? (hud.assassinMarkLive ? 'Execute' : 'Mark') : 'Dash',
+        sub: hud.weapon === 'shadow_daggers' && hud.assassinMarkLive ? 'Shadow-step' : ready ? WEAPONS[hud.weapon].skillName : `${hud.weaponSkillCooldown.toFixed(1)}s`,
         icon: ready ? <WeaponSkillIcon id={hud.weapon} className="w-7 h-7" /> : <Wind className="w-7 h-7" />,
         ready,
         color: '#e5a93c',

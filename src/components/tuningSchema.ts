@@ -407,7 +407,7 @@ function assassinGroups(P: (k: string) => string[]): GroupDef[] {
     {
       id: 'assassin-execute',
       title: 'Execute From Distance',
-      subtitle: 'Interact (E / stick tap) shadow-steps to a foe and executes it',
+      subtitle: 'Interact ([0] / stick tap) shadow-steps to a foe and executes it',
       items: [
         S(P('assassinExecRange'), 'Execute Range', 'How far the Assassin can shadow-step to execute an unaware or low-HP foe with Interact.', 80, 900, 10, 'px'),
         S(P('assassinExecHpPct'), 'Low-HP Execute Threshold', 'Alerted regular foes at or below this share of max HP can also be executed from range.', 0, 0.8, 0.05, 'frac'),

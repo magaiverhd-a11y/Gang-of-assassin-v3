@@ -305,6 +305,7 @@ export function weaponSwingShape(w: WeaponId): 'arc' | 'line' | 'lash' | 'cast' 
     case 'hammer':
       return 'arc';
     case 'rapier':
+    case 'shadow_daggers':
       return 'line';
     case 'whip':
     case 'ribbon_whip':

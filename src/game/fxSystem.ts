@@ -90,7 +90,7 @@ export interface HitFeel {
 
 type PIn = Omit<FxP, 'rot' | 'vr' | 'g' | 'drag' | 'curl' | 'color2'> & Partial<FxP>;
 
-const DASH_KEYS = ['backdashTimer', 'dashAttackTimer', 'monkDashTimer', 'rapierLungeTimer', 'naginataVaultTimer', 'minstrelVaultTimer'] as const;
+const DASH_KEYS = ['backdashTimer', 'dashAttackTimer', 'monkDashTimer', 'rapierLungeTimer', 'naginataVaultTimer', 'minstrelVaultTimer', 'assassinBlinkTimer', 'assassinStepTimer'] as const;
 
 const rnd = (a: number, b: number) => a + Math.random() * (b - a);
 

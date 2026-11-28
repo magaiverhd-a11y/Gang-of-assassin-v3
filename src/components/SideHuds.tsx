@@ -318,6 +318,8 @@ export function LeftHud({ hud, onOpenInventory }: LeftHudProps) {
                     ? hud.minstrelSlowMo
                       ? 'SLOW-MO: 1 Zip · 2 Vault · 3 Waltz'
                       : 'Dir+1 Whip-Zip · Crouch+1 Lash'
+                    : hud.weapon === 'shadow_daggers'
+                      ? '1 Stab · Slash · Cross · Crouch+1 Throw'
                     : hud.weapon === 'ash_wraps'
                       ? '1 Jab · 1 Jab · 1 Palm (chain)'
                       : hud.weapon === 'spire_staff'

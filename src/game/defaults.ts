@@ -1009,7 +1009,7 @@ export const ABILITIES: Record<AbilityId, AbilityDef> = {
     shortName: 'Venom',
     manaCost: 2,
     cooldown: 1.5,
-    description: 'Flicks a fan of poisoned needles (3, more every 5 levels). Each hit poisons: slow damage over time and a shorter enemy reaction. Takes your Affinity as a dark tint.',
+    description: 'Flicks a fan of poisoned needles (3, more every 5 levels). Each hit poisons: slow damage over time (poison ticks). Takes your Affinity as a dark tint.',
     accent: '#4d7c0f',
   },
 };
