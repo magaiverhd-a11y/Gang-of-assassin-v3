@@ -235,6 +235,7 @@ export default function App() {
   const spellQueuedRef = useRef<boolean>(false);
   const itemQueuedRef = useRef<boolean>(false);
   const specialItemQueuedRef = useRef<boolean>(false);
+  const dropQueuedRef = useRef<boolean>(false);
   const touchDirsRef = useRef<TouchDirectionalState>({ left: false, right: false, up: false, down: false });
   const touchJumpHeldRef = useRef<boolean>(false);
 
@@ -388,7 +389,11 @@ export default function App() {
     touchDirsRef.current = dirs;
   }, []);
 
-  const handleMobileAction = useCallback((action: MobileAction, pressed: boolean) => {
+  const handleMobileAction = useCallback((action: MobileAction | 'drop', pressed: boolean) => {
+    if (action === 'drop') {
+      if (pressed) dropQueuedRef.current = true;
+      return;
+    }
     if (action === 'jump') {
       touchJumpHeldRef.current = pressed;
       if (pressed) jumpQueuedRef.current = true;
@@ -655,6 +660,7 @@ export default function App() {
         spellJustPressed: spellQueuedRef.current,
         itemJustPressed: itemQueuedRef.current,
         specialItemJustPressed: specialItemQueuedRef.current,
+        dropJustPressed: dropQueuedRef.current,
       };
       jumpQueuedRef.current = false;
       attackQueuedRef.current = false;
@@ -663,6 +669,7 @@ export default function App() {
       spellQueuedRef.current = false;
       itemQueuedRef.current = false;
       specialItemQueuedRef.current = false;
+      dropQueuedRef.current = false;
 
       const engine = engineRef.current!;
       if (mobile) {

@@ -1040,6 +1040,8 @@ export interface InputState {
   itemJustPressed: boolean;
   specialItemJustPressed: boolean;
   autoAttack?: boolean;
+  /** Mobile: drop through a one-way platform without jumping (deep stick-down). */
+  dropJustPressed?: boolean;
 }
 
 export interface BossHudBar {

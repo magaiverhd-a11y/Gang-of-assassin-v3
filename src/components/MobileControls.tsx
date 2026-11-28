@@ -26,7 +26,7 @@ interface MobileControlsProps {
   hud: HudSnapshot;
   tuning: TuningConfig;
   onDirectionChange: (dirs: TouchDirectionalState) => void;
-  onAction: (action: MobileAction, pressed: boolean) => void;
+  onAction: (action: MobileAction | 'drop', pressed: boolean) => void;
   onAnyTouch?: () => void;
 }
 
@@ -351,11 +351,10 @@ export function MobileControls({ hud, tuning, onDirectionChange, onAction, onAny
         setJumpHeld(false);
       }
 
-      // Deep downward press while already crouching drops through one-way platforms (down + jump).
+      // Deep downward press drops through one-way platforms without jumping on solid ground.
       if (armed && dy > dropT && stroke && !stroke.dropped) {
         stroke.dropped = true;
-        onActionRef.current('jump', true);
-        onActionRef.current('jump', false);
+        onActionRef.current('drop', true);
       }
 
       const prev = lastDirsRef.current;

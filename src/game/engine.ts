@@ -3525,9 +3525,12 @@ export class GameEngine {
       }
     }
 
-    // Down + Jump: cleanly drop down through soft one-way platforms (bridge, timber, rafter)!
+    // Down + Jump, or a mobile deep-stick-down: drop through soft one-way platforms (bridge, timber, rafter)!
     let dropThrough = false;
-    if (input.down && (input.jumpJustPressed || p.jumpBufferTimer > 0) && p.onGround) {
+    const wantDrop =
+      p.onGround &&
+      (input.dropJustPressed || (input.down && (input.jumpJustPressed || p.jumpBufferTimer > 0)));
+    if (wantDrop) {
       const standingOnOneWay = this.platforms.some(
         (plat) =>
           plat.oneWay &&
