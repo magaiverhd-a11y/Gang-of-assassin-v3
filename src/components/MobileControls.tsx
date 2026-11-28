@@ -554,10 +554,10 @@ export function MobileControls({ hud, tuning, onDirectionChange, onAction, onAny
             </span>
             {(execute || near) && (
               <span
-                className="absolute left-1/2 -translate-x-1/2 font-mono text-[8px] uppercase tracking-[0.14em] whitespace-nowrap"
-                style={{ bottom: 16, color: execute ? '#ff8a98' : '#e5a93c' }}
+                className="absolute left-1/2 -translate-x-1/2 font-mono text-[8px] uppercase tracking-[0.14em] truncate"
+                style={{ bottom: 16, maxWidth: '70%', color: execute ? '#ff8a98' : '#e5a93c' }}
               >
-                {execute ? 'Tap · Execute' : `Tap · ${near}`}
+                {execute ? 'Tap · Execute' : 'Tap · Interact'}
               </span>
             )}
             <div
