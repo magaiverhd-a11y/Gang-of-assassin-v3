@@ -3092,6 +3092,7 @@ export class GameEngine {
     if (p.wizardFloatTimer > 0) p.wizardFloatTimer = Math.max(0, p.wizardFloatTimer - dt);
     if (p.assassinStepTimer > 0) p.assassinStepTimer = Math.max(0, p.assassinStepTimer - dt);
     if (p.assassinBlinkTimer > 0) p.assassinBlinkTimer = Math.max(0, p.assassinBlinkTimer - dt);
+    if (p.onGround) p.assassinBlinkUsed = false;
     if (p.assassinThrowTimer > 0) p.assassinThrowTimer = Math.max(0, p.assassinThrowTimer - dt);
     if (p.assassinThrowCooldown > 0) p.assassinThrowCooldown = Math.max(0, p.assassinThrowCooldown - dt);
     if (p.assassinMarkCastTimer > 0) p.assassinMarkCastTimer = Math.max(0, p.assassinMarkCastTimer - dt);
@@ -11024,7 +11025,7 @@ export class GameEngine {
     if (enemy.isBoss && (enemy.markTimer ?? 0) > 0 && source !== 'gas' && damage > 0) {
       const ctM = this.charTune('assassin');
       const lightBonus = this.hasElement('light') ? 1.2 : 1;
-      const extra = Math.max(1, Math.round(damage * (ctM.assassinBossMarkBonusPct / 100) * lightBonus));
+      const extra = Math.max(1, Math.ceil(damage * (ctM.assassinBossMarkBonusPct / 100) * lightBonus - 0.001));
       damage += extra;
       this.spawnDamageNumber(hitX + 12, hitY - 34, `+${extra}`, '#be123c', 0.95, 'MARKED');
       this.spawnSparkles(hitX, hitY, 6, '#9f1239', '#fda4af', 0.7);
