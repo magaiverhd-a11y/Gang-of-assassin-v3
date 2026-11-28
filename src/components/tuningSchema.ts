@@ -409,6 +409,9 @@ function characterTab(id: CharacterId): TabDef {
                 S(P('monkDashKnockback'), 'Pyre Dash Knockback', 'How hard the dash hurls foes aside (also lifts them).', 0, 900, 10, 'int'),
                 S(P('monkDashCooldown'), 'Pyre Dash Cooldown', 'Seconds between dashes (each fist hit shaves 0.2s off — Unbroken Flow).', 0.3, 5, 0.05, 'sec'),
                 S(P('monkComboBonus'), 'Palm (3rd Hit) Bonus Damage', 'Extra damage on the heavy palm that ends the 3-hit fist chain.', 0, 6, 1, 'int'),
+                S(P('monkChargeTime'), 'Charged Jump Time', 'How long you must hold jump on the ground for a fully charged high leap. A short tap is a normal jump. On a phone, hold the stick up to charge, then release to jump.', 0.2, 1.5, 0.05, 'sec'),
+                S(P('monkChargeJumpMult'), 'Charged Jump Height ×', 'Jump-force multiplier at full charge (1.65 is a very high leap). Scales smoothly with how long you held.', 1.1, 2.4, 0.05, 'x'),
+                T(P('monkDashDirections'), 'Directional Pyre Dash', 'On: Pyre Dash [3] follows the held direction, including diagonals and up. A downward dash in the air slams into the ground with an impact. Off: always dashes forward (the original dash).'),
               ]
             : id === 'wizard'
               ? [
@@ -420,6 +423,8 @@ function characterTab(id: CharacterId): TabDef {
                   S(P('wizardNovaLift'), 'Nova Lift', 'Upward pop of the nova so foes fly in an arc.', 0, 700, 10, 'int'),
                   S(P('wizardNovaDamage'), 'Nova Damage', 'Base nova damage (weapon level adds on top).', 0, 10, 1, 'int'),
                   S(P('wizardNovaCooldown'), 'Nova Cooldown', 'Seconds between novas.', 0.3, 8, 0.05, 'sec'),
+                  S(P('wizardFloatDuration'), 'Air Float Duration', 'How long the Wizard hovers after a second jump in the air. He does not fall until this ends. Resets when he lands. On a phone, flick the stick up a second time in the air.', 0.6, 4, 0.1, 'sec'),
+                  S(P('wizardFloatMoveSpeed'), 'Air Float Move ×', 'Horizontal move-speed multiplier while floating.', 0.4, 2, 0.05, 'x'),
                 ]
               : [
                   S(P('zipSlowMo'), 'Whip-Zip Enemy Slow-Mo', 'Enemy speed while the Minstrel is whip-zipping (0.42 = original).', 0.05, 1, 0.01, 'x'),

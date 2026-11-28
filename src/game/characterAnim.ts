@@ -296,23 +296,80 @@ function computePose(
     return pose;
   }
 
-  // 0K. MONK PYRE DASH (Key 3: low forward charge, lead fist thrust)
+  // 0K. MONK PYRE DASH (Key 3: 8-way charge, lead fist thrust; dive when slamming down)
   if (player.monkDashTimer > 0) {
-    pose.torsoTilt = 0.58;
-    pose.headTilt = -0.24;
-    pose.bodyOffsetY = 4 * scale;
-    pose.leftHipAngle = 1.0;
-    pose.leftKneeAngle = 0.95;
-    pose.rightHipAngle = -1.0;
-    pose.rightKneeAngle = 0.25;
-    pose.frontShoulderAngle = 1.6;
-    pose.frontElbowAngle = 0.0;
-    pose.backShoulderAngle = -1.35;
-    pose.backElbowAngle = -0.5;
-    pose.coatSweep = -1.2;
-    pose.hairLift = -0.9;
-    pose.squashX = 1.08;
-    pose.squashY = 0.94;
+    const slam = player.monkDashSlam || player.monkDashDirY > 0.35;
+    const rising = player.monkDashDirY < -0.35;
+    if (slam) {
+      pose.torsoTilt = 0.95;
+      pose.headTilt = 0.35;
+      pose.bodyOffsetY = 2 * scale;
+      pose.leftHipAngle = 1.15;
+      pose.leftKneeAngle = 1.2;
+      pose.rightHipAngle = 0.35;
+      pose.rightKneeAngle = 0.7;
+      pose.frontShoulderAngle = 2.1;
+      pose.frontElbowAngle = 0.15;
+      pose.backShoulderAngle = -0.4;
+      pose.backElbowAngle = -1.1;
+      pose.coatSweep = -1.35;
+      pose.hairLift = 0.85;
+      pose.squashX = 0.92;
+      pose.squashY = 1.1;
+    } else if (rising) {
+      pose.torsoTilt = -0.35;
+      pose.headTilt = -0.2;
+      pose.bodyOffsetY = -3 * scale;
+      pose.leftHipAngle = -0.7;
+      pose.leftKneeAngle = 0.85;
+      pose.rightHipAngle = 0.55;
+      pose.rightKneeAngle = 0.45;
+      pose.frontShoulderAngle = 1.85;
+      pose.frontElbowAngle = 0.1;
+      pose.backShoulderAngle = -1.55;
+      pose.backElbowAngle = -0.3;
+      pose.coatSweep = 0.7;
+      pose.hairLift = 0.95;
+      pose.squashX = 0.96;
+      pose.squashY = 1.06;
+    } else {
+      pose.torsoTilt = 0.58;
+      pose.headTilt = -0.24;
+      pose.bodyOffsetY = 4 * scale;
+      pose.leftHipAngle = 1.0;
+      pose.leftKneeAngle = 0.95;
+      pose.rightHipAngle = -1.0;
+      pose.rightKneeAngle = 0.25;
+      pose.frontShoulderAngle = 1.6;
+      pose.frontElbowAngle = 0.0;
+      pose.backShoulderAngle = -1.35;
+      pose.backElbowAngle = -0.5;
+      pose.coatSweep = -1.2;
+      pose.hairLift = -0.9;
+      pose.squashX = 1.08;
+      pose.squashY = 0.94;
+    }
+    return pose;
+  }
+
+  // 0K-2. MONK CHARGED JUMP (hold jump on the ground: deep crouch, fists gathered)
+  if (player.characterId === 'monk' && player.monkChargeTimer > 0 && player.onGround) {
+    const c = Math.min(1, player.monkCharge);
+    pose.torsoTilt = 0.42 + c * 0.22;
+    pose.headTilt = -0.18;
+    pose.bodyOffsetY = (5 + c * 3) * scale;
+    pose.leftHipAngle = 0.95;
+    pose.leftKneeAngle = 1.35;
+    pose.rightHipAngle = -0.7;
+    pose.rightKneeAngle = 1.28;
+    pose.frontShoulderAngle = 0.85 - c * 0.2;
+    pose.frontElbowAngle = -1.45;
+    pose.backShoulderAngle = 0.55;
+    pose.backElbowAngle = -1.5;
+    pose.coatSweep = -0.55;
+    pose.hairLift = -0.15 + c * 0.2;
+    pose.squashX = 1.06 + c * 0.06;
+    pose.squashY = 0.92 - c * 0.04;
     return pose;
   }
 
@@ -350,6 +407,27 @@ function computePose(
     pose.backElbowAngle = prog < 0.3 ? -1.2 : -0.15;
     pose.coatSweep = 0.65;
     pose.hairLift = 0.55;
+    return pose;
+  }
+
+  // 0N. WIZARD AIR FLOAT (second jump: hover, robe lifting, staff steady)
+  if (player.characterId === 'wizard' && player.wizardFloatTimer > 0) {
+    const bob = Math.sin(player.animTime * 7) * 1.6 * scale;
+    pose.torsoTilt = -0.06;
+    pose.headTilt = -0.08;
+    pose.bodyOffsetY = -6 * scale + bob;
+    pose.leftHipAngle = -0.2;
+    pose.leftKneeAngle = 0.45;
+    pose.rightHipAngle = 0.25;
+    pose.rightKneeAngle = 0.35;
+    pose.frontShoulderAngle = 0.55;
+    pose.frontElbowAngle = -0.7;
+    pose.backShoulderAngle = -0.85;
+    pose.backElbowAngle = -0.4;
+    pose.coatSweep = 0.55;
+    pose.hairLift = 0.7;
+    pose.squashX = 0.97;
+    pose.squashY = 1.05;
     return pose;
   }
 
@@ -2078,6 +2156,79 @@ export function drawAnimatedPlayer(
     ctx.fill();
   }
 
+  // Monk charged-jump ember aura + meter (drawn before facing flip so the meter stays upright)
+  if (player.characterId === 'monk' && player.monkChargeTimer > 0 && player.onGround) {
+    const c = Math.min(1, player.monkCharge);
+    const hx = 0;
+    const hy = -h * 0.45;
+    ctx.save();
+    const glow = ctx.createRadialGradient(hx, hy, 4 * scale, hx, hy, (36 + c * 18) * scale);
+    glow.addColorStop(0, `rgba(253, 230, 138, ${0.18 + c * 0.35})`);
+    glow.addColorStop(0.45, `rgba(194, 65, 12, ${0.16 + c * 0.28})`);
+    glow.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(hx, hy, (36 + c * 18) * scale, 0, Math.PI * 2);
+    ctx.fill();
+    // Charge ring
+    ctx.strokeStyle = 'rgba(41, 37, 36, 0.7)';
+    ctx.lineWidth = 4 * scale;
+    ctx.beginPath();
+    ctx.arc(hx, -h - 10 * scale, 11 * scale, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.strokeStyle = c >= 1 ? '#fde68a' : '#ea580c';
+    ctx.lineWidth = 3 * scale;
+    ctx.beginPath();
+    ctx.arc(hx, -h - 10 * scale, 11 * scale, -Math.PI / 2, -Math.PI / 2 + c * Math.PI * 2, false);
+    ctx.stroke();
+    if (c >= 1) {
+      ctx.strokeStyle = '#ffffff';
+      ctx.globalAlpha = 0.7 + Math.sin(player.animTime * 16) * 0.25;
+      ctx.lineWidth = 1.5 * scale;
+      ctx.beginPath();
+      ctx.arc(hx, -h - 10 * scale, 14 * scale, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+    ctx.restore();
+  }
+
+  // Wizard air-float runes and glow under his feet
+  if (player.characterId === 'wizard' && player.wizardFloatTimer > 0) {
+    const vel = visualElement(player);
+    const c1 = vel?.pal.mid ?? '#818cf8';
+    const c2 = vel?.pal.core ?? '#e0e7ff';
+    const t = player.animTime;
+    ctx.save();
+    const aura = ctx.createRadialGradient(0, 4 * scale, 2 * scale, 0, 4 * scale, 34 * scale);
+    aura.addColorStop(0, c2 + '99');
+    aura.addColorStop(0.45, c1 + '66');
+    aura.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = aura;
+    ctx.beginPath();
+    ctx.ellipse(0, 6 * scale, 30 * scale, 10 * scale, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = c1;
+    ctx.lineWidth = 1.6 * scale;
+    ctx.globalAlpha = 0.85;
+    ctx.beginPath();
+    ctx.ellipse(0, 6 * scale, 16 * scale, 5.5 * scale, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.ellipse(0, 6 * scale, 22 * scale, 7.5 * scale, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    // Orbiting runes
+    for (let i = 0; i < 5; i++) {
+      const a = t * 2.4 + (i * Math.PI * 2) / 5;
+      const rx = Math.cos(a) * 18 * scale;
+      const ry = 6 * scale + Math.sin(a) * 6 * scale;
+      ctx.globalAlpha = 0.7 + Math.sin(t * 6 + i) * 0.25;
+      ctx.fillStyle = i % 2 === 0 ? c2 : c1;
+      ctx.fillRect(rx - 2 * scale, ry - 3.5 * scale, 4 * scale, 7 * scale);
+    }
+    ctx.restore();
+  }
+
   // Katana Iaijutsu Charge Glint Ring!
   if (player.katanaChargeTimer > 0) {
     const prog =
@@ -2120,7 +2271,14 @@ export function drawAnimatedPlayer(
     drawMinstrel(ctx, w, h, scale, pose, flash, isHurt, player.weapon, player.attackState);
   } else if (player.characterId === 'monk') {
     const evo = visualTier(player);
-    const emberGlow = player.monkDashTimer > 0 || player.monkPalmTimer > 0 ? 1.2 : evo >= 1 ? 0.6 + evo * 0.2 : 0;
+    const emberGlow =
+      player.monkDashTimer > 0 || player.monkPalmTimer > 0
+        ? 1.2
+        : player.monkChargeTimer > 0
+          ? 0.45 + player.monkCharge * 1.1
+          : evo >= 1
+            ? 0.6 + evo * 0.2
+            : 0;
     drawAshMonk(ctx, w, h, scale, pose, flash, isHurt, player.weapon, player.attackState, emberGlow);
   } else if (player.characterId === 'wizard') {
     const vel = visualElement(player);
@@ -2128,7 +2286,9 @@ export function drawAnimatedPlayer(
     const el = vel ? { primaryColor: affinityFxEnabled() ? vel.pal.mid : realEl?.primaryColor ?? vel.pal.mid } : null;
     const evo = visualTier(player);
     const power =
-      player.wizardNovaTimer > 0 || player.wizardCastTimer > 0 || player.attackState === 'active' ? 1 : 0.25 + evo * 0.25;
+      player.wizardNovaTimer > 0 || player.wizardCastTimer > 0 || player.attackState === 'active' || player.wizardFloatTimer > 0
+        ? 1
+        : 0.25 + evo * 0.25;
     drawSableWizard(ctx, w, h, scale, pose, flash, isHurt, player.weapon, player.attackState, el ? el.primaryColor : '#a5b4fc', power);
   } else {
     drawAnimeVampireBoy(ctx, w, h, scale, pose, flash, isHurt, player.weapon, player.attackState);

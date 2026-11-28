@@ -464,6 +464,12 @@ export interface CharacterTuning {
   monkDashKnockback: number;
   monkDashCooldown: number;
   monkComboBonus: number;
+  /** Seconds to hold jump on the ground for a fully charged high jump. */
+  monkChargeTime: number;
+  /** Jump-force multiplier at full charge (1 = normal jump, 1.65 = very high). */
+  monkChargeJumpMult: number;
+  /** When on, Pyre Dash follows the held 8-way direction (including a down-slam). Off = always dash facing. */
+  monkDashDirections: boolean;
   // Wizard: Elemental Bolt (key 1) + Repulsion Nova (key 3)
   wizardBoltSpeed: number;
   wizardBoltRange: number;
@@ -473,6 +479,10 @@ export interface CharacterTuning {
   wizardNovaLift: number;
   wizardNovaDamage: number;
   wizardNovaCooldown: number;
+  /** Seconds the Wizard hovers after a second jump in the air. */
+  wizardFloatDuration: number;
+  /** Move-speed multiplier while floating. */
+  wizardFloatMoveSpeed: number;
 }
 
 export interface EnemyTuning {
@@ -847,10 +857,23 @@ export interface Player {
   monkComboStep: number;
   monkComboTimer: number;
   monkPalmTimer: number;
+  /** Seconds jump has been held on the ground to charge a high jump. */
+  monkChargeTimer: number;
+  /** 0..1 charge amount (for the meter and glow). */
+  monkCharge: number;
+  /** Unit direction of the active Pyre Dash. */
+  monkDashDirX: number;
+  monkDashDirY: number;
+  /** Air downward Pyre Dash: slam until landing, then impact. */
+  monkDashSlam: boolean;
   // Wizard: Repulsion Nova pose timer, bolt counter for Overcharge passive, Chain Storm pose
   wizardNovaTimer: number;
   wizardBoltCount: number;
   wizardCastTimer: number;
+  /** Remaining hover time after a second jump in the air. */
+  wizardFloatTimer: number;
+  /** True once the air-float has been used this airtime. */
+  wizardFloatUsed: boolean;
 
   isHidden: boolean;
   ambushTimer: number;

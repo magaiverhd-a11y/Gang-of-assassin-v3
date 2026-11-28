@@ -123,6 +123,7 @@ export class GameEngine {
   public damageNumbers: DamageNumber[] = [];
   public camera: CameraState;
   public status: GameStatus = 'CAMP';
+  private frameInput: InputState | null = null;
 
   // Persistent Meta Progression (Permanent Artifacts & Boss Cores survive death across ALL heroes!)
   public selectedCharacter: CharacterId = 'hunter';
@@ -558,9 +559,16 @@ export class GameEngine {
       monkComboStep: 0,
       monkComboTimer: 0,
       monkPalmTimer: 0,
+      monkChargeTimer: 0,
+      monkCharge: 0,
+      monkDashDirX: 1,
+      monkDashDirY: 0,
+      monkDashSlam: false,
       wizardNovaTimer: 0,
       wizardBoltCount: 0,
       wizardCastTimer: 0,
+      wizardFloatTimer: 0,
+      wizardFloatUsed: false,
 
       isHidden: false,
       ambushTimer: 0,
@@ -2788,6 +2796,7 @@ export class GameEngine {
     const cDef = this.cdef(p.characterId);
     const scale = tuning.playerScale;
     const cdSpeedMult = 1 + p.swiftFootworkLevel * 0.1;
+    this.frameInput = input;
     p.animTime += dt;
     if (p.landTimer > 0) p.landTimer = Math.max(0, p.landTimer - dt);
     if (p.ledgeCooldown > 0) p.ledgeCooldown = Math.max(0, p.ledgeCooldown - dt);
@@ -2800,6 +2809,7 @@ export class GameEngine {
     if (p.monkPalmTimer > 0) p.monkPalmTimer = Math.max(0, p.monkPalmTimer - dt);
     if (p.wizardNovaTimer > 0) p.wizardNovaTimer = Math.max(0, p.wizardNovaTimer - dt);
     if (p.wizardCastTimer > 0) p.wizardCastTimer = Math.max(0, p.wizardCastTimer - dt);
+    if (p.wizardFloatTimer > 0) p.wizardFloatTimer = Math.max(0, p.wizardFloatTimer - dt);
 
     // Cooldowns & Buff timers
     if (p.invulnTimer > 0) p.invulnTimer = Math.max(0, p.invulnTimer - dt);
@@ -2903,6 +2913,9 @@ export class GameEngine {
       p.minstrelVaultTimer = 0;
       p.minstrelDanceTimer = 0;
       p.monkDashTimer = 0;
+      p.monkChargeTimer = 0;
+      p.monkCharge = 0;
+      p.wizardFloatTimer = 0;
       p.wallClingDir = 0;
       p.hitStunTimer = Math.max(0, p.hitStunTimer - dt);
       if (!p.isAirKnockback) {
@@ -3450,6 +3463,10 @@ export class GameEngine {
     const effectiveMoveSpeed = tuning.moveSpeed * cDef.speedMult * (swiftMult + elSpeedBonus) * chainSpeedMult;
     const effectiveJumpForce = tuning.jumpForce * cDef.jumpMult * chainJumpMult;
     const maxHeroAirJumps = cDef.airJumps > 0 ? Math.max(cDef.airJumps, tuning.airJumps) : 0;
+    const monkCharging = p.characterId === 'monk' && p.monkChargeTimer > 0 && p.onGround && input.jumpHeld;
+    if (monkCharging) {
+      p.crouching = true;
+    }
 
     if (p.shadowChainTimer > 0 && (Math.abs(p.vx) > 60 || !p.onGround)) {
       this.shadowAfterimageAccum += dt;
@@ -3525,16 +3542,56 @@ export class GameEngine {
       }
     }
 
+    if (monkCharging) {
+      p.vx *= 0.3;
+    }
+    if (p.wizardFloatTimer > 0 && !p.onGround) {
+      const ctW = this.charTune('wizard');
+      const floatSpeed = effectiveMoveSpeed * Math.max(0.2, ctW.wizardFloatMoveSpeed);
+      if (moveDir !== 0) {
+        if (!isAttacking && tuning.airTurnFacing) {
+          p.facing = moveDir > 0 ? 1 : -1;
+        }
+        p.vx = moveDir * floatSpeed;
+      } else {
+        p.vx *= Math.pow(0.12, dt);
+      }
+      // Gentle bob; no net drop until the float ends.
+      p.vy = Math.sin(p.animTime * 7) * 16;
+      if (Math.random() < 0.55) {
+        const el = this.getWizardElement();
+        this.particles.push({
+          x: p.x + (Math.random() - 0.5) * 22 * scale,
+          y: p.y - 2 - Math.random() * 6,
+          vx: (Math.random() - 0.5) * 20,
+          vy: 8 + Math.random() * 18,
+          size: 2.2,
+          color: Math.random() < 0.5 ? el.c1 : '#e0e7ff',
+          life: 0.4,
+          maxLife: 0.4,
+          kind: 'energy_wisp',
+          rotation: p.animTime,
+        });
+      }
+    }
+
     if (p.onGround) {
       p.coyoteTimer = tuning.coyoteTimeMs / 1000;
       p.airJumpsRemaining = maxHeroAirJumps;
       p.airBackdashUsed = false;
       p.jumpCutApplied = false;
       p.wallClingDir = 0;
+      p.wizardFloatUsed = false;
+      p.wizardFloatTimer = 0;
     } else {
       p.coyoteTimer = Math.max(0, p.coyoteTimer - dt);
       if (p.airJumpsRemaining > maxHeroAirJumps) {
         p.airJumpsRemaining = maxHeroAirJumps;
+      }
+      if (p.monkChargeTimer > 0 && p.vy >= 0) {
+        // Walked off a ledge while charging — cancel, do not auto-jump.
+        p.monkChargeTimer = 0;
+        p.monkCharge = 0;
       }
     }
 
@@ -3564,8 +3621,21 @@ export class GameEngine {
     }
 
     // Jump, Wall Jump (Ronin), & Double Jump (Hunter) — responsive jump-cancel out of recovery!
+    // Monk: hold jump on the ground to charge a high leap; release to jump (short tap = normal).
+    // Wizard: a second jump in the air starts a 2s hover (once per airtime).
     const jumpLocked = isAttacking && p.attackState !== 'recovery' && tuning.jumpLockWhenAttacking;
-    if (!dropThrough && !jumpLocked && p.jumpBufferTimer > 0) {
+    const ctMonk = this.charTune('monk');
+    const chargeTime = Math.max(0.12, ctMonk.monkChargeTime);
+    const didMonkChargeJump = this.updateMonkChargeJump(
+      dt,
+      input,
+      tuning,
+      effectiveJumpForce,
+      dropThrough,
+      jumpLocked,
+      chargeTime
+    );
+    if (!dropThrough && !jumpLocked && p.jumpBufferTimer > 0 && !didMonkChargeJump) {
       if (p.wallClingDir !== 0 && cDef.canWallCling) {
         // Mega Man X Wall Kick Jump!
         const kickDir = (-p.wallClingDir) as 1 | -1;
@@ -3619,15 +3689,23 @@ export class GameEngine {
         }
         sound.playJump();
         this.spawnSparkles(p.x, p.y - 2, 7, '#cbd5e1', '#93c5fd', 0.65);
+      } else if (this.tryStartWizardFloat(tuning)) {
+        p.jumpBufferTimer = 0;
+        p.jumpCutApplied = true;
+        if (p.attackState === 'recovery') p.attackState = 'idle';
+      } else if (p.characterId === 'wizard' && (p.wizardFloatUsed || p.wizardFloatTimer > 0)) {
+        // Consume the press so a jump during the float does not fire when he lands.
+        p.jumpBufferTimer = 0;
       }
     }
 
-    // Variable jump height cut
+    // Variable jump height cut (skipped during a Monk charged jump or Wizard float)
     if (
       !input.jumpHeld &&
       p.vy < -140 &&
       !p.jumpCutApplied &&
       !p.isAirKnockback &&
+      p.wizardFloatTimer <= 0 &&
       tuning.jumpCutMultiplier < 0.99
     ) {
       p.vy *= tuning.jumpCutMultiplier;
@@ -4043,9 +4121,18 @@ export class GameEngine {
       }
 
       case 'ash_wraps': {
-        // Monk Weapon Skill [3]: PYRE DASH — long, wide, invulnerable power dash.
+        // Monk Weapon Skill [3]: PYRE DASH — long, wide, invulnerable power dash (8-way when enabled).
         const ct = this.charTune('monk');
-        p.monkDashTimer = Math.max(0.08, ct.monkDashSec) * (1 + evoTier * 0.08);
+        p.monkChargeTimer = 0;
+        p.monkCharge = 0;
+        const aim = this.readMonkDashAim(ct, p);
+        p.monkDashDirX = aim.dirX;
+        p.monkDashDirY = aim.dirY;
+        p.monkDashSlam = aim.slam;
+        if (aim.dirX !== 0) p.facing = aim.dirX > 0 ? 1 : -1;
+        p.monkDashTimer = p.monkDashSlam
+          ? Math.max(0.8, ct.monkDashSec * 3)
+          : Math.max(0.08, ct.monkDashSec) * (1 + evoTier * 0.08);
         p.monkDashHitIds.clear();
         p.weaponSkillCooldown = ct.monkDashCooldown;
         p.invulnTimer = Math.max(p.invulnTimer, p.monkDashTimer + 0.14);
@@ -4933,6 +5020,245 @@ export class GameEngine {
     return { id: def.id, name: def.name, c1: def.primaryColor, c2: def.secondaryColor, root };
   }
 
+
+  /** Monk: hold jump on the ground to charge, release to leap. Returns true if a charged/tap jump was performed this frame. */
+  private updateMonkChargeJump(
+    dt: number,
+    input: InputState,
+    tuning: TuningConfig,
+    effectiveJumpForce: number,
+    dropThrough: boolean,
+    jumpLocked: boolean,
+    chargeTime: number
+  ): boolean {
+    const p = this.player;
+    const scale = tuning.playerScale;
+    const ct = this.charTune('monk');
+    if (p.characterId !== 'monk') {
+      p.monkChargeTimer = 0;
+      p.monkCharge = 0;
+      return false;
+    }
+
+    const canCharge =
+      p.onGround &&
+      !dropThrough &&
+      !jumpLocked &&
+      p.monkDashTimer <= 0 &&
+      p.ledgeGrabActive === false &&
+      p.hitStunTimer <= 0;
+
+    if (canCharge && input.jumpHeld) {
+      p.monkChargeTimer += dt;
+      p.monkCharge = Math.min(1, p.monkChargeTimer / chargeTime);
+      p.crouching = true;
+      p.jumpBufferTimer = 0;
+      p.coyoteTimer = 0;
+      this.spawnMonkChargeFx(tuning, p.monkCharge);
+      return true;
+    }
+
+    if (canCharge && p.monkChargeTimer > 0 && !input.jumpHeld) {
+      const charge = Math.min(1, p.monkChargeTimer / chargeTime);
+      const maxMult = Math.max(1, ct.monkChargeJumpMult);
+      const mult = 1 + (maxMult - 1) * charge;
+      p.vy = -effectiveJumpForce * mult;
+      p.onGround = false;
+      p.crouching = false;
+      p.coyoteTimer = 0;
+      p.jumpBufferTimer = 0;
+      p.jumpCutApplied = true;
+      p.monkChargeTimer = 0;
+      p.monkCharge = 0;
+      if (p.attackState === 'recovery') p.attackState = 'idle';
+      sound.playJump();
+      this.triggerShake(2 + charge * 6, 0.1 + charge * 0.1);
+      for (let i = 0; i < 6 + Math.floor(charge * 10); i++) {
+        const ember = Math.random() < 0.45 + charge * 0.3;
+        this.particles.push({
+          x: p.x + (Math.random() - 0.5) * 22 * scale,
+          y: p.y - 2,
+          vx: (Math.random() - 0.5) * (70 + charge * 80),
+          vy: -20 - Math.random() * (40 + charge * 70),
+          size: ember ? 2.2 : 3 + Math.random() * 3,
+          color: ember ? (charge > 0.7 ? '#fde68a' : '#ea580c') : '#57534e',
+          life: 0.28 + charge * 0.18,
+          maxLife: 0.28 + charge * 0.18,
+          kind: ember ? 'ember' : 'dust',
+          rotation: 0,
+        });
+      }
+      return true;
+    }
+
+    if (!input.jumpHeld) {
+      p.monkChargeTimer = 0;
+      p.monkCharge = 0;
+    }
+    return false;
+  }
+
+  private spawnMonkChargeFx(tuning: TuningConfig, charge: number): void {
+    const p = this.player;
+    const scale = tuning.playerScale;
+    const h = p.crouchBaseH * scale;
+    if (Math.random() > 0.35 + charge * 0.5) return;
+    const ember = Math.random() < 0.55 + charge * 0.3;
+    this.particles.push({
+      x: p.x + (Math.random() - 0.5) * 20 * scale,
+      y: p.y - Math.random() * h * 0.7,
+      vx: (Math.random() - 0.5) * 30,
+      vy: -25 - Math.random() * (40 + charge * 50),
+      size: ember ? 2 + charge * 2 : 3,
+      color: ember ? (charge > 0.75 ? '#fde68a' : '#c2410c') : '#78716c',
+      life: 0.28 + charge * 0.22,
+      maxLife: 0.28 + charge * 0.22,
+      kind: ember ? 'ember' : 'dust',
+      rotation: 0,
+    });
+  }
+
+  /** Second jump in the air starts the Wizard's hover. Once per airtime. */
+  private tryStartWizardFloat(tuning: TuningConfig): boolean {
+    const p = this.player;
+    if (p.characterId !== 'wizard' || p.wizardFloatUsed || p.onGround || p.ledgeGrabActive) return false;
+    const ct = this.charTune('wizard');
+    const dur = Math.max(0.2, ct.wizardFloatDuration);
+    p.wizardFloatTimer = dur;
+    p.wizardFloatUsed = true;
+    p.vy = 0;
+    p.crouching = false;
+    sound.playJump();
+    this.spawnWizardFloatBurst(tuning);
+    return true;
+  }
+
+  private spawnWizardFloatBurst(tuning: TuningConfig): void {
+    const p = this.player;
+    const scale = tuning.playerScale;
+    const el = this.getWizardElement();
+    const h = p.baseH * scale;
+    this.shockwaves.push({
+      x: p.x,
+      y: p.y - 4,
+      radius: 8,
+      maxRadius: 52 * scale,
+      color: el.c1,
+      life: 0.28,
+      maxLife: 0.28,
+    });
+    for (let i = 0; i < 14; i++) {
+      const a = (Math.PI * 2 * i) / 14;
+      this.particles.push({
+        x: p.x + Math.cos(a) * 10,
+        y: p.y - 6,
+        vx: Math.cos(a) * (40 + Math.random() * 50),
+        vy: -10 - Math.random() * 30,
+        size: 2.4,
+        color: i % 2 === 0 ? el.c1 : '#e0e7ff',
+        life: 0.4,
+        maxLife: 0.4,
+        kind: 'energy_wisp',
+        rotation: a,
+      });
+    }
+    void h;
+  }
+
+  private readMonkDashAim(
+    ct: { monkDashDirections: boolean },
+    p: Player
+  ): { dirX: number; dirY: number; slam: boolean } {
+    if (!ct.monkDashDirections) {
+      return { dirX: p.facing, dirY: 0, slam: false };
+    }
+    const input = this.frameInput;
+    let dx = 0;
+    let dy = 0;
+    if (input) {
+      dx = (input.right ? 1 : 0) - (input.left ? 1 : 0);
+      dy = (input.down ? 1 : 0) - (input.up ? 1 : 0);
+    }
+    if (dx === 0 && dy === 0) {
+      return { dirX: p.facing, dirY: 0, slam: false };
+    }
+    const len = Math.hypot(dx, dy) || 1;
+    const dirX = dx / len;
+    const dirY = dy / len;
+    // Down in the air = slam. On the ground, pure down is a standing slam; a diagonal flattens to a horizontal dash.
+    if (dirY > 0.35 && p.onGround) {
+      if (Math.abs(dirX) < 0.01) return { dirX: 0, dirY: 1, slam: true };
+      return { dirX: Math.sign(dirX), dirY: 0, slam: false };
+    }
+    const slam = dirY > 0.35 && !p.onGround;
+    return { dirX, dirY, slam };
+  }
+
+  private doMonkDashSlamImpact(tuning: TuningConfig, weaponLv: number, evoTier: number): void {
+    const p = this.player;
+    const ct = this.charTune('monk');
+    const scale = tuning.playerScale;
+    const bodyH = p.baseH * scale;
+    const bx = p.x;
+    const by = p.y - bodyH * 0.2;
+    const r = (130 + evoTier * 28) * scale;
+    p.vx *= 0.25;
+    p.vy = 0;
+    p.invulnTimer = Math.max(p.invulnTimer, 0.12);
+    sound.playHammerBoom(evoTier);
+    this.triggerShake(10 + evoTier * 3, 0.24);
+    this.cameraZoomPunch = Math.max(this.cameraZoomPunch, 0.03);
+    this.shockwaves.push({
+      x: bx,
+      y: by,
+      radius: 12,
+      maxRadius: r,
+      color: evoTier >= 2 ? '#fde68a' : '#ea580c',
+      life: 0.32,
+      maxLife: 0.32,
+    });
+    this.shockwaves.push({
+      x: bx,
+      y: p.y,
+      radius: 8,
+      maxRadius: r * 0.7,
+      color: '#a8a29e',
+      life: 0.22,
+      maxLife: 0.22,
+    });
+    this.spawnSparkles(bx, by, 18 + evoTier * 6, '#ea580c', '#d6d3d1', 1.3);
+    for (let i = 0; i < 16; i++) {
+      const dir = i % 2 === 0 ? 1 : -1;
+      this.particles.push({
+        x: p.x + dir * Math.random() * 16,
+        y: p.y - 2,
+        vx: dir * (160 + Math.random() * 240),
+        vy: -30 - Math.random() * 80,
+        size: 3 + Math.random() * 3,
+        color: Math.random() < 0.4 ? '#ea580c' : '#57534e',
+        life: 0.4,
+        maxLife: 0.4,
+        kind: Math.random() < 0.35 ? 'ember' : 'dust',
+        rotation: 0,
+      });
+    }
+    for (const enemy of this.enemies) {
+      if (enemy.dead) continue;
+      const ey = enemy.y - (enemy.baseH * tuning.enemyScale) / 2;
+      if (Math.hypot(enemy.x - bx, ey - by) <= r + 14) {
+        this.handlePlayerHitEnemy(enemy, tuning, 'weapon', weaponLv, {
+          kbX: ct.monkDashKnockback * 0.85,
+          kbY: 240,
+          dirX: enemy.x >= p.x ? 1 : -1,
+          bonusDamage: Math.max(0, ct.monkDashDamage - 1),
+          stun: 0.6,
+          guardBreak: true,
+          noAssassinate: true,
+        });
+      }
+    }
+  }
+
   private updateMonkPyreDash(dt: number, tuning: TuningConfig): void {
     const p = this.player;
     const ct = this.charTune('monk');
@@ -4942,9 +5268,20 @@ export class GameEngine {
     p.monkDashTimer = Math.max(0, p.monkDashTimer - dt);
     p.wallClingDir = 0;
     const speed = ct.monkDashLength / Math.max(0.08, ct.monkDashSec);
-    p.vx = p.facing * speed;
-    p.vy = 0;
-    this.applyPlayerPhysics(dt, tuning, false);
+    const dirX = p.monkDashDirX;
+    const dirY = p.monkDashDirY;
+    const wasOnGround = p.onGround;
+    if (p.monkDashSlam) {
+      // Downward smash: keep some sideways speed and fall hard until we hit the floor.
+      p.vx = dirX * speed * (p.onGround ? 0 : 0.55);
+      p.vy = Math.max(p.vy, 1080);
+      p.invulnTimer = Math.max(p.invulnTimer, 0.1);
+      this.applyPlayerPhysics(dt, tuning, false);
+    } else {
+      p.vx = dirX * speed;
+      p.vy = dirY * speed;
+      this.applyPlayerPhysics(dt, tuning, false, { noGravity: true });
+    }
 
     // Ash / ember / pale-chi trail
     const trailColor = evoTier >= 2 ? '#fde68a' : evoTier >= 1 ? '#c2410c' : '#a8a29e';
@@ -4970,12 +5307,12 @@ export class GameEngine {
       });
     }
 
-    // Tall, wide hitbox that strikes and hurls everything it passes
+    // Tall, wide hitbox that strikes and hurls everything it passes (biased toward dash direction)
     const boxH = bodyH * ct.monkDashHeightMult;
     const boxW = ct.monkDashWidth * scale;
     const box: Rect = {
-      x: p.x - boxW / 2 + p.facing * boxW * 0.2,
-      y: p.y - boxH,
+      x: p.x - boxW / 2 + dirX * boxW * 0.2,
+      y: p.y - boxH + Math.min(0, dirY) * boxH * 0.15,
       w: boxW,
       h: boxH,
     };
@@ -4986,7 +5323,7 @@ export class GameEngine {
         this.handlePlayerHitEnemy(enemy, tuning, 'weapon', weaponLv, {
           kbX: ct.monkDashKnockback,
           kbY: 170,
-          dirX: p.facing,
+          dirX: dirX !== 0 ? (dirX > 0 ? 1 : -1) : p.facing,
           bonusDamage: Math.max(0, ct.monkDashDamage - 1),
           stun: 0.55,
           guardBreak: true,
@@ -5009,10 +5346,25 @@ export class GameEngine {
       }
     }
 
+    // Down-slam: end when we hit the ground (or the timer runs out as a safety net).
+    if (p.monkDashSlam && !wasOnGround && p.onGround) {
+      p.monkDashTimer = 0;
+      this.doMonkDashSlamImpact(tuning, weaponLv, evoTier);
+      return;
+    }
+    if (p.monkDashSlam && p.onGround && wasOnGround) {
+      // Started a down-dash already on the floor — immediate shockwave slam.
+      p.monkDashTimer = 0;
+      this.doMonkDashSlamImpact(tuning, weaponLv, evoTier);
+      return;
+    }
+
     // Awakened (5 upgrades): ends in an Ash Burst. Mythic (10): a second, larger burst.
     if (p.monkDashTimer === 0) {
-      p.vx = p.facing * 90;
-      if (evoTier >= 1) {
+      p.vx = (dirX !== 0 ? Math.sign(dirX) : p.facing) * 90;
+      if (p.monkDashSlam) {
+        this.doMonkDashSlamImpact(tuning, weaponLv, evoTier);
+      } else if (evoTier >= 1) {
         const bursts = evoTier >= 2 ? 2 : 1;
         for (let b = 0; b < bursts; b++) {
           const bx = p.x + p.facing * (20 + b * 40) * scale;
@@ -6120,7 +6472,12 @@ export class GameEngine {
     }
   }
 
-  private applyPlayerPhysics(dt: number, tuning: TuningConfig, ignoreOneWay: boolean): void {
+  private applyPlayerPhysics(
+    dt: number,
+    tuning: TuningConfig,
+    ignoreOneWay: boolean,
+    opts?: { noGravity?: boolean }
+  ): void {
     const p = this.player;
     const scale = tuning.playerScale;
     const halfW = (p.baseW * scale) / 2;
@@ -6147,13 +6504,16 @@ export class GameEngine {
 
     const wasOnGround = p.onGround;
     const prevY = p.y;
-    let effectiveGravity = tuning.gravity;
-    if (!p.onGround && Math.abs(p.vy) < 95) {
-      effectiveGravity = tuning.gravity * tuning.apexHangGravityMult;
-    } else if (p.vy > 0) {
-      effectiveGravity = tuning.gravity * tuning.fallGravityMult;
+    const hover = opts?.noGravity || p.wizardFloatTimer > 0;
+    if (!hover) {
+      let effectiveGravity = tuning.gravity;
+      if (!p.onGround && Math.abs(p.vy) < 95) {
+        effectiveGravity = tuning.gravity * tuning.apexHangGravityMult;
+      } else if (p.vy > 0) {
+        effectiveGravity = tuning.gravity * tuning.fallGravityMult;
+      }
+      p.vy = Math.min(tuning.maxFallSpeed, p.vy + effectiveGravity * dt);
     }
-    p.vy = Math.min(tuning.maxFallSpeed, p.vy + effectiveGravity * dt);
     p.y += p.vy * dt;
     p.onGround = false;
 
@@ -6202,6 +6562,8 @@ export class GameEngine {
     // Trigger smooth 30fps landing compression & dust when touching down from a jump
     if (!wasOnGround && p.onGround) {
       p.landTimer = 0.16;
+      p.wizardFloatTimer = 0;
+      p.wizardFloatUsed = false;
       for (let i = 0; i < 4; i++) {
         this.particles.push({
           x: p.x + (Math.random() - 0.5) * 18,

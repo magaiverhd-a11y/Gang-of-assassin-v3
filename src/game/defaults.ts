@@ -230,8 +230,8 @@ export const CHARACTERS: Record<CharacterId, CharacterDef> = {
     name: 'The Ash Monk',
     title: 'Bone-Wrapped Pilgrim of the Pyre',
     description:
-      'Barehanded zealot in ash-grey robes. Very short reach but lightning-fast 3-hit fist chains that hit hard. [3] Pyre Dash: a long, wide, invulnerable charge that hurls everything aside. Starts with Cinder Palm.',
-    traitSummary: 'Fists · 3-Hit Chain · Pyre Dash · Starts w/ Cinder Palm',
+      'Barehanded zealot in ash-grey robes. Very short reach but lightning-fast 3-hit fist chains that hit hard. Hold jump on the ground to charge a very high leap. [3] Pyre Dash aims in 8 directions — a downward dash slams into the ground. Starts with Cinder Palm.',
+    traitSummary: 'Fists · Charged Leap · 8-Way Pyre Dash · Starts w/ Cinder Palm',
     defaultWeapon: 'ash_wraps',
     defaultAbility: 'cinder_palm',
     baseHp: 11,
@@ -252,8 +252,8 @@ export const CHARACTERS: Record<CharacterId, CharacterDef> = {
     name: 'The Sable Wizard',
     title: 'Elementalist of the Drowned Spire',
     description:
-      'Robed spellcaster with a spire staff. [1] fires a mid-range elemental bolt that takes the colour and effect of your Affinity. [3] Repulsion Nova blasts every foe around him away — into pits, they die. Starts with Chain of Storms.',
-    traitSummary: 'Ranged Bolt · Repulsion Nova · Starts w/ Chain of Storms',
+      'Robed spellcaster with a spire staff. [1] fires a mid-range elemental bolt that takes the colour and effect of your Affinity. Tap jump again in the air to float for 2 seconds — you can move, and you will not drop until the float ends. [3] Repulsion Nova blasts every foe around him away — into pits, they die. Starts with Chain of Storms.',
+    traitSummary: 'Ranged Bolt · Air Float · Repulsion Nova · Starts w/ Chain of Storms',
     defaultWeapon: 'spire_staff',
     defaultAbility: 'chain_storm',
     baseHp: 8,
@@ -1246,6 +1246,9 @@ const CHARACTER_SPECIAL_DEFAULTS = {
   monkDashKnockback: 430,
   monkDashCooldown: 1.3,
   monkComboBonus: 1,
+  monkChargeTime: 0.55,
+  monkChargeJumpMult: 1.65,
+  monkDashDirections: true,
   wizardBoltSpeed: 760,
   wizardBoltRange: 360,
   wizardBoltDamage: 1,
@@ -1254,6 +1257,8 @@ const CHARACTER_SPECIAL_DEFAULTS = {
   wizardNovaLift: 150,
   wizardNovaDamage: 2,
   wizardNovaCooldown: 2.0,
+  wizardFloatDuration: 2.0,
+  wizardFloatMoveSpeed: 1.0,
 };
 
 export function buildDefaultCharacterTuning(): Record<CharacterId, CharacterTuning> {
