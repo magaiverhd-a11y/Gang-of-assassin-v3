@@ -39,14 +39,51 @@ export function mergeTuning(base: TuningConfig, incoming: unknown): TuningConfig
   return walk(cloneTuning(base), incoming) as TuningConfig;
 }
 
+export const MOBILE_CONTROLS_REV_KEY = 'nocturne-castle.mobile-controls-rev';
+const MOBILE_CONTROLS_REV = 2;
+
+/**
+ * v1 shipped Jump and Interact as the bottom corner buttons, with Item/Relic as mini buttons.
+ * One-time migrate that exact stock layout to the v2 corners (Item + Special relic).
+ * Custom layouts are left alone.
+ */
+function migrateMobileControls(t: TuningConfig): TuningConfig {
+  if (typeof localStorage === 'undefined') return t;
+  try {
+    const rev = Number(localStorage.getItem(MOBILE_CONTROLS_REV_KEY) || '0');
+    if (rev >= MOBILE_CONTROLS_REV) return t;
+    let next = t;
+    const isV1Stock =
+      t.mobileBtnTopLeft === 2 &&
+      t.mobileBtnTopRight === 1 &&
+      t.mobileBtnBottomLeft === 3 &&
+      t.mobileBtnBottomRight === 0 &&
+      t.mobileMiniButtons === true;
+    if (isV1Stock) {
+      next = { ...t, mobileBtnBottomLeft: 4, mobileBtnBottomRight: 5, mobileMiniButtons: false };
+    }
+    localStorage.setItem(MOBILE_CONTROLS_REV_KEY, String(MOBILE_CONTROLS_REV));
+    if (next !== t) {
+      try {
+        localStorage.setItem(TUNING_STORAGE_KEY, JSON.stringify(next));
+      } catch {
+        // storage full / private mode
+      }
+    }
+    return next;
+  } catch {
+    return t;
+  }
+}
+
 export function loadStoredTuning(): TuningConfig {
   try {
     const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(TUNING_STORAGE_KEY) : null;
-    if (raw) return mergeTuning(DEFAULT_TUNING, JSON.parse(raw));
+    if (raw) return migrateMobileControls(mergeTuning(DEFAULT_TUNING, JSON.parse(raw)));
   } catch {
     // ignore corrupt storage
   }
-  return cloneTuning(DEFAULT_TUNING);
+  return migrateMobileControls(cloneTuning(DEFAULT_TUNING));
 }
 
 export function saveStoredTuning(t: TuningConfig): void {
