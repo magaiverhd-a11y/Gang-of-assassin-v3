@@ -1,0 +1,519 @@
+{
+ "picks": [
+  [
+   "Button press",
+   "Free: Muted metal click (Kenney RPG)",
+   "sfx/ui_click_0.mp3"
+  ],
+  [
+   "Big action button (Play / Raid)",
+   "Free: Heavy door shut (Kenney RPG)",
+   "sfx/ui_chunky_0.mp3"
+  ],
+  [
+   "Confirm / upgrade pick",
+   "Flashy: Gold confirm",
+   "sfx/ui_confirm_0.mp3"
+  ],
+  [
+   "Back / close",
+   "Free: Cloth fold (Kenney RPG)",
+   "sfx/ui_back_0.mp3"
+  ],
+  [
+   "Hover / scroll tick",
+   "Free: Parchment page flip (Kenney RPG)",
+   "sfx/ui_hover_0.mp3"
+  ],
+  [
+   "Not allowed / error",
+   "Flashy: Low double buzz",
+   "sfx/ui_error_0.mp3"
+  ],
+  [
+   "Buy / spend gold",
+   "Free: Coins in a leather purse (Kenney RPG)",
+   "sfx/ui_buy_0.mp3"
+  ],
+  [
+   "Jump",
+   "Free: Leather boots jump",
+   "sfx/jump_0.mp3"
+  ],
+  [
+   "Land (generic)",
+   "Free: Soft heavy impact (Kenney)",
+   "sfx/land_0.mp3"
+  ],
+  [
+   "Backdash / dash",
+   "Free: Swish 6",
+   "sfx/dash_0.mp3"
+  ],
+  [
+   "Grapple",
+   "Made: Chain + hook",
+   "sfx/grapple_0.mp3"
+  ],
+  [
+   "Sword slash",
+   "Blob: Sword swing ×3",
+   "sfx/sword_0.mp3, sfx/sword_1.mp3, sfx/sword_2.mp3"
+  ],
+  [
+   "Katana slash",
+   "Free: StarNinjas sword 5",
+   "sfx/katana_0.mp3"
+  ],
+  [
+   "Rapier thrust",
+   "Blob: Rapier swing ×3",
+   "sfx/rapier_0.mp3, sfx/rapier_1.mp3, sfx/rapier_2.mp3"
+  ],
+  [
+   "Naginata sweep",
+   "Blob: Scythe swing ×3",
+   "sfx/naginata_0.mp3, sfx/naginata_1.mp3, sfx/naginata_2.mp3"
+  ],
+  [
+   "Greataxe swing",
+   "Blob: Hammer swing ×3",
+   "sfx/greataxe_0.mp3, sfx/greataxe_1.mp3, sfx/greataxe_2.mp3"
+  ],
+  [
+   "Whip / ribbon / silk whip",
+   "Made: Crack",
+   "sfx/whip_0.mp3"
+  ],
+  [
+   "Hammer charge",
+   "Current",
+   "procedural (game original)"
+  ],
+  [
+   "Hammer ground slam",
+   "Blob: Hammer heavy ×3",
+   "sfx/hammer_boom_0.mp3, sfx/hammer_boom_1.mp3, sfx/hammer_boom_2.mp3"
+  ],
+  [
+   "Hit enemy (light)",
+   "Made (layered): Punch + wet flesh ×3",
+   "sfx/hit_light_0.mp3, sfx/hit_light_1.mp3, sfx/hit_light_2.mp3"
+  ],
+  [
+   "Hit enemy (heavy)",
+   "Made (layered): Heavy punch + bone crack ×3",
+   "sfx/hit_heavy_0.mp3, sfx/hit_heavy_1.mp3, sfx/hit_heavy_2.mp3"
+  ],
+  [
+   "Critical hit",
+   "Made (layered): Blade + bone snap + gore ×2",
+   "sfx/crit_0.mp3, sfx/crit_1.mp3"
+  ],
+  [
+   "Parry / deflect",
+   "Free: StarNinjas clash 1",
+   "sfx/parry_0.mp3"
+  ],
+  [
+   "Armor block",
+   "Free: Metal heavy (Kenney)",
+   "sfx/block_0.mp3"
+  ],
+  [
+   "Player hurt",
+   "Flashy: Heavy hit + ring",
+   "sfx/player_hurt_0.mp3"
+  ],
+  [
+   "Fireball spell",
+   "Made: Fire roar",
+   "sfx/fireball_0.mp3"
+  ],
+  [
+   "Gas flask break",
+   "Made: Glass + hiss",
+   "sfx/gas_0.mp3"
+  ],
+  [
+   "Buff spell",
+   "Made (layered): Ethereal chant + drone",
+   "sfx/buff_0.mp3"
+  ],
+  [
+   "Assassination kill",
+   "Made (layered): Heartbeat + breath → dull stab, gore, low choir swell",
+   "sfx/assassinate_0.mp3"
+  ],
+  [
+   "Shadow chain (next kill)",
+   "Current",
+   "procedural (game original)"
+  ],
+  [
+   "Slow-mo pulse",
+   "Made (layered): Slowed heartbeat + sub + drone",
+   "sfx/slowmo_0.mp3"
+  ],
+  [
+   "Backstab ready (prompt)",
+   "Made (layered): Single muffled heartbeat",
+   "sfx/sneak_ready_0.mp3"
+  ],
+  [
+   "Enemy spots you (!)",
+   "Free: Monster snarl (darsycho)",
+   "sfx/alert_0.mp3"
+  ],
+  [
+   "Goblin alert shout",
+   "Blob: Current goblin grunt ×3 (artisticdude)",
+   "sfx/goblin_alert_0.mp3, sfx/goblin_alert_1.mp3, sfx/goblin_alert_2.mp3"
+  ],
+  [
+   "Enemy attack swing",
+   "Blob: Current goblin attack ×3 (artisticdude)",
+   "sfx/enemy_attack_0.mp3, sfx/enemy_attack_1.mp3, sfx/enemy_attack_2.mp3"
+  ],
+  [
+   "Enemy hurt",
+   "Blob: Alba high monster ×3",
+   "sfx/enemy_hurt_0.mp3, sfx/enemy_hurt_1.mp3, sfx/enemy_hurt_2.mp3"
+  ],
+  [
+   "Ghoul / vampire death",
+   "Made: Gurgle groan",
+   "sfx/death_ghoul_0.mp3"
+  ],
+  [
+   "Skeleton death",
+   "Made (layered): Bone crack + rattling collapse",
+   "sfx/death_skeleton_0.mp3"
+  ],
+  [
+   "Bat / gargoyle / imp death",
+   "Made: Screech + flap",
+   "sfx/death_bat_0.mp3"
+  ],
+  [
+   "Knight / armored death",
+   "Free: Metal falling",
+   "sfx/death_knight_0.mp3"
+  ],
+  [
+   "Goblin death",
+   "Blob: Alba high monster 080",
+   "sfx/death_goblin_0.mp3"
+  ],
+  [
+   "Goblin brute death",
+   "Blob: Ogrebane monster ×3 (long)",
+   "sfx/death_brute_0.mp3, sfx/death_brute_1.mp3, sfx/death_brute_2.mp3"
+  ],
+  [
+   "Wraith / acolyte death",
+   "Made: Ghost wail",
+   "sfx/death_wraith_0.mp3"
+  ],
+  [
+   "Grave hound death",
+   "Blob: Wolf growl ×3",
+   "sfx/death_hound_0.mp3, sfx/death_hound_1.mp3, sfx/death_hound_2.mp3"
+  ],
+  [
+   "Boss appears",
+   "Blob: Boss roar ×4",
+   "sfx/boss_intro_0.mp3, sfx/boss_intro_1.mp3, sfx/boss_intro_2.mp3, sfx/boss_intro_3.mp3"
+  ],
+  [
+   "Boss death",
+   "Made (layered): Dying roar + cannon + rockfall + choir",
+   "sfx/boss_death_0.mp3"
+  ],
+  [
+   "Boss energy → relic",
+   "Flashy: Energy riser",
+   "sfx/boss_sprout_0.mp3"
+  ],
+  [
+   "Small explosion (bomb)",
+   "Made (layered): Bang + rock debris",
+   "sfx/explosion_small_0.mp3"
+  ],
+  [
+   "Big explosion",
+   "Made (layered): Deep boom + cannon + falling rubble",
+   "sfx/explosion_big_0.mp3"
+  ],
+  [
+   "Barrel / brazier burst",
+   "Made: Barrel burst",
+   "sfx/barrel_0.mp3"
+  ],
+  [
+   "Wall crumble / collapse",
+   "Made (layered): Deep stone collapse",
+   "sfx/collapse_0.mp3"
+  ],
+  [
+   "Coin pickup",
+   "Free: Coins in hand (Kenney RPG)",
+   "sfx/coin_0.mp3"
+  ],
+  [
+   "Gem / item pickup",
+   "Free: Item into leather pouch (Kenney RPG)",
+   "sfx/gem_0.mp3"
+  ],
+  [
+   "Open chest + loot",
+   "Made (layered): Creaking lid + coins",
+   "sfx/chest_0.mp3"
+  ],
+  [
+   "Craft item",
+   "Free: Hammer on metal",
+   "sfx/craft_0.mp3"
+  ],
+  [
+   "Relic crystallize",
+   "Made (layered): Low bell + choir",
+   "sfx/relic_0.mp3"
+  ],
+  [
+   "Weapon evolution",
+   "Made (layered): Hammer + steel + choir swell",
+   "sfx/evolution_0.mp3"
+  ],
+  [
+   "Secret wall found",
+   "Made (layered): Stone grind + whisper chant",
+   "sfx/secret_0.mp3"
+  ],
+  [
+   "Level up",
+   "Made (layered): Low bell + choir",
+   "sfx/levelup_0.mp3"
+  ],
+  [
+   "Victory",
+   "Made (layered): War horns + taiko + gong",
+   "sfx/victory_0.mp3"
+  ],
+  [
+   "Raid complete",
+   "Made (layered): Gong + choir climax",
+   "sfx/raid_complete_0.mp3"
+  ],
+  [
+   "Defeat / game over",
+   "Made: Requiem",
+   "sfx/defeat_0.mp3"
+  ],
+  [
+   "Stone / castle floor",
+   "Free: Kenney concrete",
+   "4 steps"
+  ],
+  [
+   "Wood planks",
+   "Free: Kenney wood",
+   "4 steps"
+  ],
+  [
+   "Dirt / sand",
+   "Free: Kenney leather steps",
+   "4 steps"
+  ],
+  [
+   "Grass / leaves",
+   "Free: Kenney grass",
+   "4 steps"
+  ],
+  [
+   "Gravel",
+   "Free: Corsica_S snowy gravel",
+   "4 steps"
+  ],
+  [
+   "Metal grate",
+   "Free: thimras metal steps",
+   "4 steps"
+  ],
+  [
+   "Water / puddle",
+   "Free: Wet steps (rubberduck)",
+   "4 steps"
+  ],
+  [
+   "Mud",
+   "Free: Tinysized mud steps",
+   "4 steps"
+  ],
+  [
+   "Carpet / rug",
+   "Free: Kenney carpet",
+   "4 steps"
+  ],
+  [
+   "Snow",
+   "Free: Corsica_S snow on gravel",
+   "4 steps"
+  ],
+  [
+   "Bone pile (Necropolis)",
+   "Free: Bones rattle (congusbongus)",
+   "4 steps"
+  ]
+ ],
+ "procedural": [
+  "hammer_charge",
+  "shadow_chain"
+ ],
+ "music": {
+  "light": [
+   {
+    "id": "v1st0",
+    "title": "v1: Gothic organ + choir",
+    "file": "music/v1st0.mp3",
+    "dur": 43.6
+   },
+   {
+    "id": "v1st1",
+    "title": "v1: Stealth pulse",
+    "file": "music/v1st1.mp3",
+    "dur": 41.7
+   },
+   {
+    "id": "v1st2",
+    "title": "v1: Dark Theme (JaggedStone)",
+    "file": "music/v1st2.mp3",
+    "dur": 56.0
+   }
+  ],
+  "heavy": [
+   {
+    "id": "drake",
+    "title": "Blob: Drake boss music (Boss Battle Music, Juhani Junkala)",
+    "file": "music/drake.mp3",
+    "dur": 56.0
+   },
+   {
+    "id": "panther",
+    "title": "Blob: Panther boss music (Determined Pursuit, Emma_MA)",
+    "file": "music/panther.mp3",
+    "dur": 56.0
+   },
+   {
+    "id": "lament",
+    "title": "Free: Laments of the War – choir + drums (Cethiel)",
+    "file": "music/lament.mp3",
+    "dur": 56.0
+   }
+  ]
+ },
+ "ambience": [
+  {
+   "id": "drone1",
+   "title": "Free: Dark ambient drone (tsorthan grove)",
+   "file": "amb/drone1.mp3",
+   "dur": 42.0
+  },
+  {
+   "id": "horror",
+   "title": "Free: Ambient horror (techiew)",
+   "file": "amb/horror.mp3",
+   "dur": 19.7
+  },
+  {
+   "id": "b_castle_a",
+   "title": "Blob: Castle ambience (procedural)",
+   "file": "amb/b_castle_a.mp3",
+   "dur": 45.0
+  },
+  {
+   "id": "v1amb0",
+   "title": "v1: Castle wind + bells",
+   "file": "amb/v1amb0.mp3",
+   "dur": 48.0
+  },
+  {
+   "id": "v1amb1",
+   "title": "v1: Dripping dungeon",
+   "file": "amb/v1amb1.mp3",
+   "dur": 45.0
+  },
+  {
+   "id": "v1amb2",
+   "title": "v1: Rain, thunder, crickets",
+   "file": "amb/v1amb2.mp3",
+   "dur": 48.0
+  },
+  {
+   "id": "v1amb3",
+   "title": "v1: Dungeon Ambience (yd)",
+   "file": "amb/v1amb3.mp3",
+   "dur": 42.0
+  },
+  {
+   "id": "v1amb4",
+   "title": "v1: Loopable Dungeon (JaggedStone)",
+   "file": "amb/v1amb4.mp3",
+   "dur": 42.0
+  },
+  {
+   "id": "v1amb5",
+   "title": "v1: Forgotten Tomb (Kindland)",
+   "file": "amb/v1amb5.mp3",
+   "dur": 42.0
+  },
+  {
+   "id": "v1amb6",
+   "title": "v1: Rain loop (Kresiek)",
+   "file": "amb/v1amb6.mp3",
+   "dur": 42.0
+  },
+  {
+   "id": "b_grave_a",
+   "title": "Blob: Graveyard ambience (procedural)",
+   "file": "amb/b_grave_a.mp3",
+   "dur": 45.0
+  },
+  {
+   "id": "b_cave_a",
+   "title": "Blob: Cave ambience (procedural)",
+   "file": "amb/b_cave_a.mp3",
+   "dur": 45.0
+  },
+  {
+   "id": "b_forest_a",
+   "title": "Blob: Forest ambience (procedural, birds)",
+   "file": "amb/b_forest_a.mp3",
+   "dur": 45.0
+  },
+  {
+   "id": "gobchant",
+   "title": "Made (layered): Drone + distant creepy chanting",
+   "file": "amb/gobchant.mp3",
+   "dur": 45.0
+  },
+  {
+   "id": "drone2",
+   "title": "Free: Dark ambient drone 2 (tsorthan grove)",
+   "file": "amb/drone2.mp3",
+   "dur": 42.0
+  },
+  {
+   "id": "temple",
+   "title": "Free: Temple drone (tsorthan grove)",
+   "file": "amb/temple.mp3",
+   "dur": 42.0
+  },
+  {
+   "id": "pale",
+   "title": "Free: Light through a pale window (tsorthan grove)",
+   "file": "amb/pale.mp3",
+   "dur": 42.0
+  }
+ ]
+}

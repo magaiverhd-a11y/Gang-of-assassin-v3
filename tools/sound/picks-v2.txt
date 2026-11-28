@@ -1,0 +1,94 @@
+Nocturne Castle sound picks (v2) — SFX picks (weapon section = Magaiver's second paste). Music + ambience are handled in code (see build_audio.py MUSIC/AMBIENCE).
+
+[UI buttons]
+- Button press: Free: Muted metal click (Kenney RPG) (default, not picked)
+- Big action button (Play / Raid): Free: Heavy door shut (Kenney RPG)
+- Confirm / upgrade pick: Flashy: Gold confirm
+- Back / close: Free: Cloth fold (Kenney RPG)
+- Hover / scroll tick: Free: Parchment page flip (Kenney RPG) (default, not picked)
+- Not allowed / error: Flashy: Low double buzz
+- Buy / spend gold: Free: Coins in a leather purse (Kenney RPG) (default, not picked)
+
+[Player movement]
+- Jump: Free: Leather boots jump
+- Land (generic): Free: Soft heavy impact (Kenney) (default, not picked)
+- Backdash / dash: Free: Swish 6
+- Grapple: Made: Chain + hook
+
+[Player weapons]
+- Sword slash: Blob: Sword swing ×3
+- Katana slash: Free: StarNinjas sword 5
+- Rapier thrust: Blob: Rapier swing ×3
+- Naginata sweep: Blob: Scythe swing ×3
+- Greataxe swing: Blob: Hammer swing ×3
+- Whip / ribbon / silk whip: Made: Crack
+- Hammer charge: Current (default, not picked)
+- Hammer ground slam: Blob: Hammer heavy ×3
+- Hit enemy (light): Made (layered): Punch + wet flesh ×3
+- Hit enemy (heavy): Made (layered): Heavy punch + bone crack ×3
+- Critical hit: Made (layered): Blade + bone snap + gore ×2
+- Parry / deflect: Free: StarNinjas clash 1
+- Armor block: Free: Metal heavy (Kenney)
+- Player hurt: Flashy: Heavy hit + ring
+- Fireball spell: Made: Fire roar
+- Gas flask break: Made: Glass + hiss
+- Buff spell: Made (layered): Ethereal chant + drone
+
+[Assassination / stealth]
+- Assassination kill: Made (layered): Heartbeat + breath → dull stab, gore, low choir swell
+- Shadow chain (next kill): Current (default, not picked)
+- Slow-mo pulse: Made (layered): Slowed heartbeat + sub + drone
+- Backstab ready (prompt): Made (layered): Single muffled heartbeat (default, not picked)
+
+[Enemies]
+- Enemy spots you (!): Free: Monster snarl (darsycho) (default, not picked)
+- Goblin alert shout: Blob: Current goblin grunt ×3 (artisticdude) (default, not picked)
+- Enemy attack swing: Blob: Current goblin attack ×3 (artisticdude) (default, not picked)
+- Enemy hurt: Blob: Alba high monster ×3
+- Ghoul / vampire death: Made: Gurgle groan
+- Skeleton death: Made (layered): Bone crack + rattling collapse
+- Bat / gargoyle / imp death: Made: Screech + flap
+- Knight / armored death: Free: Metal falling
+- Goblin death: Blob: Alba high monster 080
+- Goblin brute death: Blob: Ogrebane monster ×3 (long)
+- Wraith / acolyte death: Made: Ghost wail
+- Grave hound death: Blob: Wolf growl ×3
+
+[Boss]
+- Boss appears: Blob: Boss roar ×4
+- Boss death: Made (layered): Dying roar + cannon + rockfall + choir
+- Boss energy → relic: Flashy: Energy riser
+
+[Explosions]
+- Small explosion (bomb): Made (layered): Bang + rock debris
+- Big explosion: Made (layered): Deep boom + cannon + falling rubble
+- Barrel / brazier burst: Made: Barrel burst
+- Wall crumble / collapse: Made (layered): Deep stone collapse
+
+[Pickups / loot / crafting]
+- Coin pickup: Free: Coins in hand (Kenney RPG)
+- Gem / item pickup: Free: Item into leather pouch (Kenney RPG)
+- Open chest + loot: Made (layered): Creaking lid + coins (default, not picked)
+- Craft item: Free: Hammer on metal (default, not picked)
+- Relic crystallize: Made (layered): Low bell + choir
+- Weapon evolution: Made (layered): Hammer + steel + choir swell
+- Secret wall found: Made (layered): Stone grind + whisper chant
+
+[Level up / victory]
+- Level up: Made (layered): Low bell + choir
+- Victory: Made (layered): War horns + taiko + gong
+- Raid complete: Made (layered): Gong + choir climax (default, not picked)
+- Defeat / game over: Made: Requiem
+
+[Footsteps (per terrain)]
+- Stone / castle floor: Free: Kenney concrete (default, not picked)
+- Wood planks: Free: Kenney wood (default, not picked)
+- Dirt / sand: Free: Kenney leather steps
+- Grass / leaves: Free: Kenney grass (default, not picked)
+- Gravel: Free: Corsica_S snowy gravel
+- Metal grate: Free: thimras metal steps
+- Water / puddle: Free: Wet steps (rubberduck) (default, not picked)
+- Mud: Free: Tinysized mud steps (default, not picked)
+- Carpet / rug: Free: Kenney carpet (default, not picked)
+- Snow: Free: Corsica_S snow on gravel
+- Bone pile (Necropolis): Free: Bones rattle (congusbongus) (default, not picked)
