@@ -1,3 +1,5 @@
+import { setFxRenderContext } from './affinityFx';
+import { drawFxBehind, drawFxFront } from './fxDraw';
 import { GameEngine } from './engine';
 import { CAMP_FIRE_X } from './level';
 import {
@@ -38,6 +40,7 @@ export function renderGame(
 ): void {
   // Tuning v2: render with the same per-character tuning the engine simulates with.
   tuning = engine.effectiveTuning ?? tuning;
+  setFxRenderContext(tuning.fx, engine.time, engine.fx.mobile);
   const stage = engine.currentStage;
   const theme = stage.theme;
 
@@ -236,12 +239,17 @@ export function renderGame(
     ctx.fill();
   }
 
-  drawElementalPlayerAura(ctx, engine.player, tuning.playerScale, engine.time);
+  if (tuning.fx?.affinityFx ?? true) {
+    drawFxBehind(ctx, engine.fx, engine.player, tuning.playerScale, engine.time);
+  } else {
+    drawElementalPlayerAura(ctx, engine.player, tuning.playerScale, engine.time);
+  }
   for (const ally of engine.phantomAllies) {
     drawPhantomAlly(ctx, ally, tuning.playerScale, engine.time);
   }
   drawPlayerSprite(ctx, engine.player, tuning.playerScale);
   drawWeaponAttack(ctx, engine.player, tuning.playerScale, engine.effectiveTuning?.attackRange ?? tuning.attackRange);
+  drawFxFront(ctx, engine.fx, engine.player, engine.enemies, tuning, engine.time);
 
   for (const spot of stage.hidingSpots) {
     const inside =

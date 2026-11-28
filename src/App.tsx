@@ -665,6 +665,7 @@ export default function App() {
       specialItemQueuedRef.current = false;
 
       const engine = engineRef.current!;
+      engine.fx.mobile = mobile;
       if (mobile) {
         if (frameTuningSrc !== tuningRef.current || frameTuningW !== viewportW) {
           frameTuningSrc = tuningRef.current;

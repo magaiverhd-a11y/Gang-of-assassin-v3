@@ -1,4 +1,6 @@
 import { sound } from './audio';
+import { AffinityFx } from './fxSystem';
+import { tierLook, visualElement } from './affinityFx';
 import {
   ABILITIES,
   ABILITY_ORDER,
@@ -110,6 +112,10 @@ export class GameEngine {
   public shockwaves: ShockwaveRing[] = [];
   public afterimages: Afterimage[] = [];
   public particles: Particle[] = [];
+  /** affinity-v1: elemental affinity + weapon evolution visual effects. */
+  public fx: AffinityFx = new AffinityFx({
+    onWeaponTierUp: (tier, _prev, moment) => this.onWeaponTierUp(tier, moment),
+  });
   public bloodStains: BloodStain[] = [];
   public slashLines: SlashLine[] = [];
   public elementalArcs: ElementalArc[] = [];
@@ -691,6 +697,7 @@ export class GameEngine {
       this.shockwaves = [];
       this.afterimages = [];
       this.particles = [];
+      this.fx.reset();
       this.bloodStains = [];
       this.slashLines = [];
       this.elementalArcs = [];
@@ -1174,6 +1181,7 @@ export class GameEngine {
     this.shockwaves = [];
     this.afterimages = [];
     this.particles = [];
+    this.fx.reset();
     this.bloodStains = [];
     this.slashLines = [];
     this.elementalArcs = [];
@@ -1653,30 +1661,7 @@ export class GameEngine {
       }
       case 'weapon_damage': {
         p.weaponDamageBonus += 1;
-        if (p.weaponDamageBonus > 0 && p.weaponDamageBonus % 5 === 0) {
-          const evoTier = p.weaponDamageBonus / 5;
-          const tierName = getEvolutionTierName(evoTier);
-          sound.playWeaponEvolution(evoTier);
-          this.triggerShake(10, 0.28);
-          this.triggerImpactFlash('#fde047', 0.52, p.x, p.y - p.baseH * 0.5, 1.6, 0.36);
-          this.shockwaves.push({
-            x: p.x,
-            y: p.y - p.baseH * 0.5,
-            radius: 16,
-            maxRadius: 195,
-            color: '#fde047',
-            life: 0.36,
-            maxLife: 0.36,
-          });
-          this.spawnSparkles(p.x, p.y - p.baseH * 0.5, 34, '#fde047', '#f97316', 1.6);
-          this.spawnDamageNumber(
-            p.x,
-            p.y - p.baseH * tuning.playerScale - 44,
-            `WEAPON EVOLVED · ${tierName.toUpperCase()}!`,
-            '#fde047',
-            1.35
-          );
-        }
+        // affinity-v1: the evolution moment (every 5 upgrades) is fired by the FX system on the next live frame.
         break;
       }
       case 'max_hp': {
@@ -2479,6 +2464,33 @@ export class GameEngine {
     return closest;
   }
 
+  /** affinity-v1: the moment a weapon evolves (every 5 weapon upgrades). */
+  private onWeaponTierUp(tier: number, moment: boolean): void {
+    const p = this.player;
+    const tuning = this.tuning ?? DEFAULT_TUNING;
+    const tierName = getEvolutionTierName(tier);
+    const el = visualElement(p, tuning.fx);
+    const look = tierLook(tier);
+    const glow = el ? el.pal.mid : look.glow;
+    const core = el ? el.pal.core : look.glowCore;
+    sound.playWeaponTierUp(tier);
+    this.spawnDamageNumber(
+      p.x,
+      p.y - p.baseH * tuning.playerScale - 44,
+      `${WEAPONS[p.weapon]?.shortName ?? 'WEAPON'} EVOLVED`.toUpperCase(),
+      core,
+      1.3,
+      tierName.toUpperCase()
+    );
+    if (moment) {
+      this.triggerShake(8 + tier * 2, 0.3);
+      this.hitstopTimer = Math.max(this.hitstopTimer, 0.12);
+      this.screenFlashColor = glow;
+      this.screenFlashAlpha = Math.max(this.screenFlashAlpha, 0.22);
+      this.cameraZoomPunch = Math.max(this.cameraZoomPunch, 0.05);
+    }
+  }
+
   public triggerShake(magnitude: number, duration = 0.22): void {
     magnitude *= this.tuning.shakeMult ?? 1;
     if (magnitude <= 0) return;
@@ -2691,6 +2703,7 @@ export class GameEngine {
 
     this.updateCrumblingPlatforms(safeDt);
     this.updatePlayer(safeDt, input, tuning);
+    this.fx.update(safeDt, this.player, this.enemies, tuning, this.currentStage.floorY);
     if (this.status !== 'PLAYING' && this.status !== 'CAMP') {
       this.updateCamera(safeDt, tuning, viewportW, viewportH);
       return;
@@ -9675,6 +9688,12 @@ export class GameEngine {
       }
     }
 
+    // affinity-v1: element / weapon-tier impact effects and per-element hit feel
+    const fxFeel =
+      source !== 'gas' && !isAssassination
+        ? this.fx.onHit(p, enemy, hitX, hitY, pushDir, { heavy: isHeavyHit, crit: isCrit, source, floorY: enemy.y })
+        : { shakeMul: 1, hitstopAddMs: 0, extraShake: 0 };
+
     if (isAssassination) {
       // MASSIVE ANIME EXECUTION FREEZE + HIGH-CONTRAST IMPACT FRAME + ZOOM PUNCH + +2 MP REWARD!
       sound.playAssassinate();
@@ -9732,8 +9751,8 @@ export class GameEngine {
       this.spawnSlashLine(hitX, hitY, pushDir > 0 ? -0.52 : Math.PI + 0.52, 180, 9, '#ffd166', '#ffffff', 0.26);
       this.spawnSlashLine(hitX, hitY, pushDir > 0 ? 0.55 : Math.PI - 0.55, 130, 5, '#ff4d6d', '#ffffff', 0.22);
       this.spawnDamageNumber(hitX, hitY - 14, `${damage}`, '#ffd166', 1.38, 'CRITICAL');
-      this.triggerShake(Math.max(12, tuning.critShakeIntensity * 1.25), 0.3);
-      this.hitstopTimer = Math.max((tuning.hitstopMs / 1000) * 3.0, 0.175);
+      this.triggerShake(Math.max(12, tuning.critShakeIntensity * 1.25) * fxFeel.shakeMul + fxFeel.extraShake, 0.3);
+      this.hitstopTimer = Math.max((tuning.hitstopMs / 1000) * 3.0, 0.175) + fxFeel.hitstopAddMs / 1000;
       this.cameraZoomPunch = Math.max(this.cameraZoomPunch, 0.085);
       this.impactFrameTimer = Math.max(this.impactFrameTimer, 0.06);
       this.triggerImpactFlash('#fff3b0', 0.52, hitX, hitY, 1.35, 0.26);
@@ -9795,8 +9814,8 @@ export class GameEngine {
       );
       if (source === 'weapon' || source === 'dash' || source === 'hammer_meteor' || source === 'grapple') {
         const minFreeze = isHeavyHit ? 0.068 : 0.044;
-        this.hitstopTimer = Math.max(this.hitstopTimer, tuning.hitstopMs / 1000, minFreeze);
-        this.triggerShake(isHeavyHit ? 6.2 : 3.8, isHeavyHit ? 0.16 : 0.11);
+        this.hitstopTimer = Math.max(this.hitstopTimer, Math.max(tuning.hitstopMs / 1000, minFreeze) + fxFeel.hitstopAddMs / 1000);
+        this.triggerShake((isHeavyHit ? 6.2 : 3.8) * fxFeel.shakeMul + fxFeel.extraShake, isHeavyHit ? 0.16 : 0.11);
         this.cameraZoomPunch = Math.max(this.cameraZoomPunch, isHeavyHit ? 0.032 : 0.014);
       }
     }

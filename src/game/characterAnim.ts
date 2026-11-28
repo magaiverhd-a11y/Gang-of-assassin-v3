@@ -1,3 +1,5 @@
+import { affinityFxEnabled, visualElement, visualTier } from './affinityFx';
+import { drawBruteHammerEvo, drawFistEvo, drawHeldWeaponEvo, drawStaffEvo, heldScale, setHeldEvo } from './weaponEvo';
 import { getActiveElementDef } from './defaults';
 import { CharacterId, Facing, Player, WeaponId } from './types';
 
@@ -699,6 +701,19 @@ function drawIdleHeldWeapon(
   trimGold: string,
   ember = '#f97316'
 ): void {
+  // affinity-v1: evolved weapons grow per tier and get their tier overlay
+  const s = scale * heldScale();
+  drawIdleHeldWeaponBase(ctx, weapon, s, trimGold, ember);
+  drawHeldWeaponEvo(ctx, weapon, s);
+}
+
+function drawIdleHeldWeaponBase(
+  ctx: CanvasRenderingContext2D,
+  weapon: WeaponId,
+  scale: number,
+  trimGold: string,
+  ember = '#f97316'
+): void {
   if (weapon === 'katana') {
     ctx.fillStyle = '#9f1239';
     ctx.fillRect(-1.5 * scale, -2 * scale, 3 * scale, 7 * scale);
@@ -1112,6 +1127,7 @@ function drawIronBrute(
       ctx.fillRect(-10 * scale, -32 * scale, 20 * scale, 12 * scale);
       ctx.fillStyle = ember;
       ctx.fillRect(-8 * scale, -28 * scale, 16 * scale, 2.5 * scale);
+      drawBruteHammerEvo(ctx, scale);
     } else {
       ctx.rotate(1.55);
       drawIdleHeldWeapon(ctx, weapon, scale, '#e5a93c', ember);
@@ -1524,6 +1540,7 @@ function drawMinstrel(
       ctx.moveTo(0, 8 * scale);
       ctx.bezierCurveTo(-10 * scale, 14 * scale, 9 * scale, 18 * scale, -5 * scale, 24 * scale);
       ctx.stroke();
+      drawHeldWeaponEvo(ctx, weapon, scale * heldScale());
     } else {
       drawIdleHeldWeapon(ctx, weapon, scale, goldTrim);
     }
@@ -1716,6 +1733,10 @@ function drawAshMonk(
     ctx.beginPath();
     ctx.arc(fHand.x, fHand.y, 9 * scale * emberGlow, 0, Math.PI * 2);
     ctx.fill();
+  }
+
+  if (weapon === 'ash_wraps' && !flash) {
+    drawFistEvo(ctx, fHand.x, fHand.y, fElbow.x, fElbow.y, scale);
   }
 
   if (attackState === 'idle' && weapon !== 'ash_wraps') {
@@ -1961,6 +1982,7 @@ function drawSableWizard(
     ctx.lineTo(cx - 2.4 * scale, cy);
     ctx.closePath();
     ctx.fill();
+    if (!flash) drawStaffEvo(ctx, cx, cy, up.x, up.y, fHand.x, fHand.y, scale);
   } else if (attackState === 'idle') {
     ctx.save();
     ctx.translate(fHand.x, fHand.y);
@@ -1984,6 +2006,7 @@ export function drawAnimatedPlayer(
   const h = (player.crouching ? player.crouchBaseH : player.baseH) * scale;
 
   ctx.save();
+  setHeldEvo(player);
 
   if (player.isHidden) {
     ctx.globalAlpha = 0.64;
@@ -2096,12 +2119,14 @@ export function drawAnimatedPlayer(
   } else if (player.characterId === 'minstrel') {
     drawMinstrel(ctx, w, h, scale, pose, flash, isHurt, player.weapon, player.attackState);
   } else if (player.characterId === 'monk') {
-    const evo = Math.floor(Math.max(0, player.weaponDamageBonus) / 5);
+    const evo = visualTier(player);
     const emberGlow = player.monkDashTimer > 0 || player.monkPalmTimer > 0 ? 1.2 : evo >= 1 ? 0.6 + evo * 0.2 : 0;
     drawAshMonk(ctx, w, h, scale, pose, flash, isHurt, player.weapon, player.attackState, emberGlow);
   } else if (player.characterId === 'wizard') {
-    const el = getActiveElementDef(player.baseElements, player.combinedElement);
-    const evo = Math.floor(Math.max(0, player.weaponDamageBonus) / 5);
+    const vel = visualElement(player);
+    const realEl = getActiveElementDef(player.baseElements, player.combinedElement);
+    const el = vel ? { primaryColor: affinityFxEnabled() ? vel.pal.mid : realEl?.primaryColor ?? vel.pal.mid } : null;
+    const evo = visualTier(player);
     const power =
       player.wizardNovaTimer > 0 || player.wizardCastTimer > 0 || player.attackState === 'active' ? 1 : 0.25 + evo * 0.25;
     drawSableWizard(ctx, w, h, scale, pose, flash, isHurt, player.weapon, player.attackState, el ? el.primaryColor : '#a5b4fc', power);
@@ -2120,6 +2145,7 @@ export function drawAnimatedPlayer(
     ctx.fill();
   }
 
+  setHeldEvo(null);
   ctx.restore();
 }
 

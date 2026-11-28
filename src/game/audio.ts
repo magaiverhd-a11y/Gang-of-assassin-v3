@@ -590,6 +590,23 @@ class SoundBank {
     notes.forEach((f, i) => this.playHarpNote(now + 0.04 + i * 0.05, f, 0.72, 0.11));
   }
 
+  /** affinity-v1: grim forge strike for a weapon evolving (minor, low bell, no bright arpeggio). */
+  public playWeaponTierUp(tier = 1): void {
+    const ctx = this.ensure();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+    const t = Math.max(1, Math.min(3, tier));
+    // anvil hit
+    this.playSubPunch(now, 120, 30, 0.55, 0.42, true, 0.5);
+    this.playMetallicRing(now, 196 * (1 + (t - 1) * 0.12), 1.4, 0.11, [1, 2.76, 5.4, 8.93], 0.75);
+    this.playNoiseBurst(now, 0.22, 'bandpass', 2600, 600, 1.6, 0.2, 0.5, 0.002);
+    // low minor toll: root, minor third, fifth (+ octave at higher tiers)
+    const root = 130.81 * (1 + (t - 1) * 0.06);
+    const chord = [1, 1.189, 1.498, ...(t >= 2 ? [2] : []), ...(t >= 3 ? [2.378] : [])];
+    chord.forEach((r, i) => this.playHarpNote(now + 0.12 + i * 0.09, root * r * 2, 1.1, 0.07));
+    this.playMetallicRing(now + 0.35, root, 1.8, 0.06, [1, 2.0, 2.98], 0.85);
+  }
+
   public playElementalAwaken(isFusion: boolean, elementId: ElementId): void {
     const ctx = this.ensure();
     if (!ctx) return;

@@ -1,3 +1,4 @@
+import { drawAffinitySwing } from './fxSwing';
 /**
  * Simple, modular Canvas 2D sprite & tile drawing functions.
  * Every visual piece is isolated here with clean shapes and palette constants
@@ -1435,47 +1436,8 @@ export function drawWeaponAttack(
   const evoTier = Math.floor(Math.max(0, player.weaponDamageBonus) / 5);
   const activeEl = getActiveElementDef(player.baseElements, player.combinedElement);
 
-  // Dramatic Every-5-Upgrades Weapon Evolution & Elemental Infusion Slash Overlay!
-  if (player.attackState === 'active' && player.attackWeapon !== 'spire_staff' && (evoTier >= 1 || activeEl)) {
-    const ah = (player.attackWasCrouching ? player.crouchBaseH : player.baseH) * scale;
-    const acx = player.x + player.facing * 18 * scale;
-    const acy = player.y - ah * 0.55;
-    const evoRadius = range * scale * (1.16 + evoTier * 0.18);
-    const startA = player.facing === 1 ? -Math.PI * 0.68 : Math.PI * 0.32;
-    const endA = player.facing === 1 ? Math.PI * 0.58 : Math.PI * 1.68;
-    const primaryCol = activeEl ? activeEl.primaryColor : evoTier >= 2 ? '#c084fc' : '#fde047';
-    const secondaryCol = activeEl ? activeEl.secondaryColor : evoTier >= 2 ? '#fde047' : '#f97316';
-
-    ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
-    ctx.strokeStyle = primaryCol;
-    ctx.globalAlpha = 0.42 + Math.min(0.35, evoTier * 0.14);
-    ctx.lineWidth = Math.max(8, (12 + evoTier * 6) * scale);
-    ctx.lineCap = 'round';
-    ctx.beginPath();
-    ctx.arc(acx, acy, evoRadius * 0.92, startA, endA, false);
-    ctx.stroke();
-
-    if (evoTier >= 1 || activeEl?.isCombined) {
-      ctx.strokeStyle = secondaryCol;
-      ctx.globalAlpha = 0.65;
-      ctx.lineWidth = Math.max(3, (4 + evoTier * 2) * scale);
-      ctx.beginPath();
-      ctx.arc(acx, acy, evoRadius * 1.02, startA + 0.08, endA - 0.08, false);
-      ctx.stroke();
-    }
-
-    if (evoTier >= 2) {
-      // Mythic & Transcendent twin outer astral shock crescent + tip star flares!
-      ctx.strokeStyle = '#ffffff';
-      ctx.globalAlpha = 0.78;
-      ctx.lineWidth = Math.max(2, 3 * scale);
-      ctx.beginPath();
-      ctx.arc(acx, acy, evoRadius * 1.12, startA + 0.18, endA - 0.18, false);
-      ctx.stroke();
-    }
-    ctx.restore();
-  }
+  // affinity-v1: element-styled swing + weapon-evolution tier layers (runes, serrated edge, fissure core)
+  drawAffinitySwing(ctx, player, scale, range);
 
   // 0. KATANA KEY [3] — Charged Huge Wide Iaijutsu Mega Slash (renders even when attackState === 'idle'!)
   if (player.katanaMegaSlashTimer > 0) {
