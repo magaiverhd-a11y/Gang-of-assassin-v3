@@ -10,6 +10,7 @@ import {
   EnemyTuning,
   EnemyType,
   KillFreezeTuning,
+  CombatTuning,
   FxTuning,
   CharacterId,
   CombinedElementId,
@@ -1315,6 +1316,16 @@ export function buildDefaultEnemyTuning(bosses: boolean): Record<string, EnemyTu
   return out;
 }
 
+
+export const DEFAULT_COMBAT_TUNING: CombatTuning = {
+  weaponEvoAttacks: true,
+  affinityAttacks: true,
+  evoReach: 1.0,
+  evoPower: 1.0,
+  affinityPower: 1.0,
+  mutedBolts: true,
+};
+
 export const DEFAULT_FX_TUNING: FxTuning = {
   affinityFx: true,
   intensity: 1.0,
@@ -1423,6 +1434,7 @@ export const DEFAULT_TUNING: TuningConfig = {
 
   killFreeze: DEFAULT_KILL_FREEZE,
   fx: DEFAULT_FX_TUNING,
+  combat: DEFAULT_COMBAT_TUNING,
   characters: buildDefaultCharacterTuning(),
   enemies: buildDefaultEnemyTuning(false) as Record<string, EnemyTuning>,
   bosses: buildDefaultEnemyTuning(true) as Record<string, BossTuning>,

@@ -403,6 +403,8 @@ export interface TuningConfig {
   killFreeze: KillFreezeTuning;
   /** Affinity & weapon-evolution visual effects (affinity-v1). Visual only — no power changes. */
   fx: FxTuning;
+  /** attacks-v1: weapon evo and affinity change the attack itself and ability [3]. */
+  combat: CombatTuning;
   characters: Record<CharacterId, CharacterTuning>;
   enemies: Record<string, EnemyTuning>;
   bosses: Record<string, BossTuning>;
@@ -965,6 +967,8 @@ export interface Enemy {
   burnTimer: number;
   burnTickTimer: number;
   chillTimer?: number;
+  witherTimer?: number;
+  witherTickTimer?: number;
   animTime: number;
   dead: boolean;
   shieldActive?: boolean;
@@ -1004,6 +1008,16 @@ export interface FxTuning {
   previewElement: number;
   /** Visual-only preview: 0 = off, 1 = Base, 2 = Awakened, 3 = Mythic, 4 = Transcendent. */
   previewEvoTier: number;
+}
+
+/** attacks-v1: weapon-tier and affinity changes to the attack itself and ability [3]. */
+export interface CombatTuning {
+  weaponEvoAttacks: boolean;
+  affinityAttacks: boolean;
+  evoReach: number;
+  evoPower: number;
+  affinityPower: number;
+  mutedBolts: boolean;
 }
 
 export interface Particle {

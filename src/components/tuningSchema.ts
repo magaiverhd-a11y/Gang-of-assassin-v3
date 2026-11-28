@@ -547,10 +547,41 @@ const bossesTab: TabDef = {
   })),
 };
 
+
+const C = (k: string) => ['combat', k];
+const combatTab: TabDef = {
+  id: 'combat',
+  label: 'Attack Feel',
+  accent: '#8f86c9',
+  roots: ['combat'],
+  note: 'These change the attack itself and ability [3] (Weapon Skill). Numbers stay moderate and do not change weapon damage growth. Off = original attack behaviour.',
+  groups: [
+    {
+      id: 'combat-evo',
+      title: 'Weapon Evolution Attacks (every 5 upgrades)',
+      items: [
+        T(C('weaponEvoAttacks'), 'Evo Changes Attacks', 'Awakened / Mythic / Transcendent change reach, hit pattern, extra waves and a bigger ability [3]. Off = only the visual weapon changes.'),
+        S(C('evoReach'), 'Evo Reach', 'How much longer / larger each evolution tier makes the attack and ability [3].', 0, 2, 0.05, 'x'),
+        S(C('evoPower'), 'Evo Waves', 'How strong the extra waves, pulses and finishers are at Mythic and Transcendent.', 0, 2, 0.05, 'x'),
+      ],
+    },
+    {
+      id: 'combat-aff',
+      title: 'Affinity Attacks & Ability [3]',
+      items: [
+        T(C('affinityAttacks'), 'Affinity Changes Attacks', 'Each element changes the basic attack and ability [3] (burn splash, chill push, air reach/pierce, earth shockwave, holy burst, shadow wither/lifesteal). Combined elements mix both parents.'),
+        S(C('affinityPower'), 'Affinity Power', 'How strong those affinity attack and ability [3] effects are.', 0, 2, 0.05, 'x'),
+        T(C('mutedBolts'), 'Muted Wizard Bolts', 'Wizard bolts and nova use the muted affinity colours instead of the bright element colour.'),
+      ],
+    },
+  ],
+};
+
 export const TUNING_TABS: TabDef[] = [
   generalTab,
   killTab,
   fxTab,
+  combatTab,
   ...CHARACTER_ORDER.map(characterTab),
   enemiesTab,
   bossesTab,
