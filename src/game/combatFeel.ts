@@ -98,7 +98,7 @@ export function startupMul(_weapon: WeaponId | string, tier: number, flags: Affi
   let m = 1;
   if (flags.air) m *= 1 - 0.14 * c.affinityPower;
   if (flags.earth) m *= 1 + 0.06 * c.affinityPower;
-  if (tier >= 2 && (_weapon === 'rapier' || _weapon === 'ash_wraps')) m *= 0.92;
+  if (tier >= 2 && (_weapon === 'rapier' || _weapon === 'ash_wraps' || _weapon === 'shadow_daggers')) m *= 0.92;
   return Math.max(0.7, m);
 }
 
@@ -108,6 +108,7 @@ export function extraPulses(weapon: WeaponId | string, tier: number): number {
     if (
       weapon === 'rapier' ||
       weapon === 'ash_wraps' ||
+      weapon === 'shadow_daggers' ||
       weapon === 'naginata' ||
       weapon === 'greataxe' ||
       weapon === 'ribbon_whip' ||
@@ -284,6 +285,8 @@ export function isSkill3Active(p: Player): boolean {
     p.naginataVaultTimer > 0 ||
     p.monkDashTimer > 0 ||
     p.wizardNovaTimer > 0 ||
+    p.assassinStepTimer > 0 ||
+    p.assassinMarkCastTimer > 0 ||
     p.minstrelDanceTimer > 0
   );
 }

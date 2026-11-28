@@ -2,6 +2,7 @@ import { sound } from './audio';
 import { AffinityFx } from './fxSystem';
 import { tierLook, visualElement } from './affinityFx';
 import {
+  AffinityFlags,
   affFlags,
   affinityHitMods,
   attackHeightMul,
@@ -96,6 +97,12 @@ interface HitOpts {
   noAssassinate?: boolean;
   guardBreak?: boolean;
   stun?: number;
+  /** Assassin: count this hit as a stealth execution on a regular foe, wherever it stands. */
+  forceAssassinate?: boolean;
+  /** Assassin: label shown on an execution. */
+  callout?: string;
+  /** Assassin: kind of hit for the execution flavour. */
+  assassinViaDagger?: boolean;
 }
 
 function rectsOverlap(a: Rect, b: Rect): boolean {
@@ -140,6 +147,10 @@ export class GameEngine {
   });
   public bloodStains: BloodStain[] = [];
   public slashLines: SlashLine[] = [];
+  /** Assassin: brief beam from the hero to a freshly marked foe. */
+  public markBeams: { x1: number; y1: number; x2: number; y2: number; life: number; maxLife: number }[] = [];
+  /** Assassin: short cooldown between interact shadow-step executes. */
+  private assassinStepCd = 0;
   public elementalArcs: ElementalArc[] = [];
   public bossDeathSequences: BossDeathSequence[] = [];
   public damageNumbers: DamageNumber[] = [];
@@ -741,6 +752,7 @@ export class GameEngine {
       this.fx.reset();
       this.bloodStains = [];
       this.slashLines = [];
+      this.markBeams = [];
       this.elementalArcs = [];
       this.bossDeathSequences = [];
       this.damageNumbers = [];
@@ -755,7 +767,9 @@ export class GameEngine {
       this.levelUpDelayTimer = 0;
 
       const campSpawnX =
-        this.selectedCharacter === 'monk'
+        this.selectedCharacter === 'assassin'
+          ? 1175
+          : this.selectedCharacter === 'monk'
           ? 1080
           : this.selectedCharacter === 'wizard'
             ? 398
@@ -2344,6 +2358,17 @@ export class GameEngine {
     // Palm-only waves for the Monk finisher; other weapons fire on every swing at their tier.
     const allowPalm = p.attackWeapon !== 'ash_wraps' || p.monkComboStep === 2;
     if (!allowPalm) return;
+    // Assassin: Mythic+ cross-slashes fling ghost daggers; Transcendent flings them on every strike (a fan on the cross-slash).
+    if (p.attackWeapon === 'shadow_daggers' && tier >= 2) {
+      const cross = p.assassinComboStep === 2;
+      const n = cross ? (tier >= 3 ? 3 : 1) : tier >= 3 ? 1 : 0;
+      const gx = p.x + p.facing * 24 * scale;
+      const gy = p.y - h * 0.58;
+      for (let i = 0; i < n; i++) {
+        const ang = (i - (n - 1) / 2) * 0.17;
+        this.spawnThrownDagger(gx, gy, gx + p.facing * Math.cos(ang) * 200, gy + Math.sin(ang) * 200, tuning, 1, true, 0);
+      }
+    }
     const waves = swingWaves(p.attackWeapon, tier, c);
     const ox = p.x + p.facing * 28 * scale;
     const oy = p.y - h * 0.55;
@@ -2392,6 +2417,8 @@ export class GameEngine {
 
   private applySkill3Cast(tuning: TuningConfig): void {
     const p = this.player;
+    // Assassin: Mark for Death applies its affinity effects at the marked foe / the execution, not around him.
+    if (p.characterId === 'assassin') return;
     const c = combatTune(tuning);
     const flags = affFlags(p, tuning);
     const scale = tuning.playerScale;
@@ -2568,6 +2595,20 @@ export class GameEngine {
       return null;
     }
 
+    if (p.attackWeapon === 'shadow_daggers') {
+      // Twin daggers: short-to-medium reach; the cross-slash reaches a little further and covers more height.
+      const cross = p.assassinComboStep === 2;
+      const dReach = reach * (cross ? 1.35 : 1.05) * (weaponLv >= 4 ? 1.08 : 1.0);
+      const hitH = Math.max(26, h * (cross ? 0.82 : 0.5) * heightMul);
+      const originX = p.x + p.facing * (p.baseW * scale * 0.15);
+      return {
+        x: p.facing === 1 ? originX : originX - dReach,
+        y: p.y - h * 0.58 - hitH / 2,
+        w: dReach,
+        h: hitH,
+      };
+    }
+
     if (p.attackWeapon === 'ash_wraps') {
       // Monk fists: very short, fast; the 3rd (palm) strike reaches a little further and taller.
       const palm = p.monkComboStep === 2;
@@ -2700,6 +2741,7 @@ export class GameEngine {
       if (item.kind === 'camp_hero_minstrel' && p.characterId === 'minstrel') continue;
       if (item.kind === 'camp_hero_monk' && p.characterId === 'monk') continue;
       if (item.kind === 'camp_hero_wizard' && p.characterId === 'wizard') continue;
+      if (item.kind === 'camp_hero_assassin' && p.characterId === 'assassin') continue;
       const d = Math.hypot(p.x - item.x, p.y - item.y);
       if (d < bestDist) {
         bestDist = d;
@@ -3048,6 +3090,15 @@ export class GameEngine {
     if (p.wizardNovaTimer > 0) p.wizardNovaTimer = Math.max(0, p.wizardNovaTimer - dt);
     if (p.wizardCastTimer > 0) p.wizardCastTimer = Math.max(0, p.wizardCastTimer - dt);
     if (p.wizardFloatTimer > 0) p.wizardFloatTimer = Math.max(0, p.wizardFloatTimer - dt);
+    if (p.assassinStepTimer > 0) p.assassinStepTimer = Math.max(0, p.assassinStepTimer - dt);
+    if (p.assassinBlinkTimer > 0) p.assassinBlinkTimer = Math.max(0, p.assassinBlinkTimer - dt);
+    if (p.assassinThrowTimer > 0) p.assassinThrowTimer = Math.max(0, p.assassinThrowTimer - dt);
+    if (p.assassinThrowCooldown > 0) p.assassinThrowCooldown = Math.max(0, p.assassinThrowCooldown - dt);
+    if (p.assassinMarkCastTimer > 0) p.assassinMarkCastTimer = Math.max(0, p.assassinMarkCastTimer - dt);
+    if (p.assassinComboTimer > 0) {
+      p.assassinComboTimer = Math.max(0, p.assassinComboTimer - dt);
+      if (p.assassinComboTimer === 0) p.assassinComboStep = 0;
+    }
 
     // Cooldowns & Buff timers
     if (p.invulnTimer > 0) p.invulnTimer = Math.max(0, p.invulnTimer - dt);
@@ -3096,8 +3147,10 @@ export class GameEngine {
 
     if (input.interactJustPressed) {
       // Mobile: the Interact button performs the stealth assassination when one is lined up.
-      const assassinTarget = input.autoAttack ? this.findAssassinationTarget(tuning) : null;
-      if (assassinTarget && p.attackState === 'idle') {
+      const assassinTarget = input.autoAttack ? this.findMeleeAssassinationTarget(tuning) : null;
+      if (p.characterId === 'assassin' && this.tryAssassinInteractExecute(input, tuning)) {
+        // Shadow-step execute from range (handled).
+      } else if (assassinTarget && p.attackState === 'idle') {
         p.facing = assassinTarget.x >= p.x ? 1 : -1;
         p.attackBufferTimer = 0.14;
       } else {
@@ -3154,6 +3207,7 @@ export class GameEngine {
       p.monkChargeTimer = 0;
       p.monkCharge = 0;
       p.wizardFloatTimer = 0;
+      p.assassinBlinkTimer = 0;
       p.wallClingDir = 0;
       p.hitStunTimer = Math.max(0, p.hitStunTimer - dt);
       if (!p.isAirKnockback) {
@@ -3594,6 +3648,24 @@ export class GameEngine {
       }
     }
 
+    // Assassin: crouch / hold down + [1] throws a dagger instead of a melee chain.
+    if (
+      p.attackBufferTimer > 0 &&
+      p.attackState === 'idle' &&
+      p.characterId === 'assassin' &&
+      p.weapon === 'shadow_daggers' &&
+      (input.down || p.crouching) &&
+      !autoAttackTriggered &&
+      !this.currentStage.isCamp
+    ) {
+      p.attackBufferTimer = 0;
+      if (p.assassinThrowCooldown <= 0) {
+        const th = this.player;
+        th.facing = (input.right ? 1 : 0) - (input.left ? 1 : 0) !== 0 ? (input.right ? 1 : -1) : th.facing;
+        this.throwDagger(tuning);
+      }
+    }
+
     // Start buffered weapon attack (Key 1 or Mobile Auto-Attack) — grants Universal Zero-Extra-Button Perfect Parry Window for ALL 4 Heroes!
     if (p.attackBufferTimer > 0 && p.attackState === 'idle') {
       p.attackBufferTimer = 0;
@@ -3665,6 +3737,13 @@ export class GameEngine {
         p.attackTotalStartup = (tuning.attackStartupMs / 1000) * (p.monkComboStep === 2 ? 1.0 : 0.5);
         p.attackTimer = p.attackTotalStartup;
         sound.playMonkFist(p.monkComboStep, wepEvoTier);
+      } else if (p.weapon === 'shadow_daggers') {
+        // Twin daggers: stab, slash, then a crossing double slash — chained while inside the combo window.
+        p.assassinComboStep = p.assassinComboTimer > 0 ? (p.assassinComboStep + 1) % 3 : 0;
+        p.assassinComboTimer = 0.6;
+        p.attackTotalStartup = (tuning.attackStartupMs / 1000) * (p.assassinComboStep === 2 ? 0.95 : 0.45);
+        p.attackTimer = p.attackTotalStartup;
+        sound.playDaggerSlash(p.assassinComboStep, wepEvoTier);
       } else if (p.weapon === 'spire_staff') {
         p.attackTotalStartup = (tuning.attackStartupMs / 1000) * 1.15;
         p.attackTimer = p.attackTotalStartup;
@@ -3935,6 +4014,13 @@ export class GameEngine {
         p.jumpBufferTimer = 0;
         p.jumpCutApplied = true;
         if (p.attackState === 'recovery') p.attackState = 'idle';
+      } else if (this.tryStartShadowBlink(tuning)) {
+        p.jumpBufferTimer = 0;
+        p.jumpCutApplied = true;
+        if (p.attackState === 'recovery') p.attackState = 'idle';
+      } else if (p.characterId === 'assassin' && p.assassinBlinkUsed) {
+        // Consume the press so a jump after the blink does not fire when he lands.
+        p.jumpBufferTimer = 0;
       } else if (p.characterId === 'wizard' && (p.wizardFloatUsed || p.wizardFloatTimer > 0)) {
         // Consume the press so a jump during the float does not fire when he lands.
         p.jumpBufferTimer = 0;
@@ -4426,6 +4512,11 @@ export class GameEngine {
           });
         }
         return true;
+      }
+
+      case 'shadow_daggers': {
+        // Assassin Weapon Skill [3]: MARK FOR DEATH — brand a foe from very far; press again to shadow-step and execute it.
+        return this.castMarkForDeath(tuning);
       }
 
       case 'spire_staff': {
@@ -5204,6 +5295,36 @@ export class GameEngine {
         return false;
       }
 
+      case 'venom_needles': {
+        // Assassin spell: a fan of poisoned needles (more every 5 levels), tinted by the active Affinity.
+        const el = this.getWizardElement();
+        const count = Math.min(7, 3 + spellEvo * 2);
+        const speed = 660;
+        for (let i = 0; i < count; i++) {
+          const ang = (i - (count - 1) / 2) * 0.13;
+          this.projectiles.push({
+            id: this.nextProjectileId++,
+            x: p.x + p.facing * 20 * scale,
+            y: p.y - h * 0.6,
+            vx: p.facing * Math.cos(ang) * speed,
+            vy: Math.sin(ang) * speed + (input.up ? -60 : 0),
+            radius: 5,
+            fromEnemy: false,
+            damage: 1,
+            life: 0.62 + spellEvo * 0.08,
+            rotation: 0,
+            kind: 'venom_needle',
+            slotLevel,
+            color: el.root ? el.c1 : '#65a30d',
+            hitIds: [],
+          });
+        }
+        p.assassinThrowTimer = 0.26;
+        sound.playVenomNeedles(spellEvo);
+        this.spawnSparkles(p.x + p.facing * 22 * scale, p.y - h * 0.6, 6, '#4d7c0f', '#bef264', 0.7);
+        return false;
+      }
+
       case 'chain_storm': {
         // Lightning leaps between nearby foes, in the colour of the active Affinity.
         const el = this.getWizardElement();
@@ -5269,6 +5390,558 @@ export class GameEngine {
   // ===========================================================================
   // MONK & WIZARD KITS
   // ===========================================================================
+
+  // ===========================================================================
+  // ASSASSIN KIT: Twin Nightfangs, Mark for Death [3], Shadow Step execute, Shadow Blink, Venom Needles
+  // ===========================================================================
+
+  /** Cooldown of [3] after an execute / boss mark (Transcendent weapons are faster). */
+  private markCooldownSec(): number {
+    const ct = this.charTune('assassin');
+    const evo = Math.min(3, this.getWeaponEvoTier());
+    return Math.max(0.5, ct.assassinMarkCooldown * (evo >= 3 ? 0.65 : 1));
+  }
+
+  private liveMarkedFoes(): Enemy[] {
+    return this.enemies.filter((e) => !e.dead && !e.isBoss && (e.markTimer ?? 0) > 0);
+  }
+
+  /** The marked regular foe nearest to the Assassin (if any). */
+  private nearestLiveMark(): Enemy | null {
+    const p = this.player;
+    let best: Enemy | null = null;
+    let bestD = Infinity;
+    for (const e of this.liveMarkedFoes()) {
+      const d = Math.abs(e.x - p.x);
+      if (d < bestD) {
+        bestD = d;
+        best = e;
+      }
+    }
+    return best;
+  }
+
+  private onMarkExpired(enemy: Enemy, tuning: TuningConfig): void {
+    const p = this.player;
+    this.spawnSparkles(enemy.x, enemy.y - enemy.baseH * tuning.enemyScale * 0.55, 6, '#44403c', '#9f1239', 0.55);
+    if (!enemy.isBoss && p.characterId === 'assassin') {
+      p.weaponSkillCooldown = Math.max(p.weaponSkillCooldown, this.markCooldownSec() * 0.5);
+    }
+  }
+
+  private onMarkedFoeDied(enemy: Enemy): void {
+    const p = this.player;
+    enemy.markTimer = 0;
+    if (p.characterId !== 'assassin') return;
+    p.weaponSkillCooldown = Math.max(p.weaponSkillCooldown, this.markCooldownSec() * 0.6);
+  }
+
+  /** Aimed target for Mark for Death: nearest foe in the facing direction (any foe behind us as a fallback). */
+  private findMarkTarget(tuning: TuningConfig, includeBosses = true): Enemy | null {
+    const p = this.player;
+    const ct = this.charTune('assassin');
+    const flags = affFlags(p, tuning);
+    const range = ct.assassinMarkRange * (flags.air ? 1 + 0.25 * combatTune(tuning).affinityPower : 1);
+    let best: Enemy | null = null;
+    let bestScore = Infinity;
+    for (const e of this.enemies) {
+      if (e.dead || (e.markTimer ?? 0) > 0) continue;
+      if (e.isBoss && !includeBosses) continue;
+      const dx = e.x - p.x;
+      const dy = e.y - p.y;
+      if (Math.abs(dx) > range || Math.abs(dy) > range * 0.55) continue;
+      const behind = dx * p.facing < -30;
+      const score = Math.abs(dx) + Math.abs(dy) * 1.4 + (behind ? 420 : 0) + (e.isBoss ? 0 : 0);
+      if (score < bestScore) {
+        bestScore = score;
+        best = e;
+      }
+    }
+    return best;
+  }
+
+  /** Brand a foe: skull mark, beam, affinity status. Bosses take extra damage; regular foes can be executed. */
+  private applyDeathMark(enemy: Enemy, tuning: TuningConfig, fromBeam: boolean): void {
+    const p = this.player;
+    const ct = this.charTune('assassin');
+    const evo = Math.min(3, this.getWeaponEvoTier());
+    const flags = affFlags(p, tuning);
+    const c = combatTune(tuning);
+    const pow = c.affinityPower;
+    const base = enemy.isBoss ? ct.assassinBossMarkDuration : ct.assassinMarkDuration;
+    const dur = base * (evo >= 1 ? 1.25 : 1) * (flags.shadow ? 1 + 0.3 * pow : 1);
+    enemy.markTimer = dur;
+    enemy.markMaxTimer = dur;
+    const ey = enemy.y - enemy.baseH * tuning.enemyScale * 0.55;
+    if (fromBeam) {
+      const h = (p.crouching ? p.crouchBaseH : p.baseH) * tuning.playerScale;
+      this.markBeams.push({ x1: p.x + p.facing * 14 * tuning.playerScale, y1: p.y - h * 0.62, x2: enemy.x, y2: ey, life: 0.32, maxLife: 0.32 });
+    }
+    this.shockwaves.push({ x: enemy.x, y: ey, radius: 6, maxRadius: 54, color: '#9f1239', life: 0.32, maxLife: 0.32 });
+    this.spawnSparkles(enemy.x, ey, 12, '#7f1d1d', '#fda4af', 0.8);
+    this.spawnDamageNumber(
+      enemy.x,
+      enemy.y - enemy.baseH * tuning.enemyScale - 22,
+      enemy.isBoss ? `MARKED +${Math.round(ct.assassinBossMarkBonusPct)}%` : 'MARKED FOR DEATH',
+      '#be123c',
+      1.15,
+      enemy.isBoss ? 'BOSS TAKES EXTRA DAMAGE' : 'PRESS [3] TO EXECUTE'
+    );
+    // Affinity changes what the brand does to the foe.
+    if (flags.fire) {
+      enemy.burnTimer = Math.max(enemy.burnTimer, 3.2 * pow);
+      enemy.burnTickTimer = Math.max(enemy.burnTickTimer, 0.75);
+    }
+    if (flags.water) enemy.chillTimer = Math.max(enemy.chillTimer ?? 0, 3 * pow);
+    if (flags.shadow) {
+      enemy.witherTimer = Math.max(enemy.witherTimer ?? 0, 3.6 * pow);
+      enemy.witherTickTimer = enemy.witherTickTimer ?? 0.5;
+    }
+    if (flags.earth && !enemy.isBoss) enemy.hurtStunTimer = Math.max(enemy.hurtStunTimer, 0.35 * pow);
+    if (flags.light) this.shockwaves.push({ x: enemy.x, y: ey, radius: 6, maxRadius: 80, color: '#fde68a', life: 0.3, maxLife: 0.3 });
+    // Mythic: the brand also lands on a second nearby regular foe.
+    if (evo >= 2 && !enemy.isBoss && fromBeam) {
+      let second: Enemy | null = null;
+      let sd = 380;
+      for (const e of this.enemies) {
+        if (e === enemy || e.dead || e.isBoss || (e.markTimer ?? 0) > 0) continue;
+        const d = Math.hypot(e.x - enemy.x, e.y - enemy.y);
+        if (d < sd) {
+          sd = d;
+          second = e;
+        }
+      }
+      if (second) this.applyDeathMark(second, tuning, false);
+    }
+  }
+
+  /** [3] Mark for Death: with a live mark it shadow-step executes it; otherwise it brands a foe. */
+  private castMarkForDeath(tuning: TuningConfig): boolean {
+    const p = this.player;
+    if (this.currentStage.isCamp) return false;
+    const live = this.nearestLiveMark();
+    if (live) {
+      this.shadowStepExecute(live, tuning, true);
+      return true;
+    }
+    const target = this.findMarkTarget(tuning);
+    if (!target) {
+      this.spawnDamageNumber(p.x, p.y - p.baseH * tuning.playerScale - 14, 'NO TARGET', '#9f1239', 0.85);
+      p.weaponSkillCooldown = Math.max(p.weaponSkillCooldown, 0.3);
+      return false;
+    }
+    p.facing = target.x >= p.x ? 1 : -1;
+    p.assassinMarkCastTimer = 0.3;
+    p.crouching = false;
+    sound.playDeathMark();
+    this.triggerShake(3, 0.12);
+    this.applyDeathMark(target, tuning, true);
+    // A regular foe: [3] is ready again at once so the execute is one more press. A boss: full cooldown.
+    p.weaponSkillCooldown = target.isBoss ? this.markCooldownSec() : 0.45;
+    return true;
+  }
+
+  private isPlayerSpotFree(x: number, y: number, tuning: TuningConfig): boolean {
+    const p = this.player;
+    const scale = tuning.playerScale;
+    const halfW = (p.baseW * scale) / 2;
+    const h = p.baseH * scale;
+    if (x < halfW + 6 || x > this.currentStage.worldWidth - halfW - 6) return false;
+    const rect: Rect = { x: x - halfW, y: y - h, w: halfW * 2, h: h - 4 };
+    for (const plat of this.platforms) {
+      if (plat.oneWay || !this.isPlatformSolid(plat)) continue;
+      if (rectsOverlap(rect, plat)) return false;
+    }
+    return true;
+  }
+
+  /** Foe the Assassin can execute from a distance right now: a marked foe, or an unaware / low-HP one in range. */
+  public findAssassinRangedTarget(tuning: TuningConfig): Enemy | null {
+    const p = this.player;
+    if (p.characterId !== 'assassin' || this.currentStage.isCamp) return null;
+    const ct = this.charTune('assassin');
+    const flags = affFlags(p, tuning);
+    const markRange = ct.assassinMarkRange * (flags.air ? 1 + 0.25 * combatTune(tuning).affinityPower : 1);
+    let best: Enemy | null = null;
+    let bestScore = Infinity;
+    for (const e of this.enemies) {
+      if (e.dead || e.isBoss) continue;
+      const dx = Math.abs(e.x - p.x);
+      const dy = Math.abs(e.y - p.y);
+      let score: number;
+      if ((e.markTimer ?? 0) > 0) {
+        if (dx > markRange || dy > markRange * 0.55) continue;
+        score = dx - 100000;
+      } else {
+        const unaware = !e.alerted && tuning.assassinationEnabled;
+        const weak = e.hp <= Math.max(1, Math.floor(e.maxHp * ct.assassinExecHpPct));
+        if (!unaware && !weak) continue;
+        if (dx > ct.assassinExecRange || dy > 170) continue;
+        score = dx;
+      }
+      if (score < bestScore) {
+        bestScore = score;
+        best = e;
+      }
+    }
+    return best;
+  }
+
+  /** Interact (desktop [0] / mobile stick tap) for the Assassin: execute from range when no door / melee target comes first. */
+  private tryAssassinInteractExecute(input: InputState, tuning: TuningConfig): boolean {
+    const p = this.player;
+    if (p.characterId !== 'assassin' || this.currentStage.isCamp) return false;
+    if (this.assassinStepCd > 0) return false;
+    const target = this.findAssassinRangedTarget(tuning);
+    if (!target) return false;
+    const marked = (target.markTimer ?? 0) > 0;
+    if (!marked) {
+      if (this.getNearbyInteractable()) return false;
+      if (input.autoAttack && this.findMeleeAssassinationTarget(tuning)) return false;
+    }
+    this.shadowStepExecute(target, tuning, marked);
+    return true;
+  }
+
+  /** Teleport to a foe and execute it (kill credit, XP, drops and the full assassination freeze). */
+  private shadowStepExecute(enemy: Enemy, tuning: TuningConfig, viaMark: boolean): void {
+    const p = this.player;
+    const ct = this.charTune('assassin');
+    const scale = tuning.playerScale;
+    const evo = Math.min(3, this.getWeaponEvoTier());
+    const flags = affFlags(p, tuning);
+    const pow = combatTune(tuning).affinityPower;
+    const halfW = (p.baseW * scale) / 2;
+    const eHalf = (enemy.baseW * tuning.enemyScale) / 2;
+    const gap = eHalf + halfW + 6;
+    const dir = enemy.facing;
+    const tries = [enemy.x - dir * gap, enemy.x + dir * gap, enemy.x - dir * (gap + 44), enemy.x + dir * (gap + 44)];
+    let destX = tries[0];
+    for (const x of tries) {
+      if (this.isPlayerSpotFree(x, enemy.y, tuning)) {
+        destX = x;
+        break;
+      }
+    }
+    destX = Math.max(halfW + 6, Math.min(this.currentStage.worldWidth - halfW - 6, destX));
+    const sx = p.x;
+    const sy = p.y;
+    const dist = Math.hypot(destX - sx, enemy.y - sy);
+    const n = Math.min(14, Math.max(3, Math.floor(dist / 48)));
+    const trailCol = flags.id ? (flags.profile?.pal.mid ?? '#7f1d1d') : '#7f1d1d';
+    for (let i = 0; i <= n; i++) {
+      this.afterimages.push({
+        x: sx + ((destX - sx) * i) / n,
+        y: sy + ((enemy.y - sy) * i) / n,
+        facing: p.facing,
+        crouching: false,
+        color: i % 2 ? trailCol : '#1c1917',
+        life: 0.3 + i * 0.012,
+        maxLife: 0.46,
+      });
+    }
+    for (let i = 0; i < 16; i++) {
+      this.particles.push({
+        x: sx + (Math.random() - 0.5) * 18,
+        y: sy - Math.random() * p.baseH * scale,
+        vx: (Math.random() - 0.5) * 90,
+        vy: -20 - Math.random() * 70,
+        size: 3 + Math.random() * 3.5,
+        color: Math.random() < 0.6 ? '#1c1917' : '#44403c',
+        life: 0.5,
+        maxLife: 0.5,
+        kind: 'dust',
+        rotation: 0,
+      });
+    }
+    p.x = destX;
+    p.y = enemy.y;
+    p.vx = 0;
+    p.vy = 0;
+    p.onGround = enemy.onGround;
+    p.facing = enemy.x >= destX ? 1 : -1;
+    p.attackState = 'idle';
+    p.attackTimer = 0;
+    p.crouching = false;
+    p.assassinStepTimer = 0.34;
+    p.invulnTimer = Math.max(p.invulnTimer, 0.55);
+    sound.playShadowStep();
+    this.shockwaves.push({ x: destX, y: p.y - p.baseH * scale * 0.5, radius: 8, maxRadius: 74, color: '#7f1d1d', life: 0.26, maxLife: 0.26 });
+    this.triggerShake(4, 0.14);
+
+    const weak = !viaMark && enemy.alerted;
+    enemy.markTimer = 0;
+    const hitX = enemy.x;
+    const hitY = enemy.y - enemy.baseH * tuning.enemyScale * 0.55;
+    this.handlePlayerHitEnemy(enemy, tuning, 'dash', 1 + p.weaponDamageBonus, {
+      forceAssassinate: true,
+      kbX: 240,
+      kbY: 100,
+      dirX: p.facing,
+      callout: viaMark ? 'DEATH MARK' : weak ? 'FINISHED' : 'SHADOW STEP',
+    });
+
+    // Awakened: ghost daggers fly at other foes. Transcendent: a shadow burst around the kill.
+    if (evo >= 1) {
+      let sent = 0;
+      for (const e of this.enemies) {
+        if (e === enemy || e.dead || sent >= 2) continue;
+        if (Math.hypot(e.x - hitX, e.y - hitY) > 440) continue;
+        this.spawnThrownDagger(hitX, hitY, e.x, e.y - e.baseH * tuning.enemyScale * 0.55, tuning, 1, true, 0);
+        sent += 1;
+      }
+    }
+    if (evo >= 3) {
+      this.shockwaves.push({ x: hitX, y: hitY, radius: 10, maxRadius: 150 * scale, color: '#0c0a09', life: 0.3, maxLife: 0.3 });
+      this.shockwaves.push({ x: hitX, y: hitY, radius: 10, maxRadius: 120 * scale, color: '#9f1239', life: 0.26, maxLife: 0.26 });
+      for (const e of this.enemies) {
+        if (e === enemy || e.dead) continue;
+        const ey = e.y - (e.baseH * tuning.enemyScale) / 2;
+        if (Math.hypot(e.x - hitX, ey - hitY) <= 150 * scale) {
+          this.handlePlayerHitEnemy(e, tuning, 'weapon', 1 + p.weaponDamageBonus, {
+            kbX: 340,
+            kbY: 140,
+            dirX: e.x >= hitX ? 1 : -1,
+            stun: 0.5,
+            noAssassinate: true,
+          });
+        }
+      }
+    }
+    this.assassinAffinityExecute(hitX, hitY, tuning, flags, pow);
+
+    if (viaMark) {
+      p.weaponSkillCooldown = this.liveMarkedFoes().length > 0 ? 0.6 : this.markCooldownSec();
+    } else {
+      this.assassinStepCd = 0.9;
+    }
+  }
+
+  /** Affinity on Mark for Death: what the execution leaves behind / does around the kill. */
+  private assassinAffinityExecute(x: number, y: number, tuning: TuningConfig, flags: AffinityFlags, pow: number): void {
+    const p = this.player;
+    if (!flags.id) return;
+    const scale = tuning.playerScale;
+    const c = combatTune(tuning);
+    const zr = skillZoneRadius(flags, c);
+    if (zr > 0 && (flags.fire || flags.shadow || flags.light || flags.earth || flags.water)) {
+      const kind: BaseElementId = flags.fire ? 'fire' : flags.shadow ? 'shadow' : flags.light ? 'light' : flags.earth ? 'earth' : 'water';
+      this.spawnAffinityZone(x, p.y - 2, kind, zr * scale * 1.2, 1.4 + 0.4 * pow);
+    }
+    const R = (110 + 30 * pow) * scale;
+    for (const e of this.enemies) {
+      if (e.dead) continue;
+      const ey = e.y - (e.baseH * tuning.enemyScale) / 2;
+      if (Math.hypot(e.x - x, ey - y) > R) continue;
+      if (flags.water) {
+        e.chillTimer = Math.max(e.chillTimer ?? 0, 2.5 * pow);
+        if (!e.isBoss) e.vx = (e.x >= x ? 1 : -1) * 150 * pow;
+      }
+      if (flags.air && !e.isBoss) {
+        e.vx = Math.sign(x - e.x || 1) * (150 + 60 * pow);
+        e.hurtStunTimer = Math.max(e.hurtStunTimer, 0.1);
+      }
+      if (flags.earth && !e.isBoss) {
+        e.hurtStunTimer = Math.max(e.hurtStunTimer, 0.3 * pow);
+        e.vx = (e.x >= x ? 1 : -1) * 190 * pow;
+      }
+      if (flags.fire) {
+        e.burnTimer = Math.max(e.burnTimer, 2.4 * pow);
+        e.burnTickTimer = Math.max(e.burnTickTimer, 0.75);
+      }
+      if (flags.shadow) {
+        e.witherTimer = Math.max(e.witherTimer ?? 0, 2.6 * pow);
+        e.witherTickTimer = e.witherTickTimer ?? 0.5;
+      }
+    }
+    if (flags.shadow && p.hp < p.maxHp && Math.random() < 0.45 * pow) {
+      p.hp = Math.min(p.maxHp, p.hp + 1);
+      this.spawnDamageNumber(p.x, p.y - p.baseH * scale - 26, '+1 HP', '#c084fc', 0.9);
+    }
+    if (flags.earth) this.triggerShake(6, 0.18);
+    const col = flags.profile?.pal.mid ?? '#9f1239';
+    this.shockwaves.push({ x, y, radius: 8, maxRadius: R, color: col, life: 0.3, maxLife: 0.3 });
+    this.spawnSparkles(x, y, 10 + Math.round(pow * 6), col, flags.profile?.pal.core ?? '#fafafa', 0.9);
+  }
+
+  /** A thrown (or ghost) dagger toward a point. `spectral` daggers pierce and are tinted crimson. */
+  private spawnThrownDagger(
+    ox: number,
+    oy: number,
+    tx: number,
+    ty: number,
+    tuning: TuningConfig,
+    dmg: number,
+    spectral: boolean,
+    bonus: number
+  ): void {
+    const p = this.player;
+    const ct = this.charTune('assassin');
+    const ang = Math.atan2(ty - oy, tx - ox);
+    const speed = spectral ? 760 : 940;
+    const weaponLv = 1 + p.weaponDamageBonus;
+    this.projectiles.push({
+      id: this.nextProjectileId++,
+      x: ox,
+      y: oy,
+      vx: Math.cos(ang) * speed,
+      vy: Math.sin(ang) * speed,
+      radius: spectral ? 7 : 6,
+      fromEnemy: false,
+      damage: dmg + bonus,
+      life: Math.max(0.2, (spectral ? 520 : ct.assassinDaggerRange) / speed),
+      rotation: ang,
+      kind: 'thrown_dagger',
+      slotLevel: weaponLv,
+      color: spectral ? '#be123c' : undefined,
+      pierce: spectral,
+      hitIds: [],
+      startX: ox,
+    });
+  }
+
+  /** Crouch + [1]: throw a dagger (aims at the nearest foe in front). Unaware regular foes die from range. */
+  private throwDagger(tuning: TuningConfig): void {
+    const p = this.player;
+    const ct = this.charTune('assassin');
+    const scale = tuning.playerScale;
+    const h = (p.crouching ? p.crouchBaseH : p.baseH) * scale;
+    const ox = p.x + p.facing * 18 * scale;
+    const oy = p.y - h * 0.62;
+    // Auto-aim: nearest foe ahead within range, otherwise straight.
+    let aimX = ox + p.facing * 300;
+    let aimY = oy;
+    let bestD = Infinity;
+    for (const e of this.enemies) {
+      if (e.dead) continue;
+      const dx = e.x - p.x;
+      if (dx * p.facing < 10 || Math.abs(dx) > ct.assassinDaggerRange) continue;
+      const ey = e.y - e.baseH * tuning.enemyScale * 0.55;
+      if (Math.abs(ey - oy) > 140) continue;
+      if (Math.abs(dx) < bestD) {
+        bestD = Math.abs(dx);
+        aimX = e.x;
+        aimY = ey;
+      }
+    }
+    this.spawnThrownDagger(ox, oy, aimX, aimY, tuning, 1, false, Math.max(0, ct.assassinDaggerDamage - 1));
+    p.assassinThrowCooldown = ct.assassinDaggerCooldown;
+    p.assassinThrowTimer = 0.22;
+    p.crouching = p.crouching && p.onGround;
+    sound.playDaggerThrow();
+    this.spawnSparkles(ox, oy, 4, '#a8a29e', '#fafafa', 0.5);
+  }
+
+  private assassinProjectileHit(proj: Projectile, target: Enemy, tuning: TuningConfig): void {
+    const p = this.player;
+    const ct = this.charTune('assassin');
+    const weaponLv = 1 + p.weaponDamageBonus;
+    const hitX = target.x;
+    const hitY = target.y - target.baseH * tuning.enemyScale * 0.55;
+    if (proj.kind === 'venom_needle') {
+      this.handlePlayerHitEnemy(target, tuning, 'fireball', proj.slotLevel ?? 1, { kbX: 50 });
+      if (!target.dead) {
+        const evo = this.getSpellEvoTier(proj.slotLevel ?? 1);
+        target.poisonTimer = Math.max(target.poisonTimer ?? 0, 4.5 + evo * 1.2);
+        target.poisonTickTimer = target.poisonTickTimer ?? 0.6;
+        this.spawnSparkles(hitX, hitY, 6, '#4d7c0f', '#bef264', 0.7);
+      }
+      return;
+    }
+    // Thrown dagger: executes unaware regular foes; otherwise a real hit that can shove foes into pits.
+    const unaware = !target.alerted && !target.isBoss && !proj.color;
+    this.handlePlayerHitEnemy(target, tuning, 'weapon', weaponLv, {
+      forceAssassinate: unaware && tuning.assassinationEnabled,
+      callout: unaware ? 'KNIFE IN THE DARK' : undefined,
+      bonusDamage: Math.max(0, proj.damage - 1),
+      kbX: 170,
+      kbY: 40,
+      dirX: proj.vx >= 0 ? 1 : -1,
+      assassinViaDagger: true,
+    });
+    void ct;
+    this.spawnSparkles(hitX, hitY, 6, '#d6d3d1', '#fafafa', 0.6);
+  }
+
+  /** Jump again in the air: Shadow Blink a short way in the held direction. Passes through foes, stops at solid walls. */
+  private tryStartShadowBlink(tuning: TuningConfig): boolean {
+    const p = this.player;
+    if (p.characterId !== 'assassin' || p.assassinBlinkUsed || p.onGround || p.ledgeGrabActive) return false;
+    const ct = this.charTune('assassin');
+    const input = this.frameInput;
+    let dx = input ? (input.right ? 1 : 0) - (input.left ? 1 : 0) : 0;
+    let dy = input ? (input.down ? 1 : 0) - (input.up ? 1 : 0) : 0;
+    if (dx === 0 && dy === 0) dx = p.facing;
+    const len = Math.hypot(dx, dy) || 1;
+    dx /= len;
+    dy /= len;
+    const dist = Math.max(40, ct.assassinBlinkDistance);
+    const scale = tuning.playerScale;
+    const halfW = (p.baseW * scale) / 2;
+    const h = p.baseH * scale;
+    const sx = p.x;
+    const sy = p.y;
+    let nx = sx;
+    let ny = sy;
+    const step = 8;
+    for (let d = step; d <= dist; d += step) {
+      const tx = sx + dx * d;
+      const ty = sy + dy * d;
+      const rect: Rect = { x: tx - halfW + 2, y: ty - h + 2, w: halfW * 2 - 4, h: h - 4 };
+      let blocked = tx < halfW + 4 || tx > this.currentStage.worldWidth - halfW - 4;
+      if (!blocked) {
+        for (const plat of this.platforms) {
+          if (plat.oneWay || !this.isPlatformSolid(plat)) continue;
+          if (rectsOverlap(rect, plat)) {
+            blocked = true;
+            break;
+          }
+        }
+      }
+      if (blocked) break;
+      nx = tx;
+      ny = ty;
+    }
+    const moved = Math.hypot(nx - sx, ny - sy);
+    const trail = Math.max(2, Math.floor(moved / 36));
+    for (let i = 0; i <= trail; i++) {
+      this.afterimages.push({
+        x: sx + ((nx - sx) * i) / trail,
+        y: sy + ((ny - sy) * i) / trail,
+        facing: p.facing,
+        crouching: false,
+        color: i % 2 ? '#7f1d1d' : '#1c1917',
+        life: 0.26 + i * 0.01,
+        maxLife: 0.38,
+      });
+    }
+    for (let i = 0; i < 12; i++) {
+      this.particles.push({
+        x: sx + (Math.random() - 0.5) * 16,
+        y: sy - Math.random() * h,
+        vx: (Math.random() - 0.5) * 80,
+        vy: -10 - Math.random() * 50,
+        size: 3 + Math.random() * 3,
+        color: Math.random() < 0.65 ? '#1c1917' : '#57534e',
+        life: 0.42,
+        maxLife: 0.42,
+        kind: 'dust',
+        rotation: 0,
+      });
+    }
+    p.x = nx;
+    p.y = ny;
+    p.vy = dy < -0.3 ? -150 : dy > 0.3 ? 140 : Math.min(p.vy, 0) * 0.4;
+    p.vx = dx * 130;
+    if (dx !== 0 && Math.abs(dx) > 0.3) p.facing = dx > 0 ? 1 : -1;
+    p.assassinBlinkUsed = true;
+    p.assassinBlinkTimer = 0.24;
+    p.crouching = false;
+    p.invulnTimer = Math.max(p.invulnTimer, ct.assassinBlinkIFrames);
+    this.shockwaves.push({ x: nx, y: ny - h * 0.5, radius: 6, maxRadius: 46, color: '#7f1d1d', life: 0.22, maxLife: 0.22 });
+    sound.playShadowBlink();
+    return true;
+  }
 
   /** Element the Wizard's bolt / spells take: the active Affinity, or pale arcane when none. */
   private getWizardElement(): { id: string; name: string; c1: string; c2: string; root: BaseElementId | null } {
@@ -6278,8 +6951,15 @@ export class GameEngine {
     return isBehindEnemy || isDrop;
   }
 
-  /** Enemy (if any) the player can assassinate right now with one swing. */
+  /** Enemy (if any) the player can assassinate right now (one swing, or a shadow-step for the Assassin). */
   public findAssassinationTarget(tuning: TuningConfig): Enemy | null {
+    const melee = this.findMeleeAssassinationTarget(tuning);
+    if (melee) return melee;
+    return this.player.characterId === 'assassin' ? this.findAssassinRangedTarget(tuning) : null;
+  }
+
+  /** Enemy (if any) the player can assassinate right now with one swing. */
+  private findMeleeAssassinationTarget(tuning: TuningConfig): Enemy | null {
     const p = this.player;
     if (this.currentStage.isCamp) return null;
     const reach =
@@ -6388,6 +7068,10 @@ export class GameEngine {
     }
     if (target.kind === 'camp_hero_wizard') {
       this.selectCharacter('wizard', tuning);
+      return;
+    }
+    if (target.kind === 'camp_hero_assassin') {
+      this.selectCharacter('assassin', tuning);
       return;
     }
     if (target.kind === 'camp_weapon_rack') {
@@ -6714,6 +7398,24 @@ export class GameEngine {
               maxLife: 0.16,
             });
           }
+        } else if (p.attackWeapon === 'shadow_daggers') {
+          const cross = p.assassinComboStep === 2;
+          p.attackTimer = (tuning.attackActiveMs / 1000) * (cross ? 0.95 : 0.55);
+          const dEvo = this.getWeaponEvoTier();
+          const dx = p.x + p.facing * tuning.attackRange * scale * (cross ? 1.0 : 0.8);
+          const dy = p.y - h * 0.58 + (p.assassinComboStep === 1 ? 6 * scale : -2 * scale);
+          this.spawnSparkles(dx, dy, cross ? 9 : 4, cross ? '#e7e5e4' : '#a8a29e', weaponLv >= 6 ? '#9f1239' : '#57534e', cross ? 0.85 : 0.5);
+          if (cross) {
+            this.shockwaves.push({
+              x: dx,
+              y: dy,
+              radius: 4,
+              maxRadius: (36 + dEvo * 14) * scale,
+              color: dEvo >= 2 ? '#be123c' : '#9f1239',
+              life: 0.16,
+              maxLife: 0.16,
+            });
+          }
         } else if (p.attackWeapon === 'spire_staff') {
           p.attackTimer = 0.06;
           this.spawnWizardBolt(tuning);
@@ -6767,6 +7469,7 @@ export class GameEngine {
           }
         }
         this.beginEvoAttackActive(tuning, scale, h);
+        if (p.attackWeapon === 'shadow_daggers' && p.assassinComboStep === 2) this.attackPulsesLeft += 1;
       } else if (p.attackState === 'active') {
         p.attackState = 'recovery';
         p.attackTimer =
@@ -6776,6 +7479,8 @@ export class GameEngine {
               ? Math.max(0.15, (tuning.attackRecoveryMs / 1000) * 1.22)
               : p.attackWeapon === 'rapier'
                 ? (tuning.attackRecoveryMs / 1000) * 0.62
+                : p.attackWeapon === 'shadow_daggers'
+                  ? (tuning.attackRecoveryMs / 1000) * (p.assassinComboStep === 2 ? 0.95 : 0.4)
                 : p.attackWeapon === 'ash_wraps'
                   ? (tuning.attackRecoveryMs / 1000) * (p.monkComboStep === 2 ? 1.25 : 0.55)
                   : p.attackWeapon === 'spire_staff'
@@ -6884,6 +7589,7 @@ export class GameEngine {
       p.landTimer = 0.16;
       p.wizardFloatTimer = 0;
       p.wizardFloatUsed = false;
+      p.assassinBlinkUsed = false;
       for (let i = 0; i < 4; i++) {
         this.particles.push({
           x: p.x + (Math.random() - 0.5) * 18,
@@ -7012,6 +7718,31 @@ export class GameEngine {
         }
       }
 
+      // Assassin Venom Needles: poison ticks (no reaction speed-up for the foe, no stacking).
+      if (enemy.poisonTimer && enemy.poisonTimer > 0) {
+        enemy.poisonTimer = Math.max(0, enemy.poisonTimer - dt);
+        enemy.poisonTickTimer = (enemy.poisonTickTimer ?? 0.6) - dt;
+        if (enemy.poisonTickTimer <= 0) {
+          enemy.poisonTickTimer = 0.6;
+          const qx = enemy.x;
+          const qy = enemy.y - enemy.baseH * eScale * 0.55;
+          enemy.hp = Math.max(0, enemy.hp - (enemy.isBoss ? 1 : 1));
+          enemy.flashTimer = 0.08;
+          this.spawnSparkles(qx, qy, 4, '#4d7c0f', '#a3e635', 0.55);
+          this.spawnDamageNumber(qx, qy - 12, '1', '#84cc16', 0.82, 'POISON');
+          if (enemy.hp <= 0) {
+            this.handleEnemyKilled(enemy, qx, qy);
+            continue;
+          }
+        }
+      }
+
+      // Assassin Mark for Death: the brand burns down; an unspent mark on a regular foe costs a short cooldown.
+      if (enemy.markTimer && enemy.markTimer > 0) {
+        enemy.markTimer = Math.max(0, enemy.markTimer - dt);
+        if (enemy.markTimer === 0) this.onMarkExpired(enemy, tuning);
+      }
+
       if (enemy.hurtStunTimer > 0) {
         enemy.hurtStunTimer = Math.max(0, enemy.hurtStunTimer - dt);
         // Launched foes keep their momentum through the air (so knockback can carry them over pits)
@@ -7054,14 +7785,17 @@ export class GameEngine {
         // Crouch-walking AND Shadow Chain Momentum dramatically shrink non-boss enemy detection!
         const crouchStealth = p.crouching && !enemy.isBoss ? tuning.crouchStealthMult : 1.0;
         const chainStealth = p.shadowChainTimer > 0 && !enemy.isBoss ? tuning.chainStealthMult : 1.0;
+        // The Assassin is quieter: foes spot him from much less far away (and only up close at the edge).
+        const assassinQuiet = p.characterId === 'assassin' && !enemy.isBoss ? Math.max(0.1, this.charTune('assassin').assassinVisionMult) : 1;
         const effectiveVision =
-          enemy.visionRange * crouchStealth * chainStealth * et.visionMult * tuning.stealthVisionMult;
-        const closeSense =
+          enemy.visionRange * crouchStealth * chainStealth * et.visionMult * tuning.stealthVisionMult * assassinQuiet;
+        const closeSenseBase =
           p.shadowChainTimer > 0
             ? tuning.closeSenseChain
             : p.crouching
               ? tuning.closeSenseCrouch
               : tuning.closeSenseNormal;
+        const closeSense = closeSenseBase * (assassinQuiet < 1 ? Math.max(0.4, assassinQuiet + 0.1) : 1);
         const canSee = isFlying
           ? Math.hypot(dx, dy) < effectiveVision
           : enemy.isBoss
@@ -9315,6 +10049,43 @@ export class GameEngine {
         }
       }
 
+      if (proj.kind === 'thrown_dagger' || proj.kind === 'venom_needle') {
+        // Assassin projectiles: thin, fast, point along their flight; daggers kill the unaware.
+        proj.rotation = Math.atan2(proj.vy, proj.vx);
+        if (Math.random() < 0.35) {
+          this.particles.push({
+            x: proj.x,
+            y: proj.y,
+            vx: (Math.random() - 0.5) * 20,
+            vy: (Math.random() - 0.5) * 20,
+            size: 2,
+            color: proj.kind === 'venom_needle' ? '#84cc16' : proj.color ?? '#a8a29e',
+            life: 0.18,
+            maxLife: 0.18,
+            kind: 'energy_wisp',
+            rotation: 0,
+          });
+        }
+        const dHit = proj.hitIds ?? (proj.hitIds = []);
+        let dTarget: Enemy | null = null;
+        for (const enemy of this.enemies) {
+          if (enemy.dead || dHit.includes(enemy.id)) continue;
+          if (rectsOverlap(projRect, this.getEnemyRect(enemy, tuning.enemyScale))) {
+            dTarget = enemy;
+            break;
+          }
+        }
+        if (dTarget) {
+          dHit.push(dTarget.id);
+          this.assassinProjectileHit(proj, dTarget, tuning);
+          if (!proj.pierce || dTarget.isBoss) this.projectiles.splice(i, 1);
+        } else if (hitSolid) {
+          this.spawnSparkles(proj.x, proj.y, 5, '#a8a29e', '#ffffff', 0.5);
+          this.projectiles.splice(i, 1);
+        }
+        continue;
+      }
+
       if (proj.kind === 'arcane_bolt') {
         if (Math.random() < 0.7) {
           this.particles.push({
@@ -9908,6 +10679,8 @@ export class GameEngine {
   }
 
   private handleEnemyKilled(enemy: Enemy, hitX: number, hitY: number, wasAssassination = false, fell = false): void {
+    if ((enemy.markTimer ?? 0) > 0 && !enemy.isBoss) this.onMarkedFoeDied(enemy);
+    enemy.markTimer = 0;
     enemy.dead = true;
     const isBig = Boolean(enemy.isBigBoss);
 
@@ -10060,6 +10833,18 @@ export class GameEngine {
               ? { kbX: 320, kbY: 130, bonusDamage: this.charTune('monk').monkComboBonus, guardBreak: true, stun: 0.42 }
               : { kbX: 105 }
           );
+        } else if (p.attackWeapon === 'shadow_daggers') {
+          // Dagger chain: stab, slash, then a cross-slash (bonus damage, a real shove for pit kills).
+          const cross = p.assassinComboStep === 2;
+          this.handlePlayerHitEnemy(
+            enemy,
+            tuning,
+            'weapon',
+            1 + p.weaponDamageBonus,
+            cross
+              ? { kbX: 300, kbY: 110, bonusDamage: this.charTune('assassin').assassinComboBonus, stun: 0.3 }
+              : { kbX: 85 }
+          );
         } else {
           this.handlePlayerHitEnemy(enemy, tuning, 'weapon', 1 + p.weaponDamageBonus);
         }
@@ -10109,10 +10894,11 @@ export class GameEngine {
       Math.abs(p.x - enemy.x) < 120;
     const canAssassinate = (source === 'weapon' || source === 'dash') && !opts?.noAssassinate;
     const isAssassination =
-      canAssassinate &&
-      tuning.assassinationEnabled &&
-      ((!enemy.alerted && (isBehindEnemy || isDropAssassination)) ||
-        (p.ambushTimer > 0 && !enemy.isBoss));
+      (Boolean(opts?.forceAssassinate) && !enemy.isBoss) ||
+      (canAssassinate &&
+        tuning.assassinationEnabled &&
+        ((!enemy.alerted && (isBehindEnemy || isDropAssassination)) ||
+          (p.ambushTimer > 0 && !enemy.isBoss)));
 
     const isHeavyHit =
       source === 'hammer_meteor' ||
@@ -10232,6 +11018,16 @@ export class GameEngine {
     } else if (isCrit) {
       damage = Math.max(2, Math.round(damage * tuning.critMultiplier));
       this.crits += 1;
+    }
+
+    // Assassin: Mark for Death makes a marked boss take extra damage from every hit.
+    if (enemy.isBoss && (enemy.markTimer ?? 0) > 0 && source !== 'gas' && damage > 0) {
+      const ctM = this.charTune('assassin');
+      const lightBonus = this.hasElement('light') ? 1.2 : 1;
+      const extra = Math.max(1, Math.round(damage * (ctM.assassinBossMarkBonusPct / 100) * lightBonus));
+      damage += extra;
+      this.spawnDamageNumber(hitX + 12, hitY - 34, `+${extra}`, '#be123c', 0.95, 'MARKED');
+      this.spawnSparkles(hitX, hitY, 6, '#9f1239', '#fda4af', 0.7);
     }
 
     enemy.hp = Math.max(0, enemy.hp - damage);
@@ -10432,8 +11228,9 @@ export class GameEngine {
         : p.crouching
           ? ['SNEAK ATTACK!', 'BOO!', 'ANKLE BITER!', 'DIDN’T SEE ME!']
           : ['SURPRISE!', 'LIGHTS OUT!', 'SHADOW CHAIN!', 'CLEAN CUT!'];
-      const callout =
-        p.shadowChainCount >= 2
+      const callout = opts?.callout
+        ? opts.callout
+        : p.shadowChainCount >= 2
           ? `SHADOW CHAIN x${p.shadowChainCount}!`
           : funnyCallouts[Math.floor(Math.random() * funnyCallouts.length)];
       const mpTag = mpReward > 0 ? ` · +${mpReward} MP` : '';
@@ -11230,6 +12027,12 @@ export class GameEngine {
       sw.radius = 12 + (sw.maxRadius - 12) * prog;
     }
 
+    for (let i = this.markBeams.length - 1; i >= 0; i--) {
+      this.markBeams[i].life -= dt;
+      if (this.markBeams[i].life <= 0) this.markBeams.splice(i, 1);
+    }
+    if (this.assassinStepCd > 0) this.assassinStepCd = Math.max(0, this.assassinStepCd - dt);
+
     for (let i = this.slashLines.length - 1; i >= 0; i--) {
       const sl = this.slashLines[i];
       sl.life -= dt;
@@ -11375,6 +12178,8 @@ export class GameEngine {
 
     return {
       assassinationReady,
+      assassinMarkLive: this.liveMarkedFoes().length > 0,
+      assassinMarkTime: Math.max(0, ...this.liveMarkedFoes().map((e) => e.markTimer ?? 0), 0),
       characterId: this.player.characterId,
       inCamp: Boolean(this.currentStage.isCamp),
       isBigBossRoom: Boolean(this.currentStage.isBigBossRoom),

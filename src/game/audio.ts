@@ -444,6 +444,66 @@ class SoundBank {
     this.playEvolutionOvertones(now + 0.07, evoTier, 261.63);
   }
 
+  // ===========================================================================
+  // ASSASSIN FOLEY (dry, quiet, cold: thin steel, cloth, a low death-bell)
+  // ===========================================================================
+  /** Twin dagger: a thin dry steel whisper; the cross-slash (step 2) rings a little. */
+  public playDaggerSlash(step = 0, evoTier = 0): void {
+    const ctx = this.ensure();
+    if (!ctx || this.tryPlayCustom('dagger_slash', 0.6)) return;
+    const now = ctx.currentTime;
+    const cross = step >= 2;
+    this.playNoiseBurst(now, cross ? 0.1 : 0.06, 'bandpass', cross ? 3600 : 4400, cross ? 1400 : 2200, 2.2, cross ? 0.15 : 0.1, 0.3, 0.002, true);
+    if (cross) this.playMetallicRing(now + 0.01, 1180, 0.16, 0.05, [1, 1.62, 2.7], 0.5);
+    this.playEvolutionOvertones(now + 0.02, evoTier, 440);
+  }
+
+  /** Thrown dagger: a thin whip of air. */
+  public playDaggerThrow(): void {
+    const ctx = this.ensure();
+    if (!ctx || this.tryPlayCustom('dagger_throw', 0.6)) return;
+    const now = ctx.currentTime;
+    this.playNoiseBurst(now, 0.14, 'bandpass', 5200, 1800, 1.8, 0.1, 0.3, 0.002, true);
+  }
+
+  /** Shadow Blink: a soft cloth snap and a hollow pop. */
+  public playShadowBlink(): void {
+    const ctx = this.ensure();
+    if (!ctx || this.tryPlayCustom('shadow_blink', 0.6)) return;
+    const now = ctx.currentTime;
+    this.playNoiseBurst(now, 0.16, 'bandpass', 900, 3200, 1.2, 0.1, 0.35, 0.004, true);
+    this.playSubPunch(now, 220, 70, 0.14, 0.12, false, 0.2);
+  }
+
+  /** Mark for Death: a low funeral bell with a dry brand-sizzle. */
+  public playDeathMark(): void {
+    const ctx = this.ensure();
+    if (!ctx || this.tryPlayCustom('death_mark', 0.75)) return;
+    const now = ctx.currentTime;
+    this.playMetallicRing(now, 98, 0.9, 0.12, [1, 2.01, 2.76, 4.1], 0.85);
+    this.playNoiseBurst(now, 0.22, 'bandpass', 2400, 600, 1.8, 0.1, 0.4, 0.01);
+    this.playSubPunch(now, 140, 38, 0.3, 0.22, true, 0.3);
+  }
+
+  /** Shadow Step execute: whoosh to the target, then the execution cut (on top of playAssassinate). */
+  public playShadowStep(): void {
+    const ctx = this.ensure();
+    if (!ctx || this.tryPlayCustom('shadow_step', 0.8)) return;
+    const now = ctx.currentTime;
+    this.playNoiseBurst(now, 0.2, 'bandpass', 500, 4200, 1.1, 0.18, 0.4, 0.004, true);
+    this.playSubPunch(now, 260, 60, 0.18, 0.18, false, 0.3);
+  }
+
+  /** Venom Needles: a faint spitting hiss. */
+  public playVenomNeedles(evoTier = 0): void {
+    const ctx = this.ensure();
+    if (!ctx || this.tryPlayCustom('venom_needles', 0.65)) return;
+    const now = ctx.currentTime;
+    this.playNoiseBurst(now, 0.16, 'bandpass', 3800, 1500, 1.6, 0.12, 0.3, 0.002, true);
+    this.playNoiseBurst(now + 0.03, 0.2, 'highpass', 3000, 3000, 0.7, 0.05, 0.3, 0.01);
+    this.playEvolutionOvertones(now + 0.02, evoTier, 392);
+  }
+
   /** Foe falling into a pit: dropping wail that fades into the dark + distant thud. */
   public playPitFall(isBoss = false): void {
     const ctx = this.ensure();
