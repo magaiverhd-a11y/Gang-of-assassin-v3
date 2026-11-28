@@ -8,7 +8,7 @@ import { drawAffinitySwing } from './fxSwing';
  */
 
 import { drawAnimatedPlayer, drawCampHeroFigure } from './characterAnim';
-import { getActiveElementDef } from './defaults';
+import { BOSS_CHARMS, getActiveElementDef } from './defaults';
 import { drawDetailedEnemySprite, drawGroundHazard } from './enemyRenderer';
 export { drawGroundHazard };
 import {
@@ -28,8 +28,10 @@ import {
   Projectile,
   SecretWall,
   ShockwaveRing,
+  StageDef,
   StageTheme,
   TorchProp,
+  WorldPickup,
 } from './types';
 
 export const SPRITE_PALETTE = {
@@ -81,10 +83,12 @@ export function drawPlatformTile(
   p: Platform,
   theme: StageTheme,
   crumble?: { state: 'intact' | 'shaking' | 'broken'; timer: number },
-  time = 0
+  time = 0,
+  environment: StageDef['environment'] = 'castle'
 ): void {
   let { x, y } = p;
   const { w, h, style } = p;
+  const env = environment ?? 'castle';
 
   if (p.crumbling && crumble?.state === 'broken') {
     // Faint dashed ghost outline so players can anticipate when the crumbling ledge reforms
@@ -104,40 +108,416 @@ export function drawPlatformTile(
     y += Math.cos(time * 58) * 1.4;
   }
 
-  if (style === 'bridge') {
-    ctx.fillStyle = p.crumbling ? '#4d3326' : SPRITE_PALETTE.bridgeFill;
+  if (style === 'grate') {
+    // Drop-through Underground Secret Iron Grate Hatch (Press DOWN+JUMP to enter!)
+    ctx.fillStyle = '#1e2430';
     ctx.fillRect(x, y, w, h);
-    ctx.fillStyle = isShaking ? '#f59e0b' : p.crumbling ? '#8c5f44' : SPRITE_PALETTE.bridgeTop;
-    ctx.fillRect(x, y, w, 4);
-
-    ctx.fillStyle = '#241914';
-    for (let px = x + 28; px < x + w; px += 28) {
-      ctx.fillRect(px, y + 2, 2, h - 2);
+    ctx.fillStyle = '#64748b';
+    ctx.fillRect(x, y, w, 3);
+    ctx.fillStyle = '#0b0e14';
+    for (let gx = x + 8; gx < x + w - 8; gx += 14) {
+      ctx.fillRect(gx, y + 3, 7, Math.max(4, h - 5));
     }
+    // Subtle downward golden shimmer cue hinting at secret underground tunnel
+    const pulse = 0.25 + Math.sin(time * 3.8 + x * 0.02) * 0.14;
+    ctx.fillStyle = `rgba(250, 204, 21, ${pulse})`;
+    ctx.fillRect(x + 4, y + h, w - 8, 2);
+    return;
+  }
 
-    if (p.crumbling) {
-      // Visual fracture cracks & hanging rubble bits so crumbling high-road ledges read immediately!
-      ctx.strokeStyle = isShaking ? '#fde68a' : '#1b110d';
-      ctx.lineWidth = isShaking ? 1.8 : 1.3;
+  if (style === 'bounce_cap') {
+    // Mushroom Kingdom Bouncy Toadstool Pad — neon magenta/emerald spring cap!
+    ctx.fillStyle = '#fef3c7';
+    ctx.fillRect(x + w * 0.36, y + h * 0.45, w * 0.28, h * 0.85);
+    const pulse = 1 + Math.sin(time * 5.2 + x * 0.04) * 0.04;
+    ctx.fillStyle = '#db2777';
+    ctx.beginPath();
+    ctx.ellipse(x + w / 2, y + h * 0.48, (w / 2) * pulse, h * 0.65, 0, Math.PI, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#34d399';
+    ctx.fillRect(x + 4, y + h * 0.4, w - 8, 4);
+    ctx.fillStyle = '#fdf2f8';
+    for (let sx = x + 14; sx < x + w - 12; sx += 22) {
       ctx.beginPath();
-      for (let cx = x + 24; cx < x + w - 18; cx += 42) {
-        ctx.moveTo(cx, y + 1);
-        ctx.lineTo(cx + 6, y + h * 0.55);
-        ctx.lineTo(cx - 2, y + h);
-      }
-      ctx.stroke();
+      ctx.arc(sx, y + h * 0.22, 3.6, 0, Math.PI * 2);
+      ctx.fill();
     }
     return;
   }
 
-  if (style === 'rafter') {
+  if (style === 'wind_pad') {
+    // Dragon Crane Emerald Updraft Column — carved jade vent + rising wind ribbons!
+    ctx.fillStyle = '#064e3b';
+    ctx.fillRect(x, y, w, h);
+    ctx.fillStyle = '#34d399';
+    ctx.fillRect(x + 2, y, w - 4, 4);
+    ctx.fillStyle = '#fbbf24';
+    ctx.fillRect(x, y + 4, 6, h - 4);
+    ctx.fillRect(x + w - 6, y + 4, 6, h - 4);
+    ctx.save();
+    ctx.strokeStyle = 'rgba(94, 234, 212, 0.62)';
+    ctx.lineWidth = 2;
+    for (let wx = x + 12; wx < x + w - 8; wx += 18) {
+      const lift = (time * 85 + wx * 3) % 52;
+      ctx.beginPath();
+      ctx.moveTo(wx, y - lift);
+      ctx.quadraticCurveTo(wx + 5, y - lift - 10, wx, y - lift - 20);
+      ctx.stroke();
+    }
+    ctx.restore();
+    return;
+  }
+
+  if (style === 'underground') {
+    // Subterranean Vault Floor with dark carved masonry & glowing mineral veins
+    ctx.fillStyle = '#141722';
+    ctx.fillRect(x, y, w, h);
+    ctx.fillStyle = '#2d3548';
+    ctx.fillRect(x, y, w, 5);
+    ctx.fillStyle = 'rgba(56, 189, 248, 0.22)';
+    for (let sx = x + 18; sx < x + w - 16; sx += 56) {
+      ctx.fillRect(sx, y + 8, 18, 2);
+    }
+    return;
+  }
+
+  // =========================================================================
+  // BIOME-UNIQUE BRIDGES, RAFTERS & TIMBER WALKWAYS
+  // =========================================================================
+  if (style === 'bridge' || style === 'rafter' || style === 'timber') {
+    if (env === 'sand') {
+      // Sand Fortress: Carved Cedar & Gilded Sandstone Lintel with Turquoise Mosaic Inlay!
+      ctx.fillStyle = p.crumbling ? '#6e3d1c' : '#78441e';
+      ctx.fillRect(x, y, w, h);
+      ctx.fillStyle = isShaking ? '#fde047' : '#d99b38';
+      ctx.fillRect(x, y, w, 5);
+      ctx.fillStyle = '#45230c';
+      ctx.fillRect(x, y + h - 3, w, 3);
+      // Gilded & turquoise inlaid mosaic dots
+      for (let mx = x + 16; mx < x + w - 12; mx += 26) {
+        ctx.fillStyle = '#14b8a6';
+        ctx.fillRect(mx, y + 7, 6, 4);
+        ctx.fillStyle = '#fbbf24';
+        ctx.fillRect(mx + 12, y + 7, 4, 4);
+      }
+      if (p.crumbling) drawCrumbleCracks(ctx, x, y, w, h, isShaking);
+      return;
+    }
+
+    if (env === 'dragon') {
+      // Dragon Crane: Curved Vermilion Pagoda Deck with Upturned Gilded Eaves & Jade Trim!
+      ctx.fillStyle = p.crumbling ? '#5c1919' : '#7f1d1d';
+      ctx.fillRect(x, y, w, h);
+      // Scalloped jade ceramic top edge
+      ctx.fillStyle = isShaking ? '#fde047' : '#10b981';
+      ctx.fillRect(x, y, w, 5);
+      ctx.fillStyle = '#fbbf24';
+      ctx.fillRect(x, y + 5, w, 2);
+      ctx.fillStyle = '#450a0a';
+      ctx.fillRect(x, y + h - 3, w, 3);
+      // Upturned pagoda eave tips on both ends
+      ctx.fillStyle = '#fbbf24';
+      ctx.beginPath();
+      ctx.moveTo(x, y + 5);
+      ctx.lineTo(x - 10, y - 3);
+      ctx.lineTo(x + 8, y);
+      ctx.closePath();
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(x + w, y + 5);
+      ctx.lineTo(x + w + 10, y - 3);
+      ctx.lineTo(x + w - 8, y);
+      ctx.closePath();
+      ctx.fill();
+      // Carved golden lattice squares along beam
+      ctx.fillStyle = 'rgba(251, 191, 36, 0.45)';
+      for (let bx = x + 18; bx < x + w - 14; bx += 28) {
+        ctx.fillRect(bx, y + 9, 10, Math.max(3, h - 13));
+      }
+      if (p.crumbling) drawCrumbleCracks(ctx, x, y, w, h, isShaking);
+      return;
+    }
+
+    if (env === 'dwarven_mines') {
+      // Corrupted Dwarven Mines: Riveted Iron Minecart Rail Trestle with Timber Sleepers & Amethyst Bolts!
+      ctx.fillStyle = p.crumbling ? '#3b2421' : '#3a2b28';
+      ctx.fillRect(x, y + 4, w, Math.max(4, h - 4));
+      // Wooden cross-ties / sleepers
+      ctx.fillStyle = '#5c4033';
+      for (let sx = x + 6; sx < x + w - 8; sx += 22) {
+        ctx.fillRect(sx, y + 5, 11, Math.max(3, h - 7));
+      }
+      // Gleaming iron minecart top rail bar
+      ctx.fillStyle = isShaking ? '#fde047' : '#94a3b8';
+      ctx.fillRect(x, y, w, 4);
+      ctx.fillStyle = '#475569';
+      ctx.fillRect(x, y + 4, w, 2);
+      // Glowing amethyst rivet accents
+      ctx.fillStyle = '#c084fc';
+      for (let rx = x + 14; rx < x + w - 12; rx += 44) {
+        ctx.fillRect(rx, y + 7, 4, 4);
+      }
+      if (p.crumbling) drawCrumbleCracks(ctx, x, y, w, h, isShaking);
+      return;
+    }
+
+    if (env === 'cyberpunk') {
+      // Neon Spire 2099: Brushed Chrome Catwalk with Magenta/Cyan Neon Circuit Strip!
+      ctx.fillStyle = '#0f172a';
+      ctx.fillRect(x, y, w, h);
+      ctx.fillStyle = '#334155';
+      ctx.fillRect(x, y + 3, w, Math.max(4, h - 6));
+      const neonPulse = 0.72 + Math.sin(time * 5 + x * 0.03) * 0.22;
+      ctx.fillStyle = isShaking ? '#fde047' : (Math.floor(x / 180) % 2 === 0 ? `rgba(236,72,153,${neonPulse})` : `rgba(34,211,238,${neonPulse})`);
+      ctx.fillRect(x, y, w, 3.5);
+      ctx.fillStyle = '#1e293b';
+      for (let gx = x + 10; gx < x + w - 8; gx += 18) {
+        ctx.fillRect(gx, y + 6, 8, Math.max(3, h - 9));
+      }
+      if (p.crumbling) drawCrumbleCracks(ctx, x, y, w, h, isShaking);
+      return;
+    }
+
+    if (env === 'pirate') {
+      // Skulltide Cove & Armada: Weathered Pirate Ship Deck Planks with Rope-Lashing & Brass Nails!
+      ctx.fillStyle = '#5c3317';
+      ctx.fillRect(x, y + 2, w, Math.max(4, h - 2));
+      ctx.fillStyle = isShaking ? '#fde047' : '#92400e';
+      ctx.fillRect(x, y, w, 5);
+      ctx.fillStyle = '#3b1d0a';
+      for (let px = x + 28; px < x + w - 10; px += 36) {
+        ctx.fillRect(px, y + 1, 2, h - 2);
+      }
+      ctx.fillStyle = '#fbbf24';
+      for (let bx = x + 10; bx < x + w - 8; bx += 36) {
+        ctx.fillRect(bx, y + 7, 3, 3);
+      }
+      if (p.crumbling) drawCrumbleCracks(ctx, x, y, w, h, isShaking);
+      return;
+    }
+
+    if (env === 'paradox') {
+      // The Ghost Paradox: Glitching Spectral Prism Bridge with Floating Rift Edges!
+      const gl = Math.sin(time * 7 + x * 0.05) * 2;
+      ctx.fillStyle = '#1e1636';
+      ctx.fillRect(x, y, w, h);
+      ctx.fillStyle = isShaking ? '#fde047' : '#818cf8';
+      ctx.fillRect(x, y, w, 3);
+      ctx.fillStyle = 'rgba(45, 212, 191, 0.55)';
+      ctx.fillRect(x + gl, y + h - 3, w, 3);
+      for (let rx = x + 14; rx < x + w - 14; rx += 32) {
+        ctx.fillStyle = rx % 64 === 0 ? 'rgba(167,139,250,0.45)' : 'rgba(45,212,191,0.35)';
+        ctx.fillRect(rx, y + 5, 14, Math.max(3, h - 10));
+      }
+      if (p.crumbling) drawCrumbleCracks(ctx, x, y, w, h, isShaking);
+      return;
+    }
+
+    if (env === 'mirror_cathedral') {
+      // SHATTERED MIRROR CATHEDRAL: Suspended Gothic Prism-Glass Balcony with Silver Tracery & Specular Sheen!
+      const shimmer = Math.sin(time * 3.8 + x * 0.03) * 0.14;
+      ctx.fillStyle = '#1d1638';
+      ctx.fillRect(x, y + 3, w, Math.max(4, h - 3));
+      // Translucent mirrored glass face
+      ctx.fillStyle = `rgba(103, 232, 249, ${0.26 + shimmer})`;
+      ctx.fillRect(x + 2, y + 4, Math.max(2, w - 4), Math.max(2, h - 7));
+      // Luminous crystalline mirror top edge
+      ctx.fillStyle = isShaking ? '#fde047' : '#e0f2fe';
+      ctx.fillRect(x, y, w, 3);
+      ctx.fillStyle = '#f472b6';
+      ctx.fillRect(x, y + 3, w, 2);
+      // Diagonal glass specular reflection streaks & gothic crystal facets
+      ctx.strokeStyle = 'rgba(224, 242, 254, 0.52)';
+      ctx.lineWidth = 1.4;
+      for (let gx = x + 10; gx < x + w - 10; gx += 28) {
+        ctx.beginPath();
+        ctx.moveTo(gx, y + h - 2);
+        ctx.lineTo(gx + 10, y + 4);
+        ctx.stroke();
+      }
+      // Hanging crystal prism drop below balcony center
+      if (w >= 72) {
+        const cx = x + w * 0.5;
+        ctx.fillStyle = 'rgba(192, 132, 252, 0.65)';
+        ctx.beginPath();
+        ctx.moveTo(cx - 6, y + h);
+        ctx.lineTo(cx, y + h + 9);
+        ctx.lineTo(cx + 6, y + h);
+        ctx.closePath();
+        ctx.fill();
+      }
+      if (p.crumbling) drawCrumbleCracks(ctx, x, y, w, h, isShaking);
+      return;
+    }
+
+    if (env === 'mansion') {
+      // Velvet Blood Chateau: Carved Gold-Trimmed Balcony with Plush Crimson Carpet Runner!
+      ctx.fillStyle = '#3b1d28';
+      ctx.fillRect(x, y + 4, w, Math.max(4, h - 4));
+      ctx.fillStyle = isShaking ? '#fde047' : '#be123c';
+      ctx.fillRect(x, y, w, 5);
+      ctx.fillStyle = '#fbbf24';
+      ctx.fillRect(x, y + 5, w, 2);
+      for (let gx = x + 16; gx < x + w - 12; gx += 26) {
+        ctx.fillRect(gx, y + 9, 6, Math.max(3, h - 11));
+      }
+      if (p.crumbling) drawCrumbleCracks(ctx, x, y, w, h, isShaking);
+      return;
+    }
+
+    if (env === 'underwater') {
+      // Sunken Pelagia: Glowing Sea-Glass Aqueduct Platform with Coral & Pearl Trim!
+      ctx.fillStyle = '#0c4a6e';
+      ctx.fillRect(x, y + 2, w, Math.max(4, h - 2));
+      ctx.fillStyle = isShaking ? '#fde047' : '#38bdf8';
+      ctx.fillRect(x, y, w, 4);
+      ctx.fillStyle = 'rgba(153, 246, 228, 0.45)';
+      for (let bx = x + 12; bx < x + w - 12; bx += 30) {
+        ctx.fillRect(bx, y + 6, 14, Math.max(3, h - 9));
+      }
+      if (p.crumbling) drawCrumbleCracks(ctx, x, y, w, h, isShaking);
+      return;
+    }
+
+    if (env === 'frost') {
+      // Frostwarden Citadel: Frosted Glacial Ice-Beam with Hanging Icicle Tips!
+      ctx.fillStyle = '#1e3a5f';
+      ctx.fillRect(x, y + 3, w, Math.max(4, h - 3));
+      ctx.fillStyle = isShaking ? '#fde047' : '#bae6fd';
+      ctx.fillRect(x, y, w, 5);
+      ctx.fillStyle = '#7dd3fc';
+      for (let ix = x + 12; ix < x + w - 10; ix += 24) {
+        ctx.beginPath();
+        ctx.moveTo(ix, y + h);
+        ctx.lineTo(ix + 5, y + h + 8);
+        ctx.lineTo(ix + 10, y + h);
+        ctx.closePath();
+        ctx.fill();
+      }
+      if (p.crumbling) drawCrumbleCracks(ctx, x, y, w, h, isShaking);
+      return;
+    }
+
+    if (env === 'barbaric') {
+      // Ironhorn Bloodlands: Rough-Hewn Spiked Timber Bridge with Iron Straps & Bone Studs!
+      ctx.fillStyle = '#451a03';
+      ctx.fillRect(x, y + 3, w, Math.max(4, h - 3));
+      ctx.fillStyle = isShaking ? '#fde047' : '#9a3412';
+      ctx.fillRect(x, y, w, 5);
+      ctx.fillStyle = '#64748b';
+      for (let sx = x + 14; sx < x + w - 12; sx += 40) {
+        ctx.fillRect(sx, y, 7, h);
+        ctx.fillStyle = '#fef3c7';
+        ctx.fillRect(sx + 2, y + 6, 3, 4);
+        ctx.fillStyle = '#64748b';
+      }
+      if (p.crumbling) drawCrumbleCracks(ctx, x, y, w, h, isShaking);
+      return;
+    }
+
+    if (env === 'mushroom') {
+      // Mushroom Kingdom: Curved Bioluminescent Fungal Shelf-Cap Platform with Ribbed Gills!
+      ctx.fillStyle = '#3b1c4a';
+      ctx.fillRect(x + 4, y + 6, w - 8, h - 6);
+      // Ribbed gill underside lines
+      ctx.fillStyle = '#6b21a8';
+      for (let gx = x + 10; gx < x + w - 8; gx += 12) {
+        ctx.fillRect(gx, y + 6, 3, h - 7);
+      }
+      // Glowing spotted fungal top cap
+      ctx.fillStyle = isShaking ? '#fde047' : '#a855f7';
+      ctx.fillRect(x, y, w, 7);
+      ctx.fillStyle = '#34d399';
+      for (let sx = x + 14; sx < x + w - 12; sx += 28) {
+        ctx.fillRect(sx, y + 1, 9, 3);
+      }
+      if (p.crumbling) drawCrumbleCracks(ctx, x, y, w, h, isShaking);
+      return;
+    }
+
+    if (env === 'alien') {
+      // Alien Ship: Hard-Light Plasma Catwalk with Metallic Emitter Caps!
+      const pulse = 0.72 + Math.sin(time * 5 + x * 0.02) * 0.2;
+      ctx.fillStyle = '#0f172a';
+      ctx.fillRect(x, y, w, h);
+      // Glowing plasma beam center
+      ctx.fillStyle = isShaking ? '#f43f5e' : `rgba(34, 211, 238, ${0.42 * pulse})`;
+      ctx.fillRect(x + 12, y + 2, Math.max(4, w - 24), h - 4);
+      ctx.fillStyle = isShaking ? '#fde047' : '#67e8f9';
+      ctx.fillRect(x + 10, y, Math.max(4, w - 20), 3);
+      // Metallic side emitter clamps
+      ctx.fillStyle = '#475569';
+      ctx.fillRect(x, y - 1, 12, h + 2);
+      ctx.fillRect(x + w - 12, y - 1, 12, h + 2);
+      ctx.fillStyle = '#38bdf8';
+      ctx.fillRect(x + 3, y + 4, 6, 4);
+      ctx.fillRect(x + w - 9, y + 4, 6, 4);
+      // Grid tick segments
+      ctx.fillStyle = 'rgba(224, 242, 254, 0.35)';
+      for (let ax = x + 26; ax < x + w - 20; ax += 24) {
+        ctx.fillRect(ax, y + 3, 2, h - 6);
+      }
+      if (p.crumbling) drawCrumbleCracks(ctx, x, y, w, h, isShaking);
+      return;
+    }
+
+    if (env === 'foundry') {
+      // Brimstone Sanctum: Riveted Forged Cast-Iron Grate with Molten Under-Glow!
+      ctx.fillStyle = '#261a18';
+      ctx.fillRect(x, y, w, h);
+      ctx.fillStyle = isShaking ? '#fde047' : '#78350f';
+      ctx.fillRect(x, y, w, 4);
+      ctx.fillStyle = '#ea580c';
+      ctx.fillRect(x + 2, y + h - 2, w - 4, 2);
+      // Iron rivets & grate slots
+      for (let rx = x + 14; rx < x + w - 10; rx += 22) {
+        ctx.fillStyle = '#110b0a';
+        ctx.fillRect(rx, y + 5, 10, Math.max(4, h - 9));
+        ctx.fillStyle = '#f97316';
+        ctx.fillRect(rx - 5, y + 6, 2, 2);
+      }
+      if (p.crumbling) drawCrumbleCracks(ctx, x, y, w, h, isShaking);
+      return;
+    }
+
+    if (style === 'timber') {
+      // Rough-hewn Goblin timber walkway with rope bindings & iron nails
+      ctx.fillStyle = '#422c1b';
+      ctx.fillRect(x, y, w, h);
+      ctx.fillStyle = '#6b472b';
+      ctx.fillRect(x, y, w, 5);
+      ctx.fillStyle = '#26180e';
+      ctx.fillRect(x, y + h - 3, w, 3);
+      for (let px = x + 22; px < x + w; px += 24) {
+        ctx.fillStyle = '#2b1b10';
+        ctx.fillRect(px, y + 1, 2, h - 2);
+      }
+      ctx.fillStyle = '#a18052';
+      ctx.fillRect(x + 6, y, 5, h);
+      ctx.fillRect(x + w - 11, y, 5, h);
+      return;
+    }
+
+    if (style === 'bridge') {
+      ctx.fillStyle = p.crumbling ? '#4d3326' : SPRITE_PALETTE.bridgeFill;
+      ctx.fillRect(x, y, w, h);
+      ctx.fillStyle = isShaking ? '#f59e0b' : p.crumbling ? '#8c5f44' : SPRITE_PALETTE.bridgeTop;
+      ctx.fillRect(x, y, w, 4);
+      ctx.fillStyle = '#241914';
+      for (let px = x + 28; px < x + w; px += 28) {
+        ctx.fillRect(px, y + 2, 2, h - 2);
+      }
+      if (p.crumbling) drawCrumbleCracks(ctx, x, y, w, h, isShaking);
+      return;
+    }
+
+    // Default Castle / Necropolis / Eclipse Rafter
     ctx.fillStyle = SPRITE_PALETTE.rafterFill;
     ctx.fillRect(x, y, w, h);
-    ctx.fillStyle = SPRITE_PALETTE.rafterTop;
+    ctx.fillStyle = env === 'eclipse' ? '#be123c' : SPRITE_PALETTE.rafterTop;
     ctx.fillRect(x, y, w, 4);
     ctx.fillStyle = '#181a24';
     ctx.fillRect(x, y + h - 3, w, 3);
-
     ctx.strokeStyle = '#9aa3b8';
     ctx.lineWidth = 1.5;
     for (let rx = x + 36; rx < x + w - 20; rx += 64) {
@@ -145,25 +525,6 @@ export function drawPlatformTile(
       ctx.arc(rx, y + h + 4, 4, 0, Math.PI * 2);
       ctx.stroke();
     }
-    return;
-  }
-
-  if (style === 'timber') {
-    // Rough-hewn Goblin timber walkway with rope bindings & iron nails
-    ctx.fillStyle = '#422c1b';
-    ctx.fillRect(x, y, w, h);
-    ctx.fillStyle = '#6b472b';
-    ctx.fillRect(x, y, w, 5);
-    ctx.fillStyle = '#26180e';
-    ctx.fillRect(x, y + h - 3, w, 3);
-    for (let px = x + 22; px < x + w; px += 24) {
-      ctx.fillStyle = '#2b1b10';
-      ctx.fillRect(px, y + 1, 2, h - 2);
-    }
-    // Rope lashes on ends
-    ctx.fillStyle = '#a18052';
-    ctx.fillRect(x + 6, y, 5, h);
-    ctx.fillRect(x + w - 11, y, 5, h);
     return;
   }
 
@@ -176,17 +537,14 @@ export function drawPlatformTile(
       const lw = Math.min(logW - 1, x + w - lx);
       ctx.fillStyle = Math.floor((lx - x) / logW) % 2 === 0 ? '#4d3320' : '#3d2819';
       ctx.fillRect(lx, y + 6, lw, h - 6);
-      // Sharpened log bevel top
       ctx.fillStyle = '#735032';
       ctx.fillRect(lx + 1, y, Math.max(2, lw - 2), 6);
     }
-    // Iron/rope horizontal binding bands
     ctx.fillStyle = '#8c6d46';
     ctx.fillRect(x, y + 18, w, 5);
     if (h > 75) {
       ctx.fillRect(x, y + Math.floor(h * 0.58), w, 5);
     }
-    // Subtle lighter side grip rim so Ronin players can clearly read climbable vertical walls
     ctx.fillStyle = 'rgba(214, 180, 128, 0.28)';
     ctx.fillRect(x, y + 4, 2, h - 4);
     ctx.fillRect(x + w - 2, y + 4, 2, h - 4);
@@ -201,13 +559,10 @@ export function drawPlatformTile(
     ctx.fillRect(x, y, w, 12);
     ctx.fillStyle = '#3b372c';
     ctx.fillRect(x, y, w, 4);
-
-    // Subtle cobblestone flagstone accents leading toward castle gate
     ctx.fillStyle = '#252229';
     for (let cx = x + 16; cx < x + w; cx += 52) {
       ctx.fillRect(cx, y + 6, 32, 6);
     }
-    // Small dark grass tufts on camp clearing
     ctx.fillStyle = '#2b3d30';
     for (let gx = x + 40; gx < x + w - 220; gx += 78) {
       ctx.fillRect(gx, y - 4, 3, 4);
@@ -225,7 +580,6 @@ export function drawPlatformTile(
     ctx.fillRect(x, y, w, 5);
     ctx.fillStyle = '#121618';
     ctx.fillRect(x, y + h - 3, w, 3);
-    // Vertical grave slab seams + faint mossy caps
     for (let sx = x + 36; sx < x + w; sx += 42) {
       ctx.fillStyle = '#121719';
       ctx.fillRect(sx, y + 3, 2, h - 4);
@@ -252,19 +606,656 @@ export function drawPlatformTile(
     return;
   }
 
+  // =========================================================================
+  // BIOME-UNIQUE SOLID FLOORS, PILLARS & BOSS ARENA TILES!
+  // =========================================================================
+  const isBoss = style === 'boss_floor';
+  const isPillar = style === 'pillar';
+
+  if (env === 'sand') {
+    // SAND FORTRESS: Wind-Rippled Golden Sand Floor + Carved Hieroglyphic Sandstone Masonry!
+    ctx.fillStyle = theme.stoneFill;
+    ctx.fillRect(x, y, w, h);
+
+    if (isPillar) {
+      // Fluted sandstone fortress monolith with gilded collar & carved hieroglyph bands
+      ctx.fillStyle = 'rgba(251, 191, 36, 0.16)';
+      ctx.fillRect(x + 4, y + 12, Math.max(4, w * 0.24), h - 12);
+      ctx.fillStyle = '#b45309';
+      ctx.fillRect(x, y, w, 10);
+      ctx.fillStyle = '#fbbf24';
+      ctx.fillRect(x, y, w, 3);
+      for (let gy = y + 26; gy < y + h - 18; gy += 36) {
+        ctx.fillStyle = 'rgba(20, 10, 4, 0.45)';
+        ctx.fillRect(x, gy, w, 2);
+        ctx.fillStyle = 'rgba(251, 191, 36, 0.28)';
+        ctx.fillRect(x + 8, gy + 10, Math.max(4, w - 16), 4);
+      }
+      return;
+    }
+
+    // Sandstone ashlar block strata underneath
+    ctx.strokeStyle = 'rgba(38, 18, 6, 0.48)';
+    ctx.lineWidth = 1.2;
+    const bh = 26;
+    const bw = 54;
+    ctx.beginPath();
+    for (let row = 0; row * bh < h - 16; row++) {
+      const by = y + 16 + row * bh;
+      ctx.moveTo(x, by);
+      ctx.lineTo(x + w, by);
+      const off = row % 2 === 0 ? 0 : bw / 2;
+      for (let bx = x + off; bx < x + w; bx += bw) {
+        ctx.moveTo(bx, by);
+        ctx.lineTo(bx, Math.min(by + bh, y + h));
+      }
+    }
+    ctx.stroke();
+
+    // Soft sculpted wind-blown sand layer on top with curved dune wave crests!
+    ctx.fillStyle = isBoss ? '#d97706' : '#b46924';
+    ctx.fillRect(x, y, w, 15);
+    ctx.fillStyle = isBoss ? '#facc15' : theme.stoneTop;
+    ctx.beginPath();
+    ctx.moveTo(x, y + 9);
+    for (let sx = x; sx <= x + w; sx += 32) {
+      const wave = Math.sin(sx * 0.045) * 2.5;
+      ctx.lineTo(sx, y + 8 + wave);
+    }
+    ctx.lineTo(x + w, y);
+    ctx.lineTo(x, y);
+    ctx.closePath();
+    ctx.fill();
+
+    // Sunlit / moonlit sand crest shimmer & wind ripple arcs
+    ctx.fillStyle = isBoss ? '#fef08a' : 'rgba(254, 240, 138, 0.65)';
+    ctx.fillRect(x, y, w, 2.5);
+    ctx.strokeStyle = 'rgba(254, 243, 199, 0.28)';
+    ctx.lineWidth = 1.5;
+    for (let rx = x + 18; rx < x + w - 26; rx += 56) {
+      ctx.beginPath();
+      ctx.moveTo(rx, y + 11);
+      ctx.quadraticCurveTo(rx + 14, y + 7, rx + 28, y + 11);
+      ctx.stroke();
+    }
+    // Boss arena inlaid turquoise & gold chevron frieze
+    if (isBoss) {
+      for (let tx = x + 14; tx < x + w - 18; tx += 36) {
+        ctx.fillStyle = '#0d9488';
+        ctx.fillRect(tx, y + 17, 14, 5);
+        ctx.fillStyle = '#fde047';
+        ctx.fillRect(tx + 18, y + 17, 8, 5);
+      }
+    }
+    return;
+  }
+
+  if (env === 'dragon') {
+    // DRAGON CRANE: Mountain Cliff Crags + Imperial Scalloped Jade Roof Tiles & Vermilion Pillars!
+    ctx.fillStyle = theme.stoneFill;
+    ctx.fillRect(x, y, w, h);
+
+    if (isPillar) {
+      // Vermilion lacquered pagoda column with gold collars & jade band!
+      ctx.fillStyle = '#7f1d1d';
+      ctx.fillRect(x, y, w, h);
+      ctx.fillStyle = 'rgba(248, 113, 113, 0.22)';
+      ctx.fillRect(x + 4, y, Math.max(4, w * 0.24), h);
+      ctx.fillStyle = '#10b981';
+      ctx.fillRect(x, y, w, 10);
+      ctx.fillStyle = '#fbbf24';
+      ctx.fillRect(x, y + 10, w, 4);
+      if (h > 90) {
+        ctx.fillRect(x, y + Math.floor(h * 0.5), w, 4);
+      }
+      return;
+    }
+
+    // Layered jagged mountain rock strata + carved cloud-scroll reliefs
+    ctx.strokeStyle = 'rgba(6, 20, 24, 0.55)';
+    ctx.lineWidth = 1.2;
+    const bh = 26;
+    const bw = 56;
+    ctx.beginPath();
+    for (let row = 0; row * bh < h - 18; row++) {
+      const by = y + 18 + row * bh;
+      ctx.moveTo(x, by);
+      ctx.lineTo(x + w, by);
+      const off = row % 2 === 0 ? 0 : bw / 2;
+      for (let bx = x + off; bx < x + w; bx += bw) {
+        ctx.moveTo(bx, by);
+        ctx.lineTo(bx + (row % 2 === 0 ? 5 : -5), Math.min(by + bh, y + h));
+      }
+    }
+    ctx.stroke();
+
+    // Imperial scalloped jade-ceramic roof tile top strip!
+    ctx.fillStyle = isBoss ? '#991b1b' : '#065f46';
+    ctx.fillRect(x, y, w, 14);
+    ctx.fillStyle = isBoss ? '#fbbf24' : '#34d399';
+    for (let tx = x; tx < x + w; tx += 22) {
+      const tw = Math.min(20, x + w - tx);
+      ctx.beginPath();
+      ctx.arc(tx + tw * 0.5, y + 8, tw * 0.48, Math.PI, 0);
+      ctx.fill();
+    }
+    // Crisp imperial gold ridge bar & cloud-scroll motifs
+    ctx.fillStyle = isBoss ? '#fef08a' : '#fbbf24';
+    ctx.fillRect(x, y + 11, w, 2.5);
+    ctx.strokeStyle = isBoss ? 'rgba(251, 191, 36, 0.42)' : 'rgba(52, 211, 153, 0.34)';
+    ctx.lineWidth = 1.4;
+    for (let cx = x + 26; cx < x + w - 26; cx += 64) {
+      ctx.beginPath();
+      ctx.arc(cx, y + 26, 7, Math.PI, 0);
+      ctx.arc(cx + 12, y + 26, 5, 0, Math.PI);
+      ctx.stroke();
+    }
+    return;
+  }
+
+  if (env === 'cyberpunk') {
+    // NEON SPIRE 2099: Rain-Slicked Cyber-Asphalt, Steel Panel Grid & Glowing Neon Curb!
+    ctx.fillStyle = '#111626';
+    ctx.fillRect(x, y, w, h);
+    ctx.strokeStyle = 'rgba(34, 211, 238, 0.16)';
+    ctx.lineWidth = 1.2;
+    for (let gx = x + 48; gx < x + w; gx += 48) {
+      ctx.beginPath();
+      ctx.moveTo(gx, y + 10);
+      ctx.lineTo(gx, y + h);
+      ctx.stroke();
+    }
+    for (let gy = y + 36; gy < y + h; gy += 36) {
+      ctx.beginPath();
+      ctx.moveTo(x, gy);
+      ctx.lineTo(x + w, gy);
+      ctx.stroke();
+    }
+    ctx.fillStyle = isBoss ? '#22d3ee' : '#ec4899';
+    ctx.fillRect(x, y, w, 5);
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
+    ctx.fillRect(x, y + 5, w, 2);
+    return;
+  }
+
+  if (env === 'pirate') {
+    // SKULLTIDE COVE & ARMADA: Sun-Warm Beach Sand OR Heavy Timber Pirate Galleon Decking!
+    const isIsland = theme.stoneFill === '#78350f';
+    ctx.fillStyle = isIsland ? '#78350f' : '#451a03';
+    ctx.fillRect(x, y, w, h);
+    if (isIsland) {
+      // Golden treasure beach sand crust + buried pebbles
+      ctx.fillStyle = '#f59e0b';
+      ctx.fillRect(x, y, w, 14);
+      ctx.fillStyle = '#fde047';
+      ctx.fillRect(x, y, w, 5);
+      ctx.fillStyle = 'rgba(254, 240, 138, 0.35)';
+      for (let sx = x + 18; sx < x + w - 18; sx += 54) {
+        ctx.fillRect(sx, y + 24, 14, 5);
+      }
+    } else {
+      // Heavy timber hull planks + brass cannon-port rings
+      ctx.strokeStyle = 'rgba(20, 8, 2, 0.65)';
+      ctx.lineWidth = 1.6;
+      for (let py = y + 18; py < y + h; py += 20) {
+        ctx.beginPath();
+        ctx.moveTo(x, py);
+        ctx.lineTo(x + w, py);
+        ctx.stroke();
+      }
+      ctx.fillStyle = '#d97706';
+      ctx.fillRect(x, y, w, 7);
+      ctx.fillStyle = '#1c1917';
+      for (let cx = x + 70; cx < x + w - 60; cx += 160) {
+        ctx.fillRect(cx, y + 28, 26, 22);
+        ctx.strokeStyle = '#fbbf24';
+        ctx.strokeRect(cx, y + 28, 26, 22);
+      }
+    }
+    return;
+  }
+
+  if (env === 'paradox') {
+    // THE GHOST PARADOX: Fractured Chessboard Void Tiles & Glowing Spectral Rift Lines!
+    ctx.fillStyle = '#17102c';
+    ctx.fillRect(x, y, w, h);
+    const tile = 32;
+    for (let ry = y + 8; ry < y + h; ry += tile) {
+      for (let rx = x; rx < x + w; rx += tile) {
+        if (((Math.floor(rx / tile) + Math.floor(ry / tile)) & 1) === 0) {
+          ctx.fillStyle = 'rgba(129, 140, 248, 0.14)';
+          ctx.fillRect(rx, ry, tile, tile);
+        }
+      }
+    }
+    ctx.fillStyle = '#818cf8';
+    ctx.fillRect(x, y, w, 5);
+    ctx.fillStyle = '#2dd4bf';
+    ctx.fillRect(x, y + 5, w, 2);
+    return;
+  }
+
+  if (env === 'mirror_cathedral') {
+    // SHATTERED MIRROR CATHEDRAL: Polished Obsidian-Mirror Marble, Prism Glare Bands & Silver Fracture Seams!
+    ctx.fillStyle = '#141126';
+    ctx.fillRect(x, y, w, h);
+
+    if (isPillar) {
+      // Reflective crystal cathedral buttress pillar
+      ctx.fillStyle = '#1e193b';
+      ctx.fillRect(x, y, w, h);
+      ctx.fillStyle = 'rgba(103, 232, 249, 0.22)';
+      ctx.fillRect(x + 3, y, Math.max(4, w * 0.3), h);
+      ctx.fillStyle = 'rgba(244, 114, 182, 0.16)';
+      ctx.fillRect(x + w - Math.max(4, w * 0.22) - 2, y, Math.max(4, w * 0.22), h);
+      ctx.strokeStyle = 'rgba(224, 242, 254, 0.45)';
+      ctx.lineWidth = 1.4;
+      ctx.strokeRect(x + 1, y + 1, w - 2, h - 2);
+      return;
+    }
+
+    // Diagonal mirror-glass reflection bands across obsidian floor
+    const tileW = 54;
+    for (let rx = x; rx < x + w; rx += tileW) {
+      const idx = Math.floor(rx / tileW);
+      ctx.fillStyle =
+        idx % 3 === 0
+          ? 'rgba(103, 232, 249, 0.14)'
+          : idx % 3 === 1
+            ? 'rgba(192, 132, 252, 0.12)'
+            : 'rgba(244, 114, 182, 0.1)';
+      ctx.beginPath();
+      ctx.moveTo(rx, y + 8);
+      ctx.lineTo(Math.min(x + w, rx + 26), y + 8);
+      ctx.lineTo(Math.min(x + w, rx + 8), y + Math.min(h, 58));
+      ctx.lineTo(rx, y + Math.min(h, 58));
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    // Cracked silver-crystal fracture seams
+    ctx.strokeStyle = 'rgba(224, 242, 254, 0.22)';
+    ctx.lineWidth = 1.2;
+    for (let fx = x + 36; fx < x + w - 28; fx += 86) {
+      ctx.beginPath();
+      ctx.moveTo(fx, y + 8);
+      ctx.lineTo(fx + 14, y + 26);
+      ctx.lineTo(fx + 4, y + 46);
+      ctx.stroke();
+    }
+
+    // Razor-crisp reflective mirror floor surface trim
+    ctx.fillStyle = isBoss ? '#f472b6' : '#67e8f9';
+    ctx.fillRect(x, y, w, 5);
+    ctx.fillStyle = '#f8fafc';
+    ctx.fillRect(x, y, w, 2);
+    ctx.fillStyle = 'rgba(192, 132, 252, 0.55)';
+    ctx.fillRect(x, y + 5, w, 2.5);
+    return;
+  }
+
+  if (env === 'mansion') {
+    // VELVET BLOOD CHATEAU: Polished Cream-and-Burgundy Marble Floor with Gilded Trim!
+    ctx.fillStyle = '#2b1b24';
+    ctx.fillRect(x, y, w, h);
+    const tw = 44;
+    for (let rx = x; rx < x + w; rx += tw) {
+      ctx.fillStyle = Math.floor(rx / tw) % 2 === 0 ? 'rgba(248, 250, 252, 0.12)' : 'rgba(190, 18, 60, 0.16)';
+      ctx.fillRect(rx, y + 10, tw - 1, Math.min(34, h - 10));
+    }
+    ctx.fillStyle = isBoss ? '#fbbf24' : '#be123c';
+    ctx.fillRect(x, y, w, 7);
+    ctx.fillStyle = '#fde68a';
+    ctx.fillRect(x, y + 7, w, 2.5);
+    return;
+  }
+
+  if (env === 'underwater') {
+    // SUNKEN PELAGIA: Pearl-Marble Ruin Masonry & Glowing Bioluminescent Coral Crust!
+    ctx.fillStyle = '#0e3147';
+    ctx.fillRect(x, y, w, h);
+    ctx.strokeStyle = 'rgba(56, 189, 248, 0.22)';
+    ctx.lineWidth = 1.4;
+    for (let gy = y + 26; gy < y + h; gy += 26) {
+      ctx.beginPath();
+      ctx.moveTo(x, gy);
+      ctx.lineTo(x + w, gy);
+      ctx.stroke();
+    }
+    ctx.fillStyle = '#0ea5e9';
+    ctx.fillRect(x, y, w, 6);
+    ctx.fillStyle = '#2dd4bf';
+    ctx.fillRect(x, y + 6, w, 3);
+    for (let cx = x + 36; cx < x + w - 36; cx += 96) {
+      ctx.fillStyle = 'rgba(244, 114, 182, 0.45)';
+      ctx.beginPath();
+      ctx.arc(cx, y + 20, 7, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    return;
+  }
+
+  if (env === 'frost') {
+    // FROSTWARDEN CITADEL: Glazed Ice-Crystal Ashlar Blocks & Shimmering Snow-Drift Top!
+    ctx.fillStyle = '#1b3454';
+    ctx.fillRect(x, y, w, h);
+    ctx.strokeStyle = 'rgba(186, 230, 253, 0.25)';
+    ctx.lineWidth = 1.4;
+    for (let rx = x + 52; rx < x + w; rx += 52) {
+      ctx.beginPath();
+      ctx.moveTo(rx, y + 10);
+      ctx.lineTo(rx - 14, y + h);
+      ctx.stroke();
+    }
+    ctx.fillStyle = '#e0f2fe';
+    ctx.fillRect(x, y, w, 7);
+    ctx.fillStyle = '#38bdf8';
+    ctx.fillRect(x, y + 7, w, 4);
+    return;
+  }
+
+  if (env === 'barbaric') {
+    // IRONHORN BLOODLANDS: Cracked Red-Earth Tundra Basalt, War-Paint Stripes & Bone Stakes!
+    ctx.fillStyle = '#382018';
+    ctx.fillRect(x, y, w, h);
+    ctx.fillStyle = isBoss ? '#f97316' : '#b91c1c';
+    ctx.fillRect(x, y, w, 8);
+    ctx.fillStyle = '#7c2d12';
+    ctx.fillRect(x, y + 8, w, 6);
+    ctx.strokeStyle = 'rgba(15, 7, 5, 0.65)';
+    ctx.lineWidth = 2;
+    for (let cx = x + 42; cx < x + w - 30; cx += 88) {
+      ctx.beginPath();
+      ctx.moveTo(cx, y + 14);
+      ctx.lineTo(cx + 14, y + 42);
+      ctx.lineTo(cx - 4, y + 68);
+      ctx.stroke();
+    }
+    return;
+  }
+
+  if (env === 'dwarven_mines') {
+    // CORRUPTED DWARVEN MINES: Chiseled Dwarven Basalt, Glowing Amethyst Ore Veins & Gilded Keystone Pillars!
+    ctx.fillStyle = theme.stoneFill;
+    ctx.fillRect(x, y, w, h);
+
+    if (isPillar) {
+      // Gilded dwarven rune-pillar with angular chevrons and amethyst inlay
+      ctx.fillStyle = '#2c253d';
+      ctx.fillRect(x, y, w, h);
+      ctx.fillStyle = '#d97706';
+      ctx.fillRect(x, y, w, 8);
+      ctx.fillRect(x, y + h - 8, w, 8);
+      ctx.fillStyle = '#4c1d95';
+      ctx.fillRect(x + Math.floor(w * 0.3), y + 14, Math.max(6, Math.floor(w * 0.4)), Math.max(8, h - 28));
+      ctx.fillStyle = '#c084fc';
+      for (let ry = y + 24; ry < y + h - 22; ry += 32) {
+        ctx.beginPath();
+        ctx.moveTo(x + w * 0.5, ry - 6);
+        ctx.lineTo(x + w * 0.5 + 6, ry);
+        ctx.lineTo(x + w * 0.5, ry + 6);
+        ctx.lineTo(x + w * 0.5 - 6, ry);
+        ctx.closePath();
+        ctx.fill();
+      }
+      return;
+    }
+
+    // Crisp angular dwarven ashlar masonry courses
+    ctx.strokeStyle = 'rgba(10, 7, 20, 0.62)';
+    ctx.lineWidth = 1.4;
+    const bh = 28;
+    const bw = 60;
+    ctx.beginPath();
+    for (let row = 0; row * bh < h - 16; row++) {
+      const by = y + 16 + row * bh;
+      ctx.moveTo(x, by);
+      ctx.lineTo(x + w, by);
+      const off = row % 2 === 0 ? 0 : bw / 2;
+      for (let bx = x + off; bx < x + w; bx += bw) {
+        ctx.moveTo(bx, by);
+        ctx.lineTo(bx, Math.min(by + bh, y + h));
+      }
+    }
+    ctx.stroke();
+
+    // Glowing corrupted amethyst ore veins running diagonally through stone
+    ctx.strokeStyle = 'rgba(192, 132, 252, 0.36)';
+    ctx.lineWidth = 2.5;
+    for (let vx = x + 38; vx < x + w - 40; vx += 140) {
+      ctx.beginPath();
+      ctx.moveTo(vx, y + 20);
+      ctx.lineTo(vx + 22, y + 48);
+      ctx.lineTo(vx + 10, y + 76);
+      ctx.stroke();
+      ctx.fillStyle = 'rgba(232, 121, 249, 0.55)';
+      ctx.fillRect(vx + 18, y + 44, 6, 6);
+    }
+
+    // Top surface: Heavy dwarven flagstone with iron rail trim (or gilded royal vault floor for boss)
+    ctx.fillStyle = isBoss ? '#92400e' : '#3b2e5a';
+    ctx.fillRect(x, y, w, 12);
+    ctx.fillStyle = isBoss ? '#fbbf24' : '#94a3b8';
+    ctx.fillRect(x, y, w, 4);
+    ctx.fillStyle = isBoss ? '#e879f9' : '#a855f7';
+    for (let tx = x + 16; tx < x + w - 16; tx += 48) {
+      ctx.fillRect(tx, y + 6, 14, 3);
+    }
+    return;
+  }
+
+  if (env === 'mushroom') {
+    // MUSHROOM KINGDOM: Mycelium Root Soil + Spongy Moss Turf + Glowing Baby Toadstools!
+    ctx.fillStyle = theme.stoneFill;
+    ctx.fillRect(x, y, w, h);
+
+    if (isPillar) {
+      // Striated giant mushroom stalk with glowing violet shelf-caps!
+      ctx.fillStyle = '#312e47';
+      ctx.fillRect(x, y, w, h);
+      ctx.fillStyle = 'rgba(226, 232, 240, 0.14)';
+      for (let sx = x + 6; sx < x + w - 4; sx += 14) {
+        ctx.fillRect(sx, y + 8, 4, h - 8);
+      }
+      ctx.fillStyle = '#a855f7';
+      ctx.fillRect(x, y, w, 9);
+      ctx.fillStyle = '#34d399';
+      ctx.fillRect(x, y + 9, w, 3);
+      return;
+    }
+
+    // Glowing underground mycelium root veins
+    ctx.strokeStyle = 'rgba(52, 211, 153, 0.22)';
+    ctx.lineWidth = 1.5;
+    for (let mx = x + 20; mx < x + w - 20; mx += 64) {
+      ctx.beginPath();
+      ctx.moveTo(mx, y + 12);
+      ctx.quadraticCurveTo(mx + 14, y + 36, mx - 6, Math.min(y + h, y + 66));
+      ctx.stroke();
+    }
+    ctx.strokeStyle = 'rgba(192, 132, 252, 0.2)';
+    for (let vx = x + 48; vx < x + w - 20; vx += 82) {
+      ctx.beginPath();
+      ctx.moveTo(vx, y + 14);
+      ctx.quadraticCurveTo(vx - 16, y + 40, vx + 10, Math.min(y + h, y + 72));
+      ctx.stroke();
+    }
+
+    // Spongy emerald moss cap
+    ctx.fillStyle = isBoss ? '#7e22ce' : '#065f46';
+    ctx.fillRect(x, y, w, 12);
+    ctx.fillStyle = isBoss ? '#e879f9' : theme.stoneTop;
+    ctx.fillRect(x, y, w, 5);
+    // Tiny glowing baby mushrooms sprouting along top edge!
+    for (let sx = x + 28; sx < x + w - 24; sx += 74) {
+      ctx.fillStyle = '#fef3c7';
+      ctx.fillRect(sx - 1.5, y - 6, 3, 6);
+      ctx.fillStyle = (sx / 74) % 2 === 0 ? '#e879f9' : '#34d399';
+      ctx.beginPath();
+      ctx.arc(sx, y - 6, 5.5, Math.PI, 0);
+      ctx.fill();
+    }
+    return;
+  }
+
+  if (env === 'alien') {
+    // ALIEN SHIP: Beveled Titanium Hull Decking + Pulsing Cyan Plasma Conduit!
+    ctx.fillStyle = theme.stoneFill;
+    ctx.fillRect(x, y, w, h);
+
+    if (isPillar) {
+      ctx.fillStyle = '#1e293b';
+      ctx.fillRect(x, y, w, h);
+      ctx.fillStyle = '#38bdf8';
+      ctx.fillRect(x + w * 0.5 - 3, y + 10, 6, h - 10);
+      ctx.fillStyle = '#06b6d4';
+      ctx.fillRect(x, y, w, 7);
+      for (let cy = y + 32; cy < y + h - 16; cy += 48) {
+        ctx.fillStyle = '#334155';
+        ctx.fillRect(x, cy, w, 8);
+      }
+      return;
+    }
+
+    // Sleek angled metallic hull plating seams
+    ctx.strokeStyle = 'rgba(56, 189, 248, 0.22)';
+    ctx.lineWidth = 1.2;
+    const panelW = 64;
+    for (let px = x + panelW; px < x + w; px += panelW) {
+      ctx.beginPath();
+      ctx.moveTo(px, y + 10);
+      ctx.lineTo(px - 10, y + 26);
+      ctx.lineTo(px - 10, Math.min(y + h, y + 84));
+      ctx.stroke();
+    }
+    // Metallic top rail + pulsing neon cyan energy strip
+    ctx.fillStyle = '#334155';
+    ctx.fillRect(x, y, w, 10);
+    const glowA = 0.65 + Math.sin(time * 4.2 + x * 0.01) * 0.25;
+    ctx.fillStyle = isBoss ? `rgba(232, 121, 249, ${glowA})` : `rgba(34, 211, 238, ${glowA})`;
+    ctx.fillRect(x, y, w, 3.5);
+    ctx.fillStyle = isBoss ? 'rgba(232, 121, 249, 0.32)' : 'rgba(56, 189, 248, 0.28)';
+    ctx.fillRect(x, y + 12, w, 2.5);
+    // Hazard chevrons on boss deck
+    if (isBoss) {
+      ctx.fillStyle = 'rgba(250, 204, 21, 0.55)';
+      for (let hx = x + 16; hx < x + w - 16; hx += 34) {
+        ctx.fillRect(hx, y + 5, 14, 3);
+      }
+    }
+    return;
+  }
+
+  if (env === 'foundry') {
+    // BRIMSTONE SANCTUM: Dark Volcanic Basalt + Glowing Molten Lava Cracks!
+    ctx.fillStyle = theme.stoneFill;
+    ctx.fillRect(x, y, w, h);
+    ctx.fillStyle = isBoss ? theme.bossFloorTop : '#57281e';
+    ctx.fillRect(x, y, w, 8);
+    ctx.fillStyle = '#f97316';
+    ctx.fillRect(x, y, w, 2.5);
+
+    // Jagged basalt cracks glowing with molten lava!
+    const lavaPulse = 0.65 + Math.sin(time * 3.5 + x * 0.02) * 0.25;
+    ctx.strokeStyle = `rgba(249, 115, 22, ${lavaPulse})`;
+    ctx.lineWidth = 1.6;
+    for (let lx = x + 30; lx < x + w - 20; lx += 68) {
+      ctx.beginPath();
+      ctx.moveTo(lx, y + 8);
+      ctx.lineTo(lx - 8, y + 26);
+      ctx.lineTo(lx + 6, Math.min(y + h, y + 48));
+      ctx.stroke();
+    }
+    ctx.strokeStyle = 'rgba(10, 6, 6, 0.65)';
+    ctx.lineWidth = 1;
+    drawBrickGrid(ctx, x, y + 8, w, h - 8, 48, 24);
+    return;
+  }
+
+  if (env === 'cemetery') {
+    // WEEPING NECROPOLIS: Cracked Mossy Graveyard Flagstones & Pale Runes!
+    ctx.fillStyle = theme.stoneFill;
+    ctx.fillRect(x, y, w, h);
+    ctx.fillStyle = isBoss ? theme.bossFloorTop : '#3f524c';
+    ctx.fillRect(x, y, w, 8);
+    // Creeping moss clumps & ghostly teal sigils
+    ctx.fillStyle = '#15803d';
+    for (let mx = x + 14; mx < x + w - 18; mx += 48) {
+      ctx.fillRect(mx, y - 2, 16, 4);
+    }
+    ctx.strokeStyle = 'rgba(12, 16, 22, 0.65)';
+    ctx.lineWidth = 1.2;
+    drawBrickGrid(ctx, x, y + 8, w, h - 8, 52, 24);
+    return;
+  }
+
+  if (env === 'goblin_camp') {
+    // GOBLIN CAMP: Packed Forest Earth, Pebbles & Wild Jagged Grass Blades!
+    ctx.fillStyle = '#261d16';
+    ctx.fillRect(x, y, w, h);
+    ctx.fillStyle = isBoss ? '#7c2d12' : '#2d4728';
+    ctx.fillRect(x, y, w, 10);
+    ctx.fillStyle = isBoss ? theme.bossFloorTop : '#4d7c3f';
+    ctx.fillRect(x, y, w, 4);
+    // Wild grass blades poking up on forest earth
+    if (!isBoss && !isPillar) {
+      ctx.fillStyle = '#4d7c3f';
+      for (let gx = x + 18; gx < x + w - 16; gx += 44) {
+        ctx.fillRect(gx, y - 5, 2, 5);
+        ctx.fillRect(gx + 4, y - 7, 2, 7);
+        ctx.fillRect(gx + 8, y - 4, 2, 4);
+      }
+    }
+    // Embedded stones in packed earth strata
+    ctx.fillStyle = '#3b2e24';
+    for (let sx = x + 22; sx < x + w - 22; sx += 54) {
+      ctx.fillRect(sx, y + 18, 16, 8);
+      ctx.fillRect(sx + 24, y + 36, 12, 6);
+    }
+    return;
+  }
+
+  if (env === 'eclipse') {
+    // ECLIPSE CITADEL: Fractured Black Obsidian & Crimson-Gold Celestial Veins!
+    ctx.fillStyle = '#120816';
+    ctx.fillRect(x, y, w, h);
+    ctx.fillStyle = isBoss ? '#ff2e63' : '#881337';
+    ctx.fillRect(x, y, w, 7);
+    ctx.fillStyle = '#fbbf24';
+    ctx.fillRect(x, y + 7, w, 2);
+    ctx.strokeStyle = 'rgba(255, 46, 99, 0.24)';
+    ctx.lineWidth = 1.2;
+    drawBrickGrid(ctx, x, y + 9, w, h - 9, 46, 24);
+    return;
+  }
+
+  // NOCTURNE CASTLE (Default): Ornate Gothic Dressed Masonry + Royal Crimson Boss Carpet!
   ctx.fillStyle = theme.stoneFill;
   ctx.fillRect(x, y, w, h);
-
-  ctx.fillStyle = style === 'boss_floor' ? theme.bossFloorTop : theme.stoneTop;
+  ctx.fillStyle = isBoss ? theme.bossFloorTop : theme.stoneTop;
   ctx.fillRect(x, y, w, 7);
-
+  if (isBoss) {
+    ctx.fillStyle = '#fbbf24';
+    ctx.fillRect(x, y + 7, w, 2);
+  }
   ctx.strokeStyle = SPRITE_PALETTE.stoneLine;
   ctx.lineWidth = 1;
-  const brickH = 22;
-  const brickW = 44;
+  drawBrickGrid(ctx, x, y + 7, w, h - 7, 44, 22);
+}
+
+function drawBrickGrid(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  brickW: number,
+  brickH: number
+): void {
+  if (h <= 0) return;
   ctx.beginPath();
   for (let row = 0; row * brickH < h; row++) {
-    const by = y + 7 + row * brickH;
+    const by = y + row * brickH;
     if (by >= y + h) break;
     ctx.moveTo(x, by);
     ctx.lineTo(x + w, by);
@@ -273,6 +1264,25 @@ export function drawPlatformTile(
       ctx.moveTo(bx, by);
       ctx.lineTo(bx, Math.min(by + brickH, y + h));
     }
+  }
+  ctx.stroke();
+}
+
+function drawCrumbleCracks(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  isShaking: boolean
+): void {
+  ctx.strokeStyle = isShaking ? '#fde68a' : '#1b110d';
+  ctx.lineWidth = isShaking ? 1.8 : 1.3;
+  ctx.beginPath();
+  for (let cx = x + 24; cx < x + w - 18; cx += 42) {
+    ctx.moveTo(cx, y + 1);
+    ctx.lineTo(cx + 6, y + h * 0.55);
+    ctx.lineTo(cx - 2, y + h);
   }
   ctx.stroke();
 }
@@ -774,88 +1784,132 @@ export function drawInteractable(
     }
 
     case 'cursed_door': {
-      const doorW = 74;
-      const doorH = 132;
+      const doorW = 76;
+      const doorH = 136;
       const pulse = Math.sin(time * 5.2) * 0.5 + 0.5;
 
-      // Towering Crimson-Violet Cursed Archway
-      ctx.fillStyle = '#1f1024';
+      // Towering Shattered Mirror Cathedral Gothic Pointed Archway
+      ctx.fillStyle = '#151026';
       ctx.beginPath();
       ctx.moveTo(-doorW / 2 - 14, 0);
-      ctx.lineTo(-doorW / 2 - 14, -doorH + 34);
-      ctx.quadraticCurveTo(0, -doorH - 26, doorW / 2 + 14, -doorH + 34);
+      ctx.lineTo(-doorW / 2 - 14, -doorH + 40);
+      ctx.quadraticCurveTo(-doorW * 0.24, -doorH - 8, 0, -doorH - 22);
+      ctx.quadraticCurveTo(doorW * 0.24, -doorH - 8, doorW / 2 + 14, -doorH + 40);
       ctx.lineTo(doorW / 2 + 14, 0);
       ctx.closePath();
       ctx.fill();
-      ctx.strokeStyle = '#f43f5e';
+      ctx.strokeStyle = '#67e8f9';
       ctx.lineWidth = 2.4;
       ctx.stroke();
 
-      // Swirling Cursed Portal Core
+      // Swirling Prismatic Mirror Portal Core
       ctx.beginPath();
       ctx.moveTo(-doorW / 2, 0);
-      ctx.lineTo(-doorW / 2, -doorH + 34);
-      ctx.quadraticCurveTo(0, -doorH - 8, doorW / 2, -doorH + 34);
+      ctx.lineTo(-doorW / 2, -doorH + 40);
+      ctx.quadraticCurveTo(-doorW * 0.2, -doorH + 4, 0, -doorH - 6);
+      ctx.quadraticCurveTo(doorW * 0.2, -doorH + 4, doorW / 2, -doorH + 40);
       ctx.lineTo(doorW / 2, 0);
       ctx.closePath();
-      const portalGrad = ctx.createLinearGradient(0, -doorH, 0, 0);
-      portalGrad.addColorStop(0, '#2e0722');
-      portalGrad.addColorStop(0.55, '#9f1239');
-      portalGrad.addColorStop(1, '#7e22ce');
+      const portalGrad = ctx.createLinearGradient(-doorW / 2, -doorH, doorW / 2, 0);
+      portalGrad.addColorStop(0, '#0f172a');
+      portalGrad.addColorStop(0.35, '#0e7490');
+      portalGrad.addColorStop(0.68, '#7e22ce');
+      portalGrad.addColorStop(1, '#be185d');
       ctx.fillStyle = portalGrad;
       ctx.fill();
 
-      // Pulsing outer cursed aura
-      const aura = ctx.createRadialGradient(0, -doorH * 0.48, 8, 0, -doorH * 0.48, 96 + pulse * 14);
-      aura.addColorStop(0, `rgba(244, 63, 94, ${0.4 + pulse * 0.2})`);
-      aura.addColorStop(0.55, `rgba(168, 85, 247, ${0.22 + pulse * 0.1})`);
+      // Shattered glass fracture lines & bright diagonal mirror reflections inside archway
+      ctx.strokeStyle = 'rgba(224, 242, 254, 0.72)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(-doorW * 0.32, -doorH + 28);
+      ctx.lineTo(doorW * 0.28, -doorH + 64);
+      ctx.moveTo(-doorW * 0.22, -doorH + 78);
+      ctx.lineTo(doorW * 0.34, -doorH + 104);
+      ctx.moveTo(0, -doorH + 12);
+      ctx.lineTo(-doorW * 0.14, -doorH + 54);
+      ctx.lineTo(doorW * 0.12, -doorH + 92);
+      ctx.stroke();
+
+      // Orbiting floating mirror shards around the portal frame
+      for (let i = 0; i < 4; i++) {
+        const ang = time * 1.9 + i * (Math.PI / 2);
+        const sx = Math.cos(ang) * (doorW * 0.62);
+        const sy = -doorH * 0.52 + Math.sin(ang) * 44;
+        ctx.fillStyle = i % 2 === 0 ? '#e0f2fe' : '#f472b6';
+        ctx.beginPath();
+        ctx.moveTo(sx, sy - 6);
+        ctx.lineTo(sx + 5, sy);
+        ctx.lineTo(sx, sy + 6);
+        ctx.lineTo(sx - 5, sy);
+        ctx.closePath();
+        ctx.fill();
+      }
+
+      // Pulsing outer prism cathedral aura
+      const aura = ctx.createRadialGradient(0, -doorH * 0.48, 8, 0, -doorH * 0.48, 98 + pulse * 14);
+      aura.addColorStop(0, `rgba(103, 232, 249, ${0.38 + pulse * 0.18})`);
+      aura.addColorStop(0.52, `rgba(244, 114, 182, ${0.22 + pulse * 0.1})`);
       aura.addColorStop(1, 'rgba(168, 85, 247, 0)');
       ctx.fillStyle = aura;
       ctx.beginPath();
-      ctx.arc(0, -doorH * 0.48, 96 + pulse * 14, 0, Math.PI * 2);
+      ctx.arc(0, -doorH * 0.48, 98 + pulse * 14, 0, Math.PI * 2);
       ctx.fill();
 
-      // Glowing Skull Keystone above Cursed Door
-      ctx.fillStyle = '#fde047';
+      // Faceted Prism Diamond Keystone above the Mirror Arch
+      ctx.fillStyle = '#e0f2fe';
       ctx.beginPath();
-      ctx.arc(0, -doorH + 6, 9, 0, Math.PI * 2);
+      ctx.moveTo(0, -doorH - 18);
+      ctx.lineTo(9, -doorH - 6);
+      ctx.lineTo(0, -doorH + 6);
+      ctx.lineTo(-9, -doorH - 6);
+      ctx.closePath();
       ctx.fill();
-      ctx.fillStyle = '#1f0716';
-      ctx.fillRect(-4, -doorH + 4, 3, 3);
-      ctx.fillRect(1, -doorH + 4, 3, 3);
+      ctx.strokeStyle = '#f472b6';
+      ctx.lineWidth = 1.6;
+      ctx.stroke();
       break;
     }
 
     case 'cursed_shrine': {
       const pulse = Math.sin(time * 5.8) * 3;
-      // Obsidian Blood Pedestal
-      ctx.fillStyle = '#1b1122';
-      ctx.fillRect(-22, -12, 44, 12);
-      ctx.fillRect(-13, -44, 26, 32);
-      ctx.fillStyle = '#4c1d3d';
-      ctx.fillRect(-18, -48, 36, 6);
+      // Obsidian-Silver Shattered Mirror Pedestal
+      ctx.fillStyle = '#18132b';
+      ctx.fillRect(-24, -12, 48, 12);
+      ctx.fillRect(-14, -46, 28, 34);
+      ctx.fillStyle = '#38bdf8';
+      ctx.fillRect(-20, -50, 40, 5);
+      ctx.fillStyle = '#f472b6';
+      ctx.fillRect(-18, -45, 36, 2);
 
       if (!item.used) {
-        const glow = ctx.createRadialGradient(0, -64 + pulse, 4, 0, -64 + pulse, 56);
-        glow.addColorStop(0, 'rgba(244, 63, 94, 0.52)');
-        glow.addColorStop(0.55, 'rgba(168, 85, 247, 0.24)');
+        const glow = ctx.createRadialGradient(0, -68 + pulse, 4, 0, -68 + pulse, 58);
+        glow.addColorStop(0, 'rgba(103, 232, 249, 0.54)');
+        glow.addColorStop(0.55, 'rgba(244, 114, 182, 0.26)');
         glow.addColorStop(1, 'rgba(168, 85, 247, 0)');
         ctx.fillStyle = glow;
         ctx.beginPath();
-        ctx.arc(0, -64 + pulse, 56, 0, Math.PI * 2);
+        ctx.arc(0, -68 + pulse, 58, 0, Math.PI * 2);
         ctx.fill();
 
-        // Floating Crimson Blood Chalice / Sigil
-        ctx.fillStyle = '#f43f5e';
+        // Floating Fractured Mirror Prism Crystal
+        ctx.fillStyle = '#e0f2fe';
         ctx.beginPath();
-        ctx.moveTo(0, -78 + pulse);
-        ctx.lineTo(12, -62 + pulse);
-        ctx.lineTo(0, -48 + pulse);
-        ctx.lineTo(-12, -62 + pulse);
+        ctx.moveTo(0, -86 + pulse);
+        ctx.lineTo(13, -68 + pulse);
+        ctx.lineTo(0, -50 + pulse);
+        ctx.lineTo(-13, -68 + pulse);
         ctx.closePath();
         ctx.fill();
-        ctx.strokeStyle = '#fde047';
-        ctx.lineWidth = 1.6;
+        ctx.fillStyle = 'rgba(244, 114, 182, 0.45)';
+        ctx.beginPath();
+        ctx.moveTo(0, -86 + pulse);
+        ctx.lineTo(13, -68 + pulse);
+        ctx.lineTo(0, -50 + pulse);
+        ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = '#67e8f9';
+        ctx.lineWidth = 1.8;
         ctx.stroke();
       }
       break;
@@ -911,7 +1965,7 @@ export function drawInteractable(
     case 'camp_hero_ronin': {
       const isSelected = activeCharacterId === 'ronin';
       if (!isSelected) {
-        drawCampHeroFigure(ctx, 'ronin', 0, 0, -1, playerScale, time, false);
+        drawCampHeroFigure(ctx, 'ronin', 0, 0, 1, playerScale, time, false);
       } else {
         ctx.fillStyle = '#33241c';
         ctx.fillRect(-16, -9, 32, 9);
@@ -922,7 +1976,7 @@ export function drawInteractable(
     case 'camp_hero_minstrel': {
       const isSelected = activeCharacterId === 'minstrel';
       if (!isSelected) {
-        drawCampHeroFigure(ctx, 'minstrel', 0, 0, -1, playerScale, time, false);
+        drawCampHeroFigure(ctx, 'minstrel', 0, 0, 1, playerScale, time, false);
       } else {
         ctx.fillStyle = '#33241c';
         ctx.fillRect(-15, -9, 30, 9);
@@ -933,9 +1987,9 @@ export function drawInteractable(
     case 'camp_hero_monk': {
       const isSelected = activeCharacterId === 'monk';
       if (!isSelected) {
-        drawCampHeroFigure(ctx, 'monk', 0, 0, -1, playerScale, time, false);
+        drawCampHeroFigure(ctx, 'monk', 0, 0, 1, playerScale, time, false);
       } else {
-        // Prayer mat where the Monk kneels when not active
+        // Prayer mat where the Monk kneels atop the Mountain Summit when not active
         ctx.fillStyle = '#3f3a36';
         ctx.fillRect(-18, -4, 36, 4);
       }
@@ -947,7 +2001,7 @@ export function drawInteractable(
       if (!isSelected) {
         drawCampHeroFigure(ctx, 'assassin', 0, 0, -1, playerScale, time, false);
       } else {
-        // Scorched whetstone and a snuffed candle where the Assassin lurks when not active
+        // Scorched whetstone and a snuffed candle where the Assassin lurks on the Battlements
         ctx.fillStyle = '#1c1917';
         ctx.fillRect(-14, -6, 28, 6);
         ctx.fillStyle = '#9f1239';
@@ -959,10 +2013,73 @@ export function drawInteractable(
     case 'camp_hero_wizard': {
       const isSelected = activeCharacterId === 'wizard';
       if (!isSelected) {
-        drawCampHeroFigure(ctx, 'wizard', 0, 0, 1, playerScale, time, false);
+        drawCampHeroFigure(ctx, 'wizard', 0, 0, -1, playerScale, time, false);
+        // 3 softly orbiting Grimoire Orbs showing off the Orbiting Grimoire tome
+        const orbCols = ['#f97316', '#38bdf8', '#c084fc'];
+        for (let i = 0; i < 3; i++) {
+          const a = time * 2.2 + (i * Math.PI * 2) / 3;
+          const ox = Math.cos(a) * 26;
+          const oy = -34 + Math.sin(a) * 10;
+          ctx.save();
+          ctx.fillStyle = orbCols[i];
+          ctx.shadowColor = orbCols[i];
+          ctx.shadowBlur = 10;
+          ctx.beginPath();
+          ctx.arc(ox, oy, 4.2, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = '#ffffff';
+          ctx.beginPath();
+          ctx.arc(ox - 1, oy - 1, 1.5, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        }
       } else {
         ctx.fillStyle = '#1e1b4b';
         ctx.fillRect(-14, -8, 28, 8);
+      }
+      break;
+    }
+
+    case 'camp_hero_ranger': {
+      const isSelected = activeCharacterId === 'ranger';
+      if (!isSelected) {
+        drawCampHeroFigure(ctx, 'ranger', 0, 0, 1, playerScale, time, false);
+      } else {
+        ctx.fillStyle = '#064e3b';
+        ctx.fillRect(-14, -8, 28, 8);
+      }
+      break;
+    }
+
+    case 'camp_hero_vanguard': {
+      const isSelected = activeCharacterId === 'vanguard';
+      if (!isSelected) {
+        drawCampHeroFigure(ctx, 'vanguard', 0, 0, -1, playerScale, time, false);
+      } else {
+        ctx.fillStyle = '#1e3a5f';
+        ctx.fillRect(-18, -10, 36, 10);
+      }
+      break;
+    }
+
+    case 'camp_hero_dancer': {
+      const isSelected = activeCharacterId === 'dancer';
+      if (!isSelected) {
+        drawCampHeroFigure(ctx, 'dancer', 0, 0, -1, playerScale, time, false);
+      } else {
+        ctx.fillStyle = '#881337';
+        ctx.fillRect(-15, -8, 30, 8);
+      }
+      break;
+    }
+
+    case 'camp_hero_bouncer': {
+      const isSelected = activeCharacterId === 'bouncer';
+      if (!isSelected) {
+        drawCampHeroFigure(ctx, 'bouncer', 0, 0, -1, playerScale, time, false);
+      } else {
+        ctx.fillStyle = '#164e63';
+        ctx.fillRect(-15, -8, 30, 8);
       }
       break;
     }
@@ -1137,7 +2254,11 @@ export function drawInteractable(
     (item.kind === 'camp_hero_minstrel' && activeCharacterId === 'minstrel') ||
     (item.kind === 'camp_hero_monk' && activeCharacterId === 'monk') ||
     (item.kind === 'camp_hero_wizard' && activeCharacterId === 'wizard') ||
-    (item.kind === 'camp_hero_assassin' && activeCharacterId === 'assassin');
+    (item.kind === 'camp_hero_assassin' && activeCharacterId === 'assassin') ||
+    (item.kind === 'camp_hero_ranger' && activeCharacterId === 'ranger') ||
+    (item.kind === 'camp_hero_vanguard' && activeCharacterId === 'vanguard') ||
+    (item.kind === 'camp_hero_dancer' && activeCharacterId === 'dancer') ||
+    (item.kind === 'camp_hero_bouncer' && activeCharacterId === 'bouncer');
 
   if (isNearby && !hidePrompt) {
     const bob = Math.sin(time * 6) * 2.5;
@@ -2374,6 +3495,146 @@ export function drawWeaponAttack(
     return;
   }
 
+  // 2B. SPECIALTY & NEW WEAPON VISUALS (+ Hold-to-Charge Aura!)
+  if (
+    player.attackWeapon === 'estoc_spear' ||
+    player.attackWeapon === 'short_blade' ||
+    player.attackWeapon === 'cleaver_greatsword' ||
+    player.attackWeapon === 'joust_lance' ||
+    player.attackWeapon === 'arcane_wand' ||
+    player.attackWeapon === 'war_fans' ||
+    player.attackWeapon === 'meteor_flail' ||
+    player.attackWeapon === 'solar_glaive' ||
+    player.attackWeapon === 'prism_gauntlets'
+  ) {
+    const wep = player.attackWeapon;
+    // Charge aura ring for charging weapons during startup
+    if (player.attackState === 'startup' && (wep === 'cleaver_greatsword' || wep === 'joust_lance')) {
+      const chFrac = Math.min(1, player.weaponChargeTimer / 0.95);
+      const col = wep === 'cleaver_greatsword' ? '#fb923c' : '#facc15';
+      ctx.strokeStyle = col;
+      ctx.lineWidth = (2.5 + chFrac * 4.5) * scale;
+      ctx.globalAlpha = 0.45 + chFrac * 0.5;
+      ctx.beginPath();
+      ctx.arc(player.x, originY, (22 + chFrac * 24) * scale, -Math.PI * 0.5, -Math.PI * 0.5 + Math.PI * 2 * Math.max(0.2, chFrac));
+      ctx.stroke();
+      ctx.restore();
+      return;
+    }
+
+    if (player.attackState === 'active') {
+      const elCol = activeEl?.primaryColor ?? (isFlaming ? '#fb923c' : null);
+      if (wep === 'estoc_spear' || wep === 'joust_lance') {
+        const isLance = wep === 'joust_lance';
+        const mult = isLance ? 1.85 * (1 + Math.min(0.45, player.weaponChargeTimer * 0.42)) : 1.18;
+        const endX = originX + player.facing * reach * mult;
+        ctx.strokeStyle = elCol ?? (isLance ? '#facc15' : '#38bdf8');
+        ctx.lineWidth = (isLance ? 13 : 7) * scale;
+        ctx.lineCap = 'round';
+        ctx.globalAlpha = 0.55;
+        ctx.beginPath();
+        ctx.moveTo(originX, originY);
+        ctx.lineTo(endX, originY);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = (isLance ? 5 : 2.6) * scale;
+        ctx.beginPath();
+        ctx.moveTo(originX, originY);
+        ctx.lineTo(endX, originY);
+        ctx.stroke();
+        // Piercing needle tip cone
+        ctx.fillStyle = elCol ?? (isLance ? '#fef08a' : '#e0f2fe');
+        ctx.beginPath();
+        ctx.moveTo(endX + player.facing * (isLance ? 26 : 16) * scale, originY);
+        ctx.lineTo(endX - player.facing * 8 * scale, originY - (isLance ? 12 : 6) * scale);
+        ctx.lineTo(endX - player.facing * 8 * scale, originY + (isLance ? 12 : 6) * scale);
+        ctx.closePath();
+        ctx.fill();
+      } else if (wep === 'short_blade' || wep === 'cleaver_greatsword' || wep === 'solar_glaive') {
+        const isGreat = wep === 'cleaver_greatsword';
+        const isSolar = wep === 'solar_glaive';
+        const r = reach * (isGreat ? 1.55 * (1 + Math.min(0.42, player.weaponChargeTimer * 0.4)) : isSolar ? 1.38 : 0.78);
+        const startA = player.facing === 1 ? -Math.PI * 0.72 : Math.PI * 0.28;
+        const endA = player.facing === 1 ? Math.PI * 0.56 : Math.PI * 1.72;
+        ctx.strokeStyle = elCol ?? (isSolar ? '#fbbf24' : isGreat ? '#fb923c' : '#cbd5e1');
+        ctx.lineWidth = (isGreat ? 22 : isSolar ? 16 : 9) * scale;
+        ctx.lineCap = 'round';
+        ctx.globalAlpha = 0.62;
+        ctx.beginPath();
+        ctx.arc(player.x, originY, r, startA, endA, false);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+        ctx.strokeStyle = isSolar ? '#fef08a' : '#ffffff';
+        ctx.lineWidth = (isGreat ? 6 : isSolar ? 4.5 : 3) * scale;
+        ctx.beginPath();
+        ctx.arc(player.x, originY, r * 1.03, startA, endA, false);
+        ctx.stroke();
+      } else if (wep === 'prism_gauntlets') {
+        // Crystal kinetic burst punch forward!
+        const endX = originX + player.facing * reach * 0.92;
+        ctx.strokeStyle = elCol ?? '#e879f9';
+        ctx.lineWidth = 14 * scale;
+        ctx.lineCap = 'round';
+        ctx.globalAlpha = 0.55;
+        ctx.beginPath();
+        ctx.moveTo(originX, originY);
+        ctx.lineTo(endX, originY);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = '#67e8f9';
+        ctx.beginPath();
+        ctx.arc(endX, originY, 12 * scale, 0, Math.PI * 2);
+        ctx.fill();
+      } else if (wep === 'war_fans') {
+        // Super wide, very short 300-degree close crescent flourish!
+        const r = Math.max(50, reach * 0.62);
+        ctx.strokeStyle = elCol ?? '#2dd4bf';
+        ctx.lineWidth = 14 * scale;
+        ctx.globalAlpha = 0.58;
+        ctx.beginPath();
+        ctx.arc(player.x, originY, r, -Math.PI * 0.9, Math.PI * 0.75);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+        ctx.strokeStyle = '#f0fdfa';
+        ctx.lineWidth = 3.5 * scale;
+        ctx.beginPath();
+        ctx.arc(player.x, originY, r * 0.92, -Math.PI * 0.85, Math.PI * 0.7);
+        ctx.stroke();
+      } else if (wep === 'meteor_flail') {
+        // Heavy iron chain + explosive impact sphere at impact point!
+        const impX = player.x + player.facing * 72 * scale;
+        const impY = player.y - h * 0.28;
+        ctx.strokeStyle = '#94a3b8';
+        ctx.lineWidth = 3 * scale;
+        ctx.setLineDash([5, 4]);
+        ctx.beginPath();
+        ctx.moveTo(originX, originY);
+        ctx.lineTo(impX, impY);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        const grad = ctx.createRadialGradient(impX, impY, 8, impX, impY, Math.max(115, reach * 1.38));
+        grad.addColorStop(0, 'rgba(254, 240, 138, 0.85)');
+        grad.addColorStop(0.45, 'rgba(239, 68, 68, 0.45)');
+        grad.addColorStop(1, 'rgba(239, 68, 68, 0)');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(impX, impY, Math.max(115, reach * 1.38), 0, Math.PI * 2);
+        ctx.fill();
+      } else if (wep === 'arcane_wand') {
+        // Crisp glowing wand tip cast ring
+        const tipX = originX + player.facing * 26 * scale;
+        ctx.strokeStyle = elCol ?? '#818cf8';
+        ctx.lineWidth = 3 * scale;
+        ctx.beginPath();
+        ctx.arc(tipX, originY, 13 * scale, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
+    return;
+  }
+
   // 3. WHIP — Classic Straight Castlevania Chain Lash
   if (player.attackState === 'startup') {
     ctx.strokeStyle = isFlaming ? '#f97316' : SPRITE_PALETTE.whipEdge;
@@ -2525,6 +3786,48 @@ export function drawEnemySprite(
   scale: number,
   assassinationEnabled: boolean
 ): void {
+  if (enemy.isMirrorPhantom) {
+    const ew = enemy.baseW * scale;
+    const eh = enemy.baseH * scale;
+    const shimmer = 0.68 + Math.sin(enemy.animTime * 8) * 0.1;
+    // Prismatic crystal aura behind Mirror Phantom
+    ctx.save();
+    const aura = ctx.createRadialGradient(
+      enemy.x,
+      enemy.y - eh * 0.5,
+      4,
+      enemy.x,
+      enemy.y - eh * 0.5,
+      Math.max(ew, eh) * 0.72
+    );
+    aura.addColorStop(0, 'rgba(103, 232, 249, 0.34)');
+    aura.addColorStop(0.6, 'rgba(244, 114, 182, 0.18)');
+    aura.addColorStop(1, 'rgba(168, 85, 247, 0)');
+    ctx.fillStyle = aura;
+    ctx.beginPath();
+    ctx.arc(enemy.x, enemy.y - eh * 0.5, Math.max(ew, eh) * 0.72, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Translucent mirror reflection sprite with crystalline refraction tint
+    ctx.globalAlpha = shimmer;
+    drawDetailedEnemySprite(ctx, enemy, scale, assassinationEnabled);
+
+    // Prismatic cyan-rose crystalline frame & floating shard diamond above phantom
+    ctx.globalAlpha = 0.85;
+    ctx.strokeStyle = '#67e8f9';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(enemy.x, enemy.y - eh - 18);
+    ctx.lineTo(enemy.x + 6, enemy.y - eh - 11);
+    ctx.lineTo(enemy.x, enemy.y - eh - 4);
+    ctx.lineTo(enemy.x - 6, enemy.y - eh - 11);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(224, 242, 254, 0.8)';
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+    return;
+  }
   drawDetailedEnemySprite(ctx, enemy, scale, assassinationEnabled);
 }
 
@@ -2633,6 +3936,111 @@ export function drawProjectile(ctx: CanvasRenderingContext2D, proj: Projectile):
       ctx.arc(0, 0, r * 1.7 + Math.sin(proj.life * 40) * 2, 0, Math.PI * 2);
       ctx.stroke();
     }
+  } else if (proj.kind === 'grimoire_orb') {
+    const c1 = proj.color ?? '#f97316';
+    const r = proj.radius;
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.fillStyle = c1;
+    ctx.globalAlpha = 0.35;
+    ctx.beginPath();
+    ctx.arc(0, 0, r * 1.9, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 0.95;
+    ctx.beginPath();
+    ctx.arc(0, 0, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(0, 0, r * 1.35, 0, Math.PI * 1.4);
+    ctx.stroke();
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.arc(-r * 0.2, -r * 0.2, r * 0.45, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (proj.kind === 'crossbow_bolt') {
+    ctx.fillStyle = proj.color ?? '#34d399';
+    ctx.fillRect(-13, -1.8, 22, 3.6);
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.moveTo(9, -3.4);
+    ctx.lineTo(16, 0);
+    ctx.lineTo(9, 3.4);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#10b981';
+    ctx.fillRect(-15, -3.5, 5, 7);
+  } else if (proj.kind === 'chakram') {
+    const r = proj.radius;
+    ctx.strokeStyle = proj.returning ? '#fb7185' : '#fbbf24';
+    ctx.lineWidth = 4.5;
+    ctx.beginPath();
+    ctx.arc(0, 0, r, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.strokeStyle = '#fef9c3';
+    ctx.lineWidth = 1.8;
+    ctx.beginPath();
+    ctx.arc(0, 0, r * 0.72, 0, Math.PI * 2);
+    ctx.stroke();
+    for (let b = 0; b < 4; b++) {
+      const a = (b * Math.PI) / 2;
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.moveTo(Math.cos(a) * (r + 5), Math.sin(a) * (r + 5));
+      ctx.lineTo(Math.cos(a + 0.35) * (r - 2), Math.sin(a + 0.35) * (r - 2));
+      ctx.lineTo(Math.cos(a - 0.35) * (r - 2), Math.sin(a - 0.35) * (r - 2));
+      ctx.closePath();
+      ctx.fill();
+    }
+  } else if (proj.kind === 'chakram_vortex') {
+    const r = proj.radius;
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.strokeStyle = '#fbbf24';
+    ctx.lineWidth = 4;
+    ctx.setLineDash([14, 8]);
+    ctx.beginPath();
+    ctx.arc(0, 0, r, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.strokeStyle = '#fb7185';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(0, 0, r * 0.65, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = 'rgba(251, 191, 36, 0.22)';
+    ctx.beginPath();
+    ctx.arc(0, 0, r, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (proj.kind === 'spore_glob') {
+    ctx.fillStyle = '#84cc16';
+    ctx.beginPath();
+    ctx.arc(0, 0, proj.radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#ecfccb';
+    ctx.beginPath();
+    ctx.arc(-2, -2, proj.radius * 0.4, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (proj.kind === 'rail_beam') {
+    const col = proj.color ?? '#38bdf8';
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.fillStyle = col;
+    ctx.fillRect(-18, -3.5, 36, 7);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(-16, -1.5, 32, 3);
+  } else if (proj.kind === 'jade_bolt') {
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.fillStyle = proj.color ?? '#34d399';
+    ctx.beginPath();
+    ctx.moveTo(13, 0);
+    ctx.lineTo(-4, -6);
+    ctx.lineTo(-10, 0);
+    ctx.lineTo(-4, 6);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#ecfdf5';
+    ctx.beginPath();
+    ctx.arc(2, 0, 3, 0, Math.PI * 2);
+    ctx.fill();
   } else if (proj.kind === 'fireball') {
     ctx.fillStyle = 'rgba(249, 115, 22, 0.42)';
     ctx.beginPath();
@@ -3288,5 +4696,152 @@ export function drawPhantomAlly(
   ctx.globalAlpha = alpha * 0.86;
   drawCampHeroFigure(ctx, ally.characterId, ally.x, ally.y, ally.facing, playerScale * 1.05, time * 2.2, true);
 
+  ctx.restore();
+}
+
+export function drawWorldPickup(
+  ctx: CanvasRenderingContext2D,
+  pickup: WorldPickup,
+  time: number
+): void {
+  const bob = Math.sin(time * 4.5 + pickup.bobPhase) * 3.5;
+  const x = pickup.x;
+  const y = pickup.y - 10 + bob;
+
+  ctx.save();
+  if (pickup.kind === 'gold') {
+    const spinW = Math.max(2.5, Math.abs(Math.cos(time * 5.2 + pickup.bobPhase)) * 7);
+    ctx.fillStyle = 'rgba(250, 204, 21, 0.25)';
+    ctx.beginPath();
+    ctx.arc(x, y, 11, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#facc15';
+    ctx.strokeStyle = '#b45309';
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.ellipse(x, y, spinW, 7.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+  } else if (pickup.kind === 'hp_goblet' || pickup.kind === 'mp_goblet') {
+    const isHp = pickup.kind === 'hp_goblet';
+    const col = isHp ? '#ef4444' : '#38bdf8';
+    const glow = isHp ? 'rgba(239, 68, 68, 0.34)' : 'rgba(56, 189, 248, 0.34)';
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(x, y - 2, 15, 0, Math.PI * 2);
+    ctx.fill();
+    // Chalice cup
+    ctx.fillStyle = '#e2e8f0';
+    ctx.fillRect(x - 5, y + 4, 10, 3);
+    ctx.fillRect(x - 1.5, y - 1, 3, 6);
+    ctx.fillStyle = col;
+    ctx.beginPath();
+    ctx.moveTo(x - 7, y - 9);
+    ctx.lineTo(x + 7, y - 9);
+    ctx.lineTo(x + 4, y);
+    ctx.lineTo(x - 4, y);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = '#f8fafc';
+    ctx.lineWidth = 1.3;
+    ctx.stroke();
+  } else if (pickup.kind === 'map_relic') {
+    // Gleaming Ancient Map Relic Gem
+    const pulse = 1 + Math.sin(time * 5 + pickup.bobPhase) * 0.14;
+    ctx.fillStyle = 'rgba(245, 158, 11, 0.26)';
+    ctx.beginPath();
+    ctx.arc(x, y - 3, 18 * pulse, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#fbbf24';
+    ctx.strokeStyle = '#fef3c7';
+    ctx.lineWidth = 1.8;
+    ctx.beginPath();
+    ctx.moveTo(x, y - 15);
+    ctx.lineTo(x + 9, y - 3);
+    ctx.lineTo(x, y + 9);
+    ctx.lineTo(x - 9, y - 3);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  } else if (pickup.kind === 'boss_charm' && pickup.charmId) {
+    // Mythic Signature Boss Charm Orb + Rotating Halo + Nameplate!
+    const charm = BOSS_CHARMS[pickup.charmId];
+    const accent = charm?.color ?? '#f59e0b';
+    const pulse = 1 + Math.sin(time * 4.2) * 0.15;
+    const grad = ctx.createRadialGradient(x, y - 8, 4, x, y - 8, 36 * pulse);
+    grad.addColorStop(0, '#ffffff');
+    grad.addColorStop(0.35, accent);
+    grad.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(x, y - 8, 36 * pulse, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Rotating sacred sigil ring
+    ctx.save();
+    ctx.translate(x, y - 8);
+    ctx.rotate(time * 1.8);
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([6, 4]);
+    ctx.beginPath();
+    ctx.arc(0, 0, 17, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
+
+    // Jewel core
+    ctx.fillStyle = accent;
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(x, y - 21);
+    ctx.lineTo(x + 11, y - 8);
+    ctx.lineTo(x, y + 5);
+    ctx.lineTo(x - 11, y - 8);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // Floating charm name tag
+    ctx.font = 'bold 10px Cinzel, serif';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#fef3c7';
+    ctx.fillText(charm?.name.toUpperCase() ?? 'BOSS CHARM', x, y - 28);
+  } else if (pickup.kind === 'lore_fragment') {
+    // Glowing Ancient Lore Scroll Fragment
+    const pulse = 1 + Math.sin(time * 4.5 + pickup.bobPhase) * 0.14;
+    const grad = ctx.createRadialGradient(x, y - 6, 2, x, y - 6, 24 * pulse);
+    grad.addColorStop(0, 'rgba(254, 243, 199, 0.82)');
+    grad.addColorStop(0.5, 'rgba(229, 169, 60, 0.34)');
+    grad.addColorStop(1, 'rgba(229, 169, 60, 0)');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(x, y - 6, 24 * pulse, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Rolled parchment scroll with crimson wax seal
+    ctx.fillStyle = '#fef3c7';
+    ctx.strokeStyle = '#92400e';
+    ctx.lineWidth = 1.6;
+    ctx.fillRect(x - 8, y - 14, 16, 16);
+    ctx.strokeRect(x - 8, y - 14, 16, 16);
+    ctx.fillStyle = '#d97706';
+    ctx.fillRect(x - 10, y - 15, 20, 3);
+    ctx.fillRect(x - 10, y + 1, 20, 3);
+    // Ink lines + wax seal
+    ctx.fillStyle = '#78350f';
+    ctx.fillRect(x - 5, y - 10, 10, 1.5);
+    ctx.fillRect(x - 5, y - 6, 8, 1.5);
+    ctx.fillStyle = '#dc2626';
+    ctx.beginPath();
+    ctx.arc(x + 3, y - 2, 2.8, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.font = 'bold 9px Cinzel, serif';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#fde68a';
+    ctx.fillText('LORE', x, y - 21);
+  }
   ctx.restore();
 }

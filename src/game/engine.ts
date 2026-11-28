@@ -24,11 +24,17 @@ import {
   ARTIFACTS,
   BASE_ELEMENTS,
   BASE_ELEMENT_ORDER,
+  BOSS_CHARMS,
   canCharacterUseWeapon,
   CHARACTERS,
   COMBINED_ELEMENTS,
+  computeActiveCharmSynergies,
   DEFAULT_TUNING,
   CRAFT_RECIPES,
+  GOLD_PREP_RECIPES,
+  HERO_SKINS,
+  RAID_BOSS_CHARM,
+  SACRIFICE_ALTAR_OFFERINGS,
   getActiveElementDef,
   getCombinedElementId,
   getEvolutionTierName,
@@ -42,7 +48,8 @@ import {
   WEAPONS,
   WEAPON_ORDER,
 } from './defaults';
-import { CAMP_STAGE, ENEMY_SPECS, isFlyingEnemyType } from './level';
+import { CAMP_HERO_SPOTS, CAMP_STAGE, ENEMY_SPECS, isFlyingEnemyType } from './level';
+import { LORE_BY_ID, LORE_BY_RAID, loadCollectedLoreIds, saveCollectedLoreIds } from './lore';
 import { RAIDS_BY_ID } from './raids';
 import {
   EnemyTuning,
@@ -55,10 +62,14 @@ import {
   ArtifactId,
   BaseElementId,
   BloodStain,
+  BossCharmId,
+  GlassWall,
   BossDeathSequence,
   BossHudBar,
   CameraState,
   CharacterId,
+  CharacterUnlockState,
+  CharmSynergyId,
   DamageNumber,
   ElementalArc,
   Enemy,
@@ -67,6 +78,7 @@ import {
   GasCloud,
   GroundHazard,
   HangingBrazier,
+  HeroSkinId,
   HudSnapshot,
   InputState,
   Interactable,
@@ -78,11 +90,13 @@ import {
   Projectile,
   RaidId,
   Rect,
+  SacrificeAltarStat,
   SecretWall,
   ShockwaveRing,
   SlashLine,
   SpecialItemId,
   StageDef,
+  WorldPickup,
   TuningConfig,
   UpgradeOption,
   WeaponId,
@@ -135,6 +149,8 @@ export class GameEngine {
   private affinityTrailAcc = 0;
   public hangingBraziers: HangingBrazier[] = [];
   public secretWalls: SecretWall[] = [];
+  public glassWalls: GlassWall[] = [];
+  private nextGlassWallId = 1;
   public phantomAllies: PhantomAlly[] = [];
   public crumbleStates = new Map<string, { state: 'intact' | 'shaking' | 'broken'; timer: number }>();
   public minstrelAimAnchor: { x: number; y: number } | null = null;
@@ -166,10 +182,66 @@ export class GameEngine {
   public offeredRaids: RaidId[] = ['nocturne_castle', 'goblin_camp'];
   public shards = 4;
   public bossCores = 0;
+  public gold = 30;
   public ownedArtifacts: ArtifactId[] = [];
   public undyingUsed = false;
   public raidsCompleted = 0;
   public roomsCleared: number[] = [];
+
+  // Run Hero Commitment + Testing Override (Free Hero Switcher anywhere/anytime while testing!)
+  public runHeroLocked: CharacterId | null = null;
+  public testFreeHeroSwitch = true;
+
+  // Permanent Per-Character Unlocks (Boss Shards -> Weapons, Spells, Specials & Skins kept forever per character)
+  public characterUnlocks: Record<CharacterId, CharacterUnlockState> = {
+    hunter: { weapons: ['whip'], spells: ['fireball'], specials: ['eclipse_hourglass', 'smoke_vial', 'fire_bomb'], skins: ['default'] },
+    brute: { weapons: ['hammer'], spells: ['fire_weapon'], specials: ['eclipse_hourglass', 'smoke_vial', 'fire_bomb'], skins: ['default'] },
+    ronin: { weapons: ['katana'], spells: ['dash_attack'], specials: ['eclipse_hourglass', 'smoke_vial', 'fire_bomb'], skins: ['default'] },
+    minstrel: { weapons: ['ribbon_whip'], spells: ['gas_bomb'], specials: ['eclipse_hourglass', 'smoke_vial', 'fire_bomb'], skins: ['default'] },
+    monk: { weapons: ['ash_wraps'], spells: ['cinder_palm'], specials: ['eclipse_hourglass', 'smoke_vial', 'fire_bomb'], skins: ['default'] },
+    wizard: { weapons: ['spire_staff'], spells: ['chain_storm'], specials: ['eclipse_hourglass', 'smoke_vial', 'fire_bomb'], skins: ['default'] },
+    assassin: { weapons: ['shadow_daggers'], spells: ['venom_needles'], specials: ['eclipse_hourglass', 'smoke_vial', 'fire_bomb'], skins: ['default'] },
+    ranger: { weapons: ['burst_crossbow'], spells: ['ricochet_snare'], specials: ['eclipse_hourglass', 'smoke_vial', 'fire_bomb'], skins: ['default'] },
+    vanguard: { weapons: ['shield_mace'], spells: ['aegis_slam'], specials: ['eclipse_hourglass', 'smoke_vial', 'fire_bomb'], skins: ['default'] },
+    dancer: { weapons: ['twin_chakram'], spells: ['solar_bloom'], specials: ['eclipse_hourglass', 'smoke_vial', 'fire_bomb'], skins: ['default'] },
+    bouncer: { weapons: ['prism_lance'], spells: ['prism_beam'], specials: ['eclipse_hourglass', 'smoke_vial', 'fire_bomb'], skins: ['default'] },
+  };
+  public selectedSkins: Record<CharacterId, HeroSkinId> = {
+    hunter: 'default',
+    brute: 'default',
+    ronin: 'default',
+    minstrel: 'default',
+    monk: 'default',
+    wizard: 'default',
+    assassin: 'default',
+    ranger: 'default',
+    vanguard: 'default',
+    dancer: 'default',
+    bouncer: 'default',
+  };
+  // Permanent Cross-Hero Sacrifice Altar Bonuses (Sacrifice 10 Relic Levels + 2 Boss Cores -> applies to ALL heroes forever!)
+  public permAltarBonuses: Record<SacrificeAltarStat, number> = {
+    hp: 0,
+    mp: 0,
+    weapon: 0,
+    spell: 0,
+    regen: 0,
+    agility: 0,
+  };
+
+  // World Pickups (Gold Coins, HP/MP Goblets, Scattered Map Relics, Mythic Boss Charms) & End-of-Raid Scorecard
+  public pickups: WorldPickup[] = [];
+  private nextPickupId = 1;
+  public raidGoldEarned = 0;
+  public raidDamageDealt = 0;
+  public raidElapsedSeconds = 0;
+  public raidMapRelicsCollected = 0;
+
+  // Run-Scoped Mythic Boss Charms & Cross-Charm Synergies (Every run builds unique charm combinations!)
+  public bossCharms: BossCharmId[] = [];
+  public lastBossCharmDrop: BossCharmId | null = null;
+  private chaliceKillCounter = 0;
+  private blastSiphonCounter = 0;
 
   // Room Boss Relic, Cursed Chamber Branching & Smooth Transition State
   public bossDefeatedHandled = false;
@@ -239,6 +311,12 @@ export class GameEngine {
   public killFreezeHold = false;
   /** Hold requested; engages once the kill hit-stop has finished so the held frame is readable. */
   private killFreezeHoldPending = false;
+  /** Collected lore fragment IDs persisted across sessions in localStorage. */
+  public collectedLoreIds: string[] = loadCollectedLoreIds();
+  /** At most 1 uncollected lore scroll spawns per raid run, assigned to one room (1..4). */
+  private activeRaidLorePlan: { roomNumber: number; loreId: string } | null = null;
+  public lastLoreToast: { id: string; title: string; raidName: string; count: number } | null = null;
+  private lastLoreToastTimer = 0;
 
   /** Character definition with live tuning overrides applied. */
   private cdef(id: CharacterId): CharacterDef {
@@ -269,13 +347,25 @@ export class GameEngine {
   }
 
   /** Scale damage an enemy deals to the player (per type x global). */
+  private getBossBaseDamage(enemy?: Enemy): number {
+    if (this.activeRaidId === 'eclipse_gauntlet') return 2;
+    const tier = this.getRaidOrderTier();
+    const room = this.currentStage?.roomNumber ?? 1;
+    // Early stages: bosses deal 1 damage; deeper raids/rooms grow to 2 damage.
+    if (tier <= 1) return 1;
+    if (tier === 2 && room <= 2 && !enemy?.isBigBoss) return 1;
+    return 2;
+  }
+
   private scaleEnemyDamage(amount: number, enemy: Enemy): number {
+    if (amount <= 0) return 0;
+    const base = enemy.isBoss ? this.getBossBaseDamage(enemy) : 1;
     const mult =
       this.enemyTune(enemy).damageMult *
       (enemy.isBoss ? this.tuning.bossDamageMult : this.tuning.enemyDamageMult);
-    if (mult === 1) return amount;
+    if (mult === 1) return base;
     if (mult <= 0) return 0;
-    return Math.max(1, Math.round(amount * mult));
+    return Math.max(1, Math.round(base * mult));
   }
 
   /** Build the tuning the engine actually runs with: global values x current hero's overrides. */
@@ -371,7 +461,7 @@ export class GameEngine {
       this.offeredRaids = ['eclipse_gauntlet'];
       return;
     }
-    this.offeredRaids = shuffle(remaining).slice(0, Math.min(2, remaining.length));
+    this.offeredRaids = shuffle(remaining).slice(0, Math.min(3, remaining.length));
   }
 
   public triggerImpactFlash(
@@ -471,22 +561,46 @@ export class GameEngine {
   }
 
   private getArtifactBaseBonuses() {
+    const altar = this.permAltarBonuses;
     return {
-      maxHp: (this.hasArtifact('crimson_fang') ? 1 : 0) + (this.hasArtifact('undying_heart') ? 1 : 0),
-      maxMp: (this.hasArtifact('moonstone_signet') ? 2 : 0) + (this.hasArtifact('arcane_conduit') ? 2 : 0),
-      hpRegen: this.hasArtifact('crimson_fang') ? 1 : 0,
-      mpRegen: this.hasArtifact('moonstone_signet') ? 1 : 0,
-      weaponTier: (this.hasArtifact('soul_anvil') ? 1 : 0) + (this.hasArtifact('bloodsteel_edge') ? 1 : 0),
+      maxHp: (this.hasArtifact('crimson_fang') ? 1 : 0) + (this.hasArtifact('undying_heart') ? 1 : 0) + altar.hp,
+      maxMp: (this.hasArtifact('moonstone_signet') ? 2 : 0) + (this.hasArtifact('arcane_conduit') ? 2 : 0) + altar.mp,
+      hpRegen: (this.hasArtifact('crimson_fang') ? 1 : 0) + altar.regen,
+      mpRegen: (this.hasArtifact('moonstone_signet') ? 1 : 0) + altar.regen,
+      weaponTier: (this.hasArtifact('soul_anvil') ? 1 : 0) + (this.hasArtifact('bloodsteel_edge') ? 1 : 0) + altar.weapon,
+      spellTier: altar.spell,
       extraPotions: this.hasArtifact('everflask') ? 1 : 0,
     };
   }
 
   private getWeaponFlatBonus(weaponLv: number): number {
-    return Math.max(0, weaponLv - 1);
+    // Rebalanced slower scaling: +1 flat damage every 3 weapon levels (+5% dmg & +1% crit each level in hit calc)
+    return Math.floor(Math.max(0, weaponLv - 1) / 3);
   }
 
   private getSpellFlatBonus(slotLv: number): number {
-    return Math.max(0, slotLv - 1);
+    // Rebalanced slower scaling: +1 flat spell damage every 3 spell levels (+10% spell dmg each level in hit calc)
+    return Math.floor(Math.max(0, slotLv - 1) / 3);
+  }
+
+  public getRaidScoreAndRank(): { score: number; rank: 'S' | 'A' | 'B' | 'C' } {
+    const speedBonus = Math.max(0, Math.round(1200 - this.raidElapsedSeconds * 4));
+    const score = Math.max(
+      0,
+      Math.round(
+        this.raidDamageDealt * 10 +
+          this.raidGoldEarned * 8 +
+          this.assassinations * 180 +
+          this.parries * 140 +
+          this.secretsFound * 220 +
+          this.raidMapRelicsCollected * 150 +
+          this.roomsCleared.length * 350 +
+          (this.status === 'VICTORY' ? 1000 + speedBonus : Math.round(speedBonus * 0.25))
+      )
+    );
+    const rank: 'S' | 'A' | 'B' | 'C' =
+      score >= 5200 ? 'S' : score >= 3200 ? 'A' : score >= 1600 ? 'B' : 'C';
+    return { score, rank };
   }
 
   private getWeaponEvoTier(): number {
@@ -504,8 +618,10 @@ export class GameEngine {
   private createFreshPlayer(floorY: number, charId: CharacterId): Player {
     const cDef = this.cdef(charId);
     const art = this.getArtifactBaseBonuses();
+    const unlocks = this.characterUnlocks[charId];
     const maxHp = cDef.baseHp + art.maxHp;
     const maxMp = cDef.baseMp + art.maxMp;
+    const startSpellLv = 1 + art.spellTier;
 
     return {
       characterId: charId,
@@ -550,7 +666,9 @@ export class GameEngine {
       ledgeCooldown: 0,
 
       weapon: cDef.defaultWeapon,
-      unlockedWeapons: [cDef.defaultWeapon],
+      unlockedWeapons: WEAPON_ORDER.filter(
+        (w) => canCharacterUseWeapon(charId, w) && (w === cDef.defaultWeapon || unlocks.weapons.includes(w))
+      ),
       weaponDamageBonus: cDef.bonusWeaponDamage + art.weaponTier,
 
       attackState: 'idle',
@@ -617,16 +735,35 @@ export class GameEngine {
       shadowChainCount: 0,
       level: 1,
       xp: 0,
-      xpToNext: 3,
+      xpToNext: 5,
       assassinTrainingLevel: 0,
       swiftFootworkLevel: 0,
       baseElements: [],
       combinedElement: null,
       elementResonance: 0,
       parryWindowTimer: 0,
+      parryCooldownTimer: 0,
+      weaponChargeTimer: 0,
+      grimoireElementIndex: 0,
+      grimoireOrbs: 3,
+      grimoireOrbRechargeTimer: 0,
+      shieldGuardActive: false,
+      vanguardBashTimer: 0,
+      vanguardBashHitIds: new Set<number>(),
+      bounceActive: false,
+      bouncesLeft: 0,
+      maxBounces: 2,
+      bounceTimer: 0,
+      bounceSpeed: 640,
+      bounceHitIds: new Set<number>(),
+      bounceWallCooldown: 0,
+      bounceDistLeft: 0,
+      bounceCountDone: 0,
       tagPartner: null,
       tagPartnerCooldown: 0,
       cursedGlassVulnerable: false,
+      skin: this.selectedSkins[charId] ?? 'default',
+      runRelicLevels: { hp: 0, mp: 0, weapon: 0, spell: 0, regen: 0, agility: 0 },
       backdashTimer: 0,
       weaponSkillCooldown: 0,
       dashAttackTimer: 0,
@@ -634,11 +771,13 @@ export class GameEngine {
       dashAttackHitIds: new Set<number>(),
       fireWeaponTimer: 0,
       fireWeaponLevel: 1,
-      armorShield: 0,
-      armorTimer: 0,
+      armorShield: charId === 'vanguard' ? 2 : 0,
+      armorTimer: charId === 'vanguard' ? 25 : 0,
 
-      // Single Equipped Spell Slot (Key 4) with each Hero's signature starting spell!
-      unlockedAbilities: [cDef.defaultAbility],
+      // Single Equipped Spell Slot (Key 4) with each Hero's signature + permanently unlocked spells!
+      unlockedAbilities: ABILITY_ORDER.filter(
+        (a) => a === cDef.defaultAbility || unlocks.spells.includes(a)
+      ),
       unlockedAbilitySlots: 1,
       abilitySlots: [
         cDef.defaultAbility,
@@ -647,7 +786,7 @@ export class GameEngine {
           (a) => a !== cDef.defaultAbility && a !== (ABILITY_ORDER.find((b) => b !== cDef.defaultAbility) ?? 'dash_attack')
         ) ?? 'grapple',
       ] as [AbilityId, AbilityId, AbilityId],
-      abilitySlotLevels: [1, 1, 1],
+      abilitySlotLevels: [startSpellLv, startSpellLv, startSpellLv],
       abilityCooldowns: {
         fireball: 0,
         dash_attack: 0,
@@ -657,6 +796,14 @@ export class GameEngine {
         cinder_palm: 0,
         chain_storm: 0,
         venom_needles: 0,
+        ricochet_snare: 0,
+        aegis_slam: 0,
+        solar_bloom: 0,
+        prism_beam: 0,
+        frost_nova: 0,
+        phantom_blades: 0,
+        meteor_call: 0,
+        blood_siphon: 0,
       },
 
       // Single Equipped Item Slot (Key 5) + Single Special Item Slot (Key 6)
@@ -666,10 +813,12 @@ export class GameEngine {
         mana_potion: 2 + art.extraPotions,
         armor_potion: 1 + art.extraPotions,
       },
-      specialItemSlot: 'eclipse_hourglass',
+      specialItemSlot: unlocks.specials[0] ?? 'eclipse_hourglass',
       specialItemCounts: {
         eclipse_hourglass: 1,
         hero_tag_horn: 0,
+        smoke_vial: 1,
+        fire_bomb: 1,
       },
       specialItemCooldown: 0,
       grapple: {
@@ -743,6 +892,7 @@ export class GameEngine {
       this.hangingBraziers = [];
       this.secretWalls = [];
       this.phantomAllies = [];
+      this.pickups = [];
       this.isCursedChamber = false;
       this.crumbleStates.clear();
       this.minstrelAimAnchor = null;
@@ -766,30 +916,23 @@ export class GameEngine {
       this.pendingLevelUpLevels = [];
       this.levelUpDelayTimer = 0;
 
-      const campSpawnX =
-        this.selectedCharacter === 'assassin'
-          ? 1295
-          : this.selectedCharacter === 'monk'
-          ? 1080
-          : this.selectedCharacter === 'wizard'
-            ? 398
-            : this.selectedCharacter === 'minstrel'
-          ? 700
-          : this.selectedCharacter === 'ronin'
-            ? 615
-            : this.selectedCharacter === 'brute'
-              ? 535
-              : 385;
+      const heroSpot = CAMP_HERO_SPOTS[this.selectedCharacter] ?? {
+        x: 590,
+        y: CAMP_STAGE.floorY,
+        facing: 1 as const,
+      };
+      const campSpawnX = heroSpot.x;
+      const campSpawnY = heroSpot.y;
 
       if (preserveRaidUpgrades && this.player) {
         // Surviving / winning a raid carries ALL relics, spells, & gear back into Base Camp across ALL heroes!
         const p = this.player;
         const art = this.getArtifactBaseBonuses();
         p.x = campSpawnX;
-        p.y = CAMP_STAGE.floorY;
+        p.y = campSpawnY;
         p.vx = 0;
         p.vy = 0;
-        p.facing = this.selectedCharacter === 'hunter' ? 1 : -1;
+        p.facing = heroSpot.facing;
         p.onGround = true;
         p.crouching = false;
         p.hp = p.maxHp;
@@ -834,13 +977,17 @@ export class GameEngine {
           this.rollOfferedRaids();
         }
       } else {
-        // On Death: wipe run relics & reset raid pick-order back to Tier 1; Permanent Artifacts endure for ALL heroes!
+        // On Death: wipe run relics & unlock hero commitment for a fresh run; Permanent Unlocks, Artifacts & Altar Bonuses endure!
         this.raidsClearedInRun = [];
         this.raidsClearedCountInRun = 0;
+        this.runHeroLocked = null;
+        this.bossCharms = [];
+        this.lastBossCharmDrop = null;
         this.rollOfferedRaids();
-        this.player = this.createFreshPlayer(CAMP_STAGE.floorY, this.selectedCharacter);
+        this.player = this.createFreshPlayer(campSpawnY, this.selectedCharacter);
         this.player.x = campSpawnX;
-        this.player.facing = this.selectedCharacter === 'hunter' ? 1 : -1;
+        this.player.y = campSpawnY;
+        this.player.facing = heroSpot.facing;
       }
 
       this.status = 'CAMP';
@@ -871,14 +1018,12 @@ export class GameEngine {
     if (targetRaid === 'eclipse_gauntlet' && !this.isEndRaidUnlocked()) {
       return;
     }
-    if (
-      targetRaid !== 'eclipse_gauntlet' &&
-      (this.raidsClearedInRun.includes(targetRaid) || !this.offeredRaids.includes(targetRaid))
-    ) {
-      return;
-    }
 
     this.activeRaidId = targetRaid;
+    // Commit to the chosen hero for the duration of this run (unless Test Free Hero Switch is ON!)
+    if (!this.runHeroLocked) {
+      this.runHeroLocked = this.selectedCharacter;
+    }
     const rooms = this.getCurrentRaidRooms();
     const room1 = rooms[0];
     const raidDef = RAIDS[this.activeRaidId];
@@ -886,8 +1031,25 @@ export class GameEngine {
     this.roomsCleared = [];
     this.undyingUsed = false;
     this.isCursedChamber = false;
+    this.raidGoldEarned = 0;
+    this.raidDamageDealt = 0;
+    this.raidElapsedSeconds = 0;
+    this.raidMapRelicsCollected = 0;
     // Choose 1 random standard room (Room 1, 2, or 3) where defeating the boss unlocks BOTH a Normal Door & a Cursed Door!
     this.cursedDoorRoomIndex = Math.floor(Math.random() * 3);
+
+    // Schedule at most 1 uncollected lore fragment for this raid run (in a random room 1..4)
+    const raidLore = LORE_BY_RAID[targetRaid] ?? [];
+    const uncollected = raidLore.filter((l) => !this.collectedLoreIds.includes(l.id));
+    if (uncollected.length > 0) {
+      const pick = uncollected[Math.floor(Math.random() * uncollected.length)];
+      this.activeRaidLorePlan = {
+        roomNumber: 1 + Math.floor(Math.random() * 4),
+        loreId: pick.id,
+      };
+    } else {
+      this.activeRaidLorePlan = null;
+    }
 
     const subtitle =
       targetRaid === 'eclipse_gauntlet'
@@ -904,15 +1066,34 @@ export class GameEngine {
     });
   }
 
+  public setTestFreeHeroSwitch(enabled: boolean): void {
+    this.testFreeHeroSwitch = enabled;
+    sound.playInteract();
+  }
+
   public selectCharacter(charId: CharacterId, tuning: TuningConfig): void {
-    if (!this.currentStage.isCamp) return;
+    // Allow switching anywhere/anytime while Test Mode is active; otherwise only in Camp before committing to a run!
+    if (!this.testFreeHeroSwitch) {
+      if (!this.currentStage.isCamp) return;
+      if (this.runHeroLocked && this.runHeroLocked !== charId) {
+        sound.playUi('error');
+        this.spawnDamageNumber(
+          this.player.x,
+          this.player.y - this.player.baseH * tuning.playerScale - 18,
+          `COMMITTED TO ${this.cdef(this.runHeroLocked).name.toUpperCase()}`,
+          '#f87171',
+          0.95
+        );
+        return;
+      }
+    }
     if (this.selectedCharacter === charId) return;
 
     const prev = this.player;
     const prevBase = this.cdef(prev.characterId);
     const art = this.getArtifactBaseBonuses();
 
-    // Preserve carried raid upgrade deltas when swapping heroes by the campfire!
+    // Preserve carried raid upgrade deltas when swapping heroes!
     const extraHp = Math.max(0, prev.maxHp - (prevBase.baseHp + art.maxHp));
     const extraMp = Math.max(0, prev.maxMp - (prevBase.baseMp + art.maxMp));
     const extraHpRegen = Math.max(0, prev.hpRegenLevel - art.hpRegen);
@@ -923,25 +1104,34 @@ export class GameEngine {
     const next = this.createFreshPlayer(this.currentStage.floorY, charId);
     next.x = prev.x;
     next.y = prev.y;
+    next.facing = prev.facing;
+    next.onGround = prev.onGround;
     next.maxHp += extraHp;
-    next.hp = next.maxHp;
+    next.hp = this.currentStage.isCamp ? next.maxHp : Math.min(next.maxHp, Math.max(1, prev.hp));
     next.maxMp += extraMp;
-    next.mp = next.maxMp;
+    next.mp = this.currentStage.isCamp ? next.maxMp : Math.min(next.maxMp, prev.mp);
     next.hpRegenLevel += extraHpRegen;
     next.mpRegenLevel += extraMpRegen;
     next.weaponDamageBonus += extraWeaponTier;
+    next.runRelicLevels = { ...prev.runRelicLevels };
 
-    // Carry inventory (weapons, spells, slots, slot levels, potions) across hero switch in Camp.
-    // Main weapons and hero-specific weapons are strictly class-exclusive!
+    // Apply this hero's permanent Boss-Shard unlocks + carried universal/class-eligible run gear
     const nextChar = this.cdef(charId);
-    const mergedWeapons = new Set<WeaponId>([...prev.unlockedWeapons, nextChar.defaultWeapon]);
+    const charUnlocks = this.characterUnlocks[charId];
+    const mergedWeapons = new Set<WeaponId>([
+      nextChar.defaultWeapon,
+      ...charUnlocks.weapons,
+      ...prev.unlockedWeapons.filter((w) => canCharacterUseWeapon(charId, w)),
+    ]);
     next.unlockedWeapons = WEAPON_ORDER.filter((w) => mergedWeapons.has(w));
-    next.weapon = canCharacterUseWeapon(charId, prev.weapon) ? prev.weapon : nextChar.defaultWeapon;
+    next.weapon = canCharacterUseWeapon(charId, prev.weapon) && next.unlockedWeapons.includes(prev.weapon)
+      ? prev.weapon
+      : nextChar.defaultWeapon;
 
-    // Ensure each hero enters battle with their own signature starting spell!
+    // Ensure each hero has their signature starter spell + permanent unlocked spells + run spells
     const onlyHadPrevStarter =
       prev.unlockedAbilities.length === 1 && prev.unlockedAbilities[0] === prevBase.defaultAbility;
-    if (onlyHadPrevStarter) {
+    if (onlyHadPrevStarter && charUnlocks.spells.length <= 1) {
       next.unlockedAbilities = [nextChar.defaultAbility];
       next.abilitySlots = [
         nextChar.defaultAbility,
@@ -949,7 +1139,11 @@ export class GameEngine {
         prev.abilitySlots[2] === nextChar.defaultAbility ? 'grapple' : prev.abilitySlots[2],
       ] as [AbilityId, AbilityId, AbilityId];
     } else {
-      const mergedAbilities = new Set<AbilityId>([...prev.unlockedAbilities, nextChar.defaultAbility]);
+      const mergedAbilities = new Set<AbilityId>([
+        nextChar.defaultAbility,
+        ...charUnlocks.spells,
+        ...prev.unlockedAbilities,
+      ]);
       next.unlockedAbilities = ABILITY_ORDER.filter((a) => mergedAbilities.has(a));
       const nextSlots = [...prev.abilitySlots] as [AbilityId, AbilityId, AbilityId];
       if (!nextSlots.includes(nextChar.defaultAbility)) {
@@ -962,8 +1156,11 @@ export class GameEngine {
     next.abilitySlotLevels = [...prev.abilitySlotLevels] as [number, number, number];
     next.itemSlots = [...prev.itemSlots] as [ItemId, ItemId, ItemId];
     next.itemCounts = { ...prev.itemCounts };
-    next.specialItemSlot = prev.specialItemSlot;
+    next.specialItemSlot = charUnlocks.specials.includes(prev.specialItemSlot)
+      ? prev.specialItemSlot
+      : charUnlocks.specials[0] ?? 'eclipse_hourglass';
     next.specialItemCounts = { ...prev.specialItemCounts };
+    next.skin = this.selectedSkins[charId] ?? 'default';
     next.level = prev.level;
     next.xp = prev.xp;
     next.xpToNext = prev.xpToNext;
@@ -1002,7 +1199,7 @@ export class GameEngine {
     const p = this.player;
 
     if (recipe.category === 'weapon' && recipe.weaponId) {
-      if (p.unlockedWeapons.includes(recipe.weaponId)) return false;
+      if (!canCharacterUseWeapon(p.characterId, recipe.weaponId) || p.unlockedWeapons.includes(recipe.weaponId)) return false;
       this.shards -= recipe.cost;
       p.unlockedWeapons = WEAPON_ORDER.filter(
         (w) => p.unlockedWeapons.includes(w) || w === recipe.weaponId
@@ -1152,6 +1349,463 @@ export class GameEngine {
     return true;
   }
 
+  /** Gold Preparations Shop: buy HP/MP/Armor potions and simple tactical special items with Gold. */
+  public buyGoldPrep(recipeId: string, tuning: TuningConfig): boolean {
+    const recipe = GOLD_PREP_RECIPES.find((r) => r.id === recipeId);
+    if (!recipe || this.gold < recipe.goldCost) return false;
+    const p = this.player;
+
+    if (recipe.category === 'potion' && recipe.itemId) {
+      this.gold -= recipe.goldCost;
+      p.itemCounts[recipe.itemId] += 1;
+    } else if (recipe.category === 'special_item' && recipe.specialItemId) {
+      const def = SPECIAL_ITEMS[recipe.specialItemId];
+      if ((p.specialItemCounts[recipe.specialItemId] ?? 0) >= def.maxCharges) return false;
+      this.gold -= recipe.goldCost;
+      p.specialItemCounts[recipe.specialItemId] = (p.specialItemCounts[recipe.specialItemId] ?? 0) + 1;
+      const unlocks = this.characterUnlocks[p.characterId];
+      if (!unlocks.specials.includes(recipe.specialItemId)) {
+        unlocks.specials.push(recipe.specialItemId);
+      }
+    } else {
+      return false;
+    }
+
+    sound.playCraft();
+    this.spawnSparkles(p.x, p.y - p.baseH * tuning.playerScale * 0.5, 14, recipe.accent, '#ffd166', 1.0);
+    return true;
+  }
+
+  /** Crafting Type 1 — Permanent Character Unlocks (Boss Cores): weapons, spells, specials & skins for the CURRENT hero! */
+  public unlockForCurrentChar(
+    kind: 'weapon' | 'spell' | 'special' | 'skin',
+    id: string,
+    coreCost: number,
+    tuning: TuningConfig
+  ): boolean {
+    if (this.bossCores < coreCost) return false;
+    const p = this.player;
+    const unlocks = this.characterUnlocks[p.characterId];
+    let label = id.toUpperCase();
+    let accent = '#e5a93c';
+
+    if (kind === 'weapon') {
+      const wId = id as WeaponId;
+      if (!canCharacterUseWeapon(p.characterId, wId) || unlocks.weapons.includes(wId)) return false;
+      this.bossCores -= coreCost;
+      unlocks.weapons.push(wId);
+      if (!p.unlockedWeapons.includes(wId)) {
+        p.unlockedWeapons = WEAPON_ORDER.filter((w) => p.unlockedWeapons.includes(w) || w === wId);
+      }
+      label = WEAPONS[wId].name.toUpperCase();
+      accent = WEAPONS[wId].accent;
+    } else if (kind === 'spell') {
+      const abId = id as AbilityId;
+      if (unlocks.spells.includes(abId)) return false;
+      this.bossCores -= coreCost;
+      unlocks.spells.push(abId);
+      if (!p.unlockedAbilities.includes(abId)) {
+        p.unlockedAbilities = ABILITY_ORDER.filter((a) => p.unlockedAbilities.includes(a) || a === abId);
+      }
+      label = ABILITIES[abId].name.toUpperCase();
+      accent = ABILITIES[abId].accent;
+    } else if (kind === 'special') {
+      const spId = id as SpecialItemId;
+      if (unlocks.specials.includes(spId)) return false;
+      this.bossCores -= coreCost;
+      unlocks.specials.push(spId);
+      p.specialItemCounts[spId] = Math.max(1, p.specialItemCounts[spId] ?? 0);
+      label = SPECIAL_ITEMS[spId].name.toUpperCase();
+      accent = SPECIAL_ITEMS[spId].accent;
+    } else if (kind === 'skin') {
+      const skinId = id as HeroSkinId;
+      if (unlocks.skins.includes(skinId)) return false;
+      this.bossCores -= coreCost;
+      unlocks.skins.push(skinId);
+      this.selectedSkins[p.characterId] = skinId;
+      p.skin = skinId;
+      label = HERO_SKINS[skinId].name.toUpperCase();
+      accent = HERO_SKINS[skinId].accent;
+    } else {
+      return false;
+    }
+
+    sound.playCraft();
+    this.spawnSparkles(p.x, p.y - p.baseH * tuning.playerScale * 0.5, 22, accent, '#ffffff', 1.25);
+    this.spawnDamageNumber(p.x, p.y - p.baseH * tuning.playerScale - 20, label, accent, 1.05, 'PERMANENT UNLOCK');
+    return true;
+  }
+
+  /** Equip an unlocked skin for the current hero in Base Camp. */
+  public selectSkin(skinId: HeroSkinId): void {
+    const p = this.player;
+    if (!this.characterUnlocks[p.characterId].skins.includes(skinId)) return;
+    this.selectedSkins[p.characterId] = skinId;
+    p.skin = skinId;
+    sound.playInteract();
+  }
+
+  /** Crafting Type 2 — Sacrifice Altar: Pay Boss Cores + Sacrifice 10 levels of a Run Relic for a PERMANENT bonus on ALL heroes! */
+  public sacrificeRelicAltar(stat: SacrificeAltarStat, tuning: TuningConfig): boolean {
+    const def = SACRIFICE_ALTAR_OFFERINGS[stat];
+    if (!def) return false;
+    const p = this.player;
+    if (this.bossCores < def.coreCost) return false;
+    if ((p.runRelicLevels[stat] ?? 0) < def.levelsRequired) return false;
+
+    this.bossCores -= def.coreCost;
+    p.runRelicLevels[stat] -= def.levelsRequired;
+    this.permAltarBonuses[stat] += 1;
+
+    // Deduct the sacrificed run levels from current run stats, then apply the new permanent +1 blessing!
+    if (stat === 'hp') {
+      p.maxHp = Math.max(this.cdef(p.characterId).baseHp, p.maxHp - 5 + 1);
+      p.hp = Math.min(p.maxHp, p.hp);
+    } else if (stat === 'mp') {
+      p.maxMp = Math.max(this.cdef(p.characterId).baseMp, p.maxMp - 5 + 1);
+      p.mp = Math.min(p.maxMp, p.mp);
+    } else if (stat === 'weapon') {
+      p.weaponDamageBonus = Math.max(this.permAltarBonuses.weapon, p.weaponDamageBonus - 10 + 1);
+    } else if (stat === 'spell') {
+      p.abilitySlotLevels[0] = Math.max(1 + this.permAltarBonuses.spell, p.abilitySlotLevels[0] - 10 + 1);
+    } else if (stat === 'regen') {
+      p.hpRegenLevel = Math.max(this.permAltarBonuses.regen, p.hpRegenLevel - 5 + 1);
+      p.mpRegenLevel = Math.max(1 + this.permAltarBonuses.regen, p.mpRegenLevel - 5 + 1);
+    } else if (stat === 'agility') {
+      p.assassinTrainingLevel = Math.max(0, p.assassinTrainingLevel - 5);
+      p.swiftFootworkLevel = Math.max(0, p.swiftFootworkLevel - 5);
+    }
+
+    sound.playCursedShrine();
+    this.triggerShake(11, 0.3);
+    this.triggerImpactFlash(def.accent, 0.48, p.x, p.y - p.baseH * 0.5, 1.5, 0.34);
+    this.spawnSparkles(p.x, p.y - p.baseH * tuning.playerScale * 0.5, 30, def.accent, '#ffd166', 1.45);
+    this.spawnDamageNumber(p.x, p.y - p.baseH * tuning.playerScale - 24, def.bonusLabel.toUpperCase(), def.accent, 1.1, 'ALTAR BLESSING');
+    return true;
+  }
+
+  public hasBossCharm(id: BossCharmId): boolean {
+    return this.bossCharms.includes(id);
+  }
+
+  public getActiveCharmSynergies(): CharmSynergyId[] {
+    return computeActiveCharmSynergies(this.bossCharms).map((s) => s.id);
+  }
+
+  public hasCharmSynergy(id: CharmSynergyId): boolean {
+    return this.getActiveCharmSynergies().includes(id);
+  }
+
+  private awardBossCharm(charmId: BossCharmId, fxX: number, fxY: number): void {
+    const def = BOSS_CHARMS[charmId];
+    this.lastBossCharmDrop = charmId;
+    const prevSynergies = new Set(this.getActiveCharmSynergies());
+    if (!this.bossCharms.includes(charmId)) {
+      this.bossCharms.push(charmId);
+    }
+    const newSynergies = computeActiveCharmSynergies(this.bossCharms).filter((s) => !prevSynergies.has(s.id));
+    sound.playMapRelicPickup();
+    this.triggerImpactFlash(def.color, 0.36, fxX, fxY, 1.3, 0.28);
+    this.shockwaves.push({
+      x: fxX,
+      y: fxY,
+      radius: 12,
+      maxRadius: 145,
+      color: def.color,
+      life: 0.36,
+      maxLife: 0.36,
+    });
+    this.spawnSparkles(fxX, fxY, 32, def.color, '#ffffff', 1.45);
+    this.spawnDamageNumber(fxX, fxY - 34, `${def.name.toUpperCase()}!`, def.color, 1.25, 'MYTHIC BOSS CHARM');
+    if (newSynergies.length > 0) {
+      this.spawnDamageNumber(
+        fxX,
+        fxY - 68,
+        `SYNERGY: ${newSynergies[0].name.toUpperCase()}!`,
+        newSynergies[0].color,
+        1.18,
+        'CHARM RESONANCE'
+      );
+    }
+  }
+
+  private spawnWorldPickup(
+    kind: WorldPickup['kind'],
+    x: number,
+    y: number,
+    value: number,
+    vx = (Math.random() - 0.5) * 180,
+    vy = -(160 + Math.random() * 110),
+    charmId?: BossCharmId,
+    loreId?: string
+  ): void {
+    const isPersistent = kind === 'map_relic' || kind === 'boss_charm' || kind === 'lore_fragment';
+    this.pickups.push({
+      id: this.nextPickupId++,
+      kind,
+      x,
+      y,
+      vx,
+      vy,
+      value,
+      life: isPersistent ? 9999 : 22,
+      bobPhase: Math.random() * Math.PI * 2,
+      grounded: isPersistent,
+      charmId,
+      loreId,
+    });
+  }
+
+  /** Scatter 5-7 shimmering Map Relics across high-road platforms, ledges & Underground Secret Passages! */
+  private spawnMapRelicsForStage(): void {
+    if (this.currentStage.isCamp || this.currentStage.isBigBossRoom) {
+      return;
+    }
+
+    // Spawn the single planned Lore Fragment if this room matches the raid's lore plan!
+    if (
+      this.activeRaidLorePlan &&
+      this.activeRaidLorePlan.roomNumber === this.currentStage.roomNumber &&
+      !this.collectedLoreIds.includes(this.activeRaidLorePlan.loreId)
+    ) {
+      const loreCandidates = this.platforms.filter(
+        (pl) =>
+          !pl.id.startsWith('wall-') &&
+          !pl.id.startsWith('floor-') &&
+          pl.style !== 'grate' &&
+          pl.w >= 90 &&
+          pl.x > 260 &&
+          pl.x + pl.w < this.currentStage.bossZoneStartX - 80
+      );
+      if (loreCandidates.length > 0) {
+        const pickedPlat = loreCandidates[Math.floor(Math.random() * loreCandidates.length)];
+        this.spawnWorldPickup(
+          'lore_fragment',
+          pickedPlat.x + pickedPlat.w * 0.5,
+          pickedPlat.y - 30,
+          0,
+          0,
+          0,
+          undefined,
+          this.activeRaidLorePlan.loreId
+        );
+      } else {
+        this.spawnWorldPickup(
+          'lore_fragment',
+          Math.min(this.currentStage.bossZoneStartX - 180, 620),
+          this.currentStage.floorY - 36,
+          0,
+          0,
+          0,
+          undefined,
+          this.activeRaidLorePlan.loreId
+        );
+      }
+    }
+
+    if (this.currentStage.isBossGauntletRoom) {
+      return;
+    }
+
+    // Always seed 2 high-value Map Relics inside any Underground Secret Passage!
+    const ugFloors = this.platforms.filter((pl) => pl.style === 'underground' && pl.w >= 140);
+    for (const ug of ugFloors) {
+      this.spawnWorldPickup('map_relic', ug.x + ug.w * 0.28, ug.y - 28, 20, 0, 0);
+      this.spawnWorldPickup('map_relic', ug.x + ug.w * 0.72, ug.y - 28, 20, 0, 0);
+    }
+
+    const candidates = this.platforms.filter(
+      (pl) =>
+        !pl.id.startsWith('wall-') &&
+        !pl.id.startsWith('floor-') &&
+        pl.style !== 'underground' &&
+        pl.style !== 'grate' &&
+        pl.w >= 70 &&
+        pl.x > 180 &&
+        pl.x + pl.w < this.currentStage.bossZoneStartX - 80
+    );
+    const chosen = shuffle(candidates).slice(0, 5);
+    for (const plat of chosen) {
+      const rx = plat.x + plat.w * (0.25 + Math.random() * 0.5);
+      const ry = plat.y - 26;
+      this.spawnWorldPickup('map_relic', rx, ry, 15, 0, 0);
+    }
+    if (chosen.length < 4) {
+      const floorY = this.currentStage.floorY;
+      for (let i = chosen.length; i < 4; i++) {
+        const rx = 280 + i * 320;
+        if (rx < this.currentStage.bossZoneStartX - 100) {
+          this.spawnWorldPickup('map_relic', rx, floorY - 34, 15, 0, 0);
+        }
+      }
+    }
+  }
+
+  private updatePickups(dt: number, tuning: TuningConfig): void {
+    const p = this.player;
+    const ph = (p.crouching ? p.crouchBaseH : p.baseH) * tuning.playerScale;
+    const pcx = p.x;
+    const pcy = p.y - ph * 0.5;
+
+    if (this.lastLoreToastTimer > 0) {
+      this.lastLoreToastTimer = Math.max(0, this.lastLoreToastTimer - dt);
+      if (this.lastLoreToastTimer <= 0) {
+        this.lastLoreToast = null;
+      }
+    }
+
+    for (let i = this.pickups.length - 1; i >= 0; i--) {
+      const pk = this.pickups[i];
+      pk.bobPhase += dt * 4.5;
+      const isFloatingRelic =
+        pk.kind === 'map_relic' || pk.kind === 'boss_charm' || pk.kind === 'lore_fragment';
+      if (!isFloatingRelic) {
+        pk.life -= dt;
+        if (pk.life <= 0) {
+          this.pickups.splice(i, 1);
+          continue;
+        }
+      }
+
+      const dx = pcx - pk.x;
+      const dy = pcy - pk.y;
+      const dist = Math.hypot(dx, dy);
+
+      // Gentle magnetic pull on coins, goblets, lore & boss charms when player approaches
+      const magnetRadius =
+        pk.kind === 'boss_charm'
+          ? 140
+          : pk.kind === 'lore_fragment'
+            ? 74
+            : pk.kind === 'map_relic'
+              ? 56
+              : 108;
+      if (dist < magnetRadius && dist > 1) {
+        const pull = pk.kind === 'map_relic' || pk.kind === 'lore_fragment' ? 280 : 380;
+        pk.vx += (dx / dist) * pull * dt * 6;
+        pk.vy += (dy / dist) * pull * dt * 6;
+        pk.grounded = false;
+      }
+
+      if (!pk.grounded) {
+        if (!isFloatingRelic) {
+          pk.vy += 680 * dt;
+        }
+        pk.x += pk.vx * dt;
+        pk.y += pk.vy * dt;
+        pk.vx *= Math.pow(0.25, dt);
+
+        if (!isFloatingRelic) {
+          const floorY = this.currentStage.floorY;
+          if (pk.y >= floorY - 8 && pk.y <= floorY + 20) {
+            pk.y = floorY - 8;
+            if (Math.abs(pk.vy) > 95) {
+              pk.vy = -pk.vy * 0.42;
+            } else {
+              pk.vy = 0;
+              pk.vx *= 0.6;
+              pk.grounded = true;
+            }
+          } else if (pk.vy > 0) {
+            for (const plat of this.platforms) {
+              if (!this.isPlatformSolid(plat) || plat.id.startsWith('wall-')) continue;
+              if (pk.x >= plat.x + 4 && pk.x <= plat.x + plat.w - 4 && pk.y >= plat.y - 10 && pk.y <= plat.y + 12) {
+                pk.y = plat.y - 10;
+                pk.vy = 0;
+                pk.vx *= 0.5;
+                pk.grounded = true;
+                break;
+              }
+            }
+          }
+        }
+      }
+
+      // Collect pickup on overlap!
+      if (dist < (pk.kind === 'boss_charm' ? 48 : pk.kind === 'lore_fragment' ? 42 : pk.kind === 'map_relic' ? 38 : 34)) {
+        if (pk.kind === 'gold') {
+          this.gold += pk.value;
+          this.raidGoldEarned += pk.value;
+          sound.playGoldCoin();
+          this.spawnSparkles(pk.x, pk.y, 7, '#fbbf24', '#fef08a', 0.78);
+          this.spawnDamageNumber(pk.x, pk.y - 14, `+${pk.value}g`, '#ffd166', 0.85);
+        } else if (pk.kind === 'hp_goblet') {
+          const heal = Math.min(pk.value, p.maxHp - p.hp);
+          p.hp = Math.min(p.maxHp, p.hp + pk.value);
+          sound.playGobletDrink(false);
+          this.spawnSparkles(pk.x, pk.y, 12, '#ef4444', '#fecaca', 0.95);
+          this.spawnDamageNumber(pk.x, pk.y - 16, heal > 0 ? `+${heal} HP` : 'HP FULL', '#f87171', 0.92, 'GOBLET');
+        } else if (pk.kind === 'mp_goblet') {
+          const gain = Math.min(pk.value, p.maxMp - p.mp);
+          p.mp = Math.min(p.maxMp, p.mp + pk.value);
+          sound.playGobletDrink(true);
+          this.spawnSparkles(pk.x, pk.y, 12, '#3b82f6', '#bfdbfe', 0.95);
+          this.spawnDamageNumber(pk.x, pk.y - 16, gain > 0 ? `+${gain} MP` : 'MP FULL', '#60a5fa', 0.92, 'GOBLET');
+        } else if (pk.kind === 'map_relic') {
+          this.gold += pk.value;
+          this.raidGoldEarned += pk.value;
+          this.raidMapRelicsCollected += 1;
+          sound.playMapRelicPickup();
+          this.triggerImpactFlash('#fde047', 0.22, pk.x, pk.y, 0.95, 0.2);
+          this.shockwaves.push({
+            x: pk.x,
+            y: pk.y,
+            radius: 6,
+            maxRadius: 68,
+            color: '#fbbf24',
+            life: 0.26,
+            maxLife: 0.26,
+          });
+          this.spawnSparkles(pk.x, pk.y, 20, '#fbbf24', '#e879f9', 1.25);
+          this.spawnDamageNumber(pk.x, pk.y - 22, `+${pk.value}g RELIC!`, '#fde047', 1.08, '+150 SCORE');
+        } else if (pk.kind === 'boss_charm' && pk.charmId) {
+          this.awardBossCharm(pk.charmId, pk.x, pk.y);
+        } else if (pk.kind === 'lore_fragment' && pk.loreId) {
+          const lore = LORE_BY_ID[pk.loreId];
+          if (lore) {
+            if (!this.collectedLoreIds.includes(lore.id)) {
+              this.collectedLoreIds = [...this.collectedLoreIds, lore.id];
+              saveCollectedLoreIds(this.collectedLoreIds);
+            }
+            this.activeRaidLorePlan = null;
+            const raidFragments = LORE_BY_RAID[lore.raidId] ?? [];
+            const foundCount = raidFragments.filter((l) => this.collectedLoreIds.includes(l.id)).length;
+            this.lastLoreToast = {
+              id: lore.id,
+              title: lore.title,
+              raidName: RAIDS[lore.raidId]?.name ?? lore.raidId,
+              count: foundCount,
+            };
+            this.lastLoreToastTimer = 5.0;
+            this.gold += 25;
+            this.raidGoldEarned += 25;
+            sound.playMapRelicPickup();
+            this.triggerImpactFlash('#fde68a', 0.28, pk.x, pk.y, 1.1, 0.25);
+            this.shockwaves.push({
+              x: pk.x,
+              y: pk.y,
+              radius: 8,
+              maxRadius: 84,
+              color: '#f59e0b',
+              life: 0.3,
+              maxLife: 0.3,
+            });
+            this.spawnSparkles(pk.x, pk.y, 24, '#fde68a', '#f59e0b', 1.3);
+            this.spawnDamageNumber(
+              pk.x,
+              pk.y - 24,
+              `LORE FOUND (${foundCount}/4)`,
+              '#fde68a',
+              1.15,
+              lore.title.toUpperCase()
+            );
+          }
+        }
+        this.pickups.splice(i, 1);
+      }
+    }
+  }
+
   public toggleInventory(): void {
     if (this.status === 'INVENTORY') {
       this.status = this.modalReturnStatus;
@@ -1206,9 +1860,27 @@ export class GameEngine {
     const rooms = this.getCurrentRaidRooms();
     const clamped = Math.max(0, Math.min(rooms.length - 1, index));
     this.stageIndex = clamped;
-    this.currentStage = rooms[clamped];
+    const baseStage = rooms[clamped];
+    this.isCursedChamber = enterCursed && !baseStage.isCamp;
+    this.currentStage = this.isCursedChamber
+      ? {
+          ...baseStage,
+          name: `Shattered Mirror Cathedral · ${baseStage.name}`,
+          environment: 'mirror_cathedral',
+          theme: {
+            skyTop: '#0b081b',
+            skyBottom: '#231542',
+            moonColor: '#e0f2fe',
+            parallaxColor: '#1b1335',
+            archColor: '#2e2254',
+            windowColor: '#67e8f9',
+            stoneFill: '#141126',
+            stoneTop: '#a5b4fc',
+            bossFloorTop: '#f472b6',
+          },
+        }
+      : baseStage;
     this.bossDefeatedHandled = false;
-    this.isCursedChamber = enterCursed && !this.currentStage.isCamp;
 
     const scaling = getRaidOrderScaling(this.getRaidOrderTier());
     this.platforms = this.currentStage.platforms;
@@ -1221,6 +1893,38 @@ export class GameEngine {
         e.maxHp += bonus;
         e.hp = e.maxHp;
       }
+      // Shattered Mirror Cathedral: Manifest Phantom Mirror Copies of up to 4 non-boss foes!
+      const mirrorCandidates = this.enemies.filter(
+        (e) => !e.isBoss && !e.summoned && e.x > 300 && e.x < this.currentStage.bossZoneStartX - 110
+      );
+      const maxPhantoms = Math.min(4, mirrorCandidates.length);
+      const stride = maxPhantoms > 0 ? Math.max(1, Math.floor(mirrorCandidates.length / maxPhantoms)) : 1;
+      const phantoms: Enemy[] = [];
+      for (let i = 0; i < mirrorCandidates.length && phantoms.length < maxPhantoms; i += stride) {
+        const orig = mirrorCandidates[i];
+        const mirrorOffset = (phantoms.length % 2 === 0 ? 1 : -1) * 94;
+        const mirrorX = Math.max(
+          240,
+          Math.min(this.currentStage.bossZoneStartX - 90, orig.x + mirrorOffset)
+        );
+        const phantomHp = Math.max(2, Math.round(orig.maxHp * 0.45));
+        phantoms.push({
+          ...orig,
+          id: this.nextEnemyId++,
+          name: `Mirror ${orig.name}`,
+          x: mirrorX,
+          homeX: mirrorX,
+          facing: (orig.facing === 1 ? -1 : 1) as 1 | -1,
+          hp: phantomHp,
+          maxHp: phantomHp,
+          summoned: true,
+          isMirrorPhantom: true,
+          animTime: orig.animTime + 1.3,
+        });
+      }
+      if (phantoms.length > 0) {
+        this.enemies.push(...phantoms);
+      }
     }
     this.interactables = this.currentStage.interactables.map((it) => ({ ...it, used: false }));
     this.totalEnemies = this.enemies.length;
@@ -1232,7 +1936,9 @@ export class GameEngine {
     this.attackPulsesLeft = 0;
     this.hangingBraziers = [];
     this.secretWalls = [];
+    this.glassWalls = [];
     this.phantomAllies = [];
+    this.pickups = [];
     this.crumbleStates.clear();
     this.minstrelAimAnchor = null;
     this.shockwaves = [];
@@ -1322,6 +2028,9 @@ export class GameEngine {
       }
     }
 
+    // Scatter 5-7 shimmering Map Relics across rafters, ledges & nooks of this room!
+    this.spawnMapRelicsForStage();
+
     // Inside a Cursed Chamber: manifest an interactive Cursed Shrine for high-risk / huge-reward Pacts!
     if (this.isCursedChamber) {
       const shrineX = Math.max(
@@ -1333,7 +2042,7 @@ export class GameEngine {
         kind: 'cursed_shrine',
         x: shrineX,
         y: this.currentStage.floorY,
-        label: 'Commune with Cursed Shrine (High-Risk Pact)',
+        label: 'Commune with Shattered Mirror Shrine (Forbidden Pact)',
         used: false,
       });
     }
@@ -1357,6 +2066,20 @@ export class GameEngine {
       p.onGround = true;
       p.crouching = false;
       p.parryWindowTimer = 0;
+      p.parryCooldownTimer = 0;
+      p.weaponChargeTimer = 0;
+      p.grimoireOrbs = 3;
+      p.grimoireOrbRechargeTimer = 0;
+      p.shieldGuardActive = false;
+      p.vanguardBashTimer = 0;
+      p.vanguardBashHitIds.clear();
+      p.bounceActive = false;
+      p.bouncesLeft = 0;
+      p.bounceTimer = 0;
+      p.bounceHitIds.clear();
+      p.bounceWallCooldown = 0;
+      p.bounceDistLeft = 0;
+      p.bounceCountDone = 0;
       p.tagPartnerCooldown = 0;
       p.attackState = 'idle';
       p.backdashTimer = 0;
@@ -1380,6 +2103,19 @@ export class GameEngine {
       p.wallClingDir = 0;
       p.ledgeGrabActive = false;
       p.grapple.active = false;
+      // Iron Vanguard passive: starts every chamber with +2 free Tower-Shield Armor!
+      if (!this.currentStage.isCamp && p.characterId === 'vanguard') {
+        p.armorShield = Math.max(p.armorShield, 2);
+        p.armorTimer = Math.max(p.armorTimer, 24);
+      }
+      // Molten Anvil Heart & Glacial Warden Shard Boss Charms (+Armor on room entry!)
+      if (!this.currentStage.isCamp && (this.hasBossCharm('molten_anvil_heart') || this.hasBossCharm('glacial_aegis_shard'))) {
+        const bonusArmor =
+          (this.hasBossCharm('molten_anvil_heart') ? (this.hasCharmSynergy('skyforged_tempest') ? 2 : 1) : 0) +
+          (this.hasBossCharm('glacial_aegis_shard') ? (this.hasCharmSynergy('frozen_abyss') ? 2 : 1) : 0);
+        p.armorShield = Math.max(p.armorShield, Math.min(4, bonusArmor));
+        p.armorTimer = Math.max(p.armorTimer, 18);
+      }
       p.hitStunTimer = 0;
       p.invulnTimer = 0.7;
       p.dropThroughTimer = 0;
@@ -1461,22 +2197,22 @@ export class GameEngine {
     sound.playInteract();
   }
 
-  private openUpgradeDraft(title: string): void {
-    this.pendingUpgrades = this.generateUpgradeChoices();
+  private openUpgradeDraft(title: string, poolMode: 'boss' | 'altar' = 'altar'): void {
+    this.pendingUpgrades = this.generateUpgradeChoices(poolMode);
     this.upgradePromptTitle = title;
     this.status = 'CHOOSING_UPGRADE';
   }
 
-  private generateUpgradeChoices(): UpgradeOption[] {
+  private generateUpgradeChoices(poolMode: 'boss' | 'altar' = 'altar'): UpgradeOption[] {
     const p = this.player;
 
-    // Bucket A: New Ability / New Weapon / Extra Ability Slot
-    const unlockPool: UpgradeOption[] = [];
+    // Weapon & Spell unlocks (Boss-only!)
+    const weaponSpellUnlockPool: UpgradeOption[] = [];
 
     for (const wId of WEAPON_ORDER) {
       if (!p.unlockedWeapons.includes(wId) && canCharacterUseWeapon(p.characterId, wId)) {
         const w = WEAPONS[wId];
-        unlockPool.push({
+        weaponSpellUnlockPool.push({
           id: `weapon_${wId}`,
           kind: 'unlock_weapon',
           category: w.ownerChar ? `${this.cdef(w.ownerChar).name} Weapon` : 'New Weapon',
@@ -1491,7 +2227,7 @@ export class GameEngine {
     for (const aId of ABILITY_ORDER) {
       if (!p.unlockedAbilities.includes(aId)) {
         const ab = ABILITIES[aId];
-        unlockPool.push({
+        weaponSpellUnlockPool.push({
           id: `ability_${aId}`,
           kind: 'unlock_ability',
           category: 'New Spell',
@@ -1503,9 +2239,11 @@ export class GameEngine {
       }
     }
 
+    // Special / Tag utility relics
+    const specialPool: UpgradeOption[] = [];
     const hgDef = SPECIAL_ITEMS.eclipse_hourglass;
     if (p.specialItemCounts.eclipse_hourglass < hgDef.maxCharges) {
-      unlockPool.push({
+      specialPool.push({
         id: 'special_eclipse_hourglass',
         kind: 'special_item_charge',
         category: 'Special Relic [6]',
@@ -1518,7 +2256,7 @@ export class GameEngine {
 
     const hornDef = SPECIAL_ITEMS.hero_tag_horn;
     if (p.specialItemCounts.hero_tag_horn < hornDef.maxCharges) {
-      unlockPool.push({
+      specialPool.push({
         id: 'special_hero_tag_horn',
         kind: 'special_item_charge',
         category: 'Special Relic [6]',
@@ -1529,7 +2267,6 @@ export class GameEngine {
       });
     }
 
-    // Hero Tag-Team Relic: Bind a companion hero to auto-tag in whenever you cast your [3] Weapon Skill!
     const allyPool = (['hunter', 'brute', 'ronin', 'minstrel'] as CharacterId[]).filter(
       (cid) => cid !== p.characterId && cid !== p.tagPartner
     );
@@ -1544,7 +2281,7 @@ export class GameEngine {
             : pickedPartner === 'hunter'
               ? 'Morning Star Shock-Whip (wide lash + guard break)'
               : 'Healing Encore Waltz (AoE damage + reflects projectiles + +1 HP/+1 MP)';
-      unlockPool.push({
+      specialPool.push({
         id: `tag_partner_${pickedPartner}`,
         kind: 'tag_partner',
         category: 'Hero Tag Relic',
@@ -1555,44 +2292,40 @@ export class GameEngine {
       });
     }
 
-    // Bucket B: Single Spell Slot [4] Milestone Upgrades & Weapon Mastery Tiers!
-    const powerPool: UpgradeOption[] = [];
-
-    {
-      const slotIdx = 0 as const;
-      const nextLv = p.abilitySlotLevels[0] + 1;
-      const equippedId = p.abilitySlots[0];
-      const equippedName = ABILITIES[equippedId].shortName;
-      const milestone = getSpellMilestoneInfo(equippedId, nextLv);
-      powerPool.push({
-        id: `slot_lv_0_${nextLv}`,
-        kind: 'upgrade_ability_slot',
-        category: `Spell [4] Lv ${nextLv} · ${milestone.tag}`,
-        title: `Spell Slot (${equippedName}) → Lv ${nextLv}`,
-        description: milestone.summary,
-        accent: nextLv === 3 ? '#f97316' : nextLv >= 4 ? '#ffd166' : '#f59e0b',
-        slotIndex: slotIdx,
-        abilityId: equippedId,
-      });
-    }
+    // Weapon & Spell Mastery Relics (Boss-only!)
+    const slotIdx = 0 as const;
+    const nextLv = p.abilitySlotLevels[0] + 1;
+    const equippedId = p.abilitySlots[0];
+    const equippedName = ABILITIES[equippedId].shortName;
+    const milestone = getSpellMilestoneInfo(equippedId, nextLv);
+    const spellMasteryOpt: UpgradeOption = {
+      id: `slot_lv_0_${nextLv}`,
+      kind: 'upgrade_ability_slot',
+      category: `Boss Spell Relic · Lv ${nextLv} · ${milestone.tag}`,
+      title: `Spell Slot (${equippedName}) → Lv ${nextLv}`,
+      description: milestone.summary,
+      accent: nextLv === 3 ? '#f97316' : nextLv >= 4 ? '#ffd166' : '#f59e0b',
+      slotIndex: slotIdx,
+      abilityId: equippedId,
+    };
 
     const nextWeaponLv = 1 + p.weaponDamageBonus + 1;
     const weaponMilestone = getWeaponMilestoneInfo(nextWeaponLv);
-    powerPool.push({
+    const weaponMasteryOpt: UpgradeOption = {
       id: `weapon_dmg_${nextWeaponLv}`,
       kind: 'weapon_damage',
-      category: `Weapon · ${weaponMilestone.tag}`,
+      category: `Boss Weapon Relic · ${weaponMilestone.tag}`,
       title: weaponMilestone.title,
       description: weaponMilestone.description,
       accent: nextWeaponLv === 3 ? '#93c5fd' : nextWeaponLv >= 4 ? '#f97316' : '#ef4444',
-    });
+    };
 
-    // Bucket C: +1 Max HP, +2 Max MP, Per-Room HP Regen, Per-Room MP Regen
+    // Vitality / Arcane / Recovery / Agility Relics (Altar & Level-Up pool!)
     const vitPool: UpgradeOption[] = [
       {
         id: 'max_hp',
         kind: 'max_hp',
-        category: 'Vitality',
+        category: 'Vitality Relic',
         title: 'Max HP +1',
         description: `Adds +1 Health block (Max ${p.maxHp + 1}) and restores +1 HP immediately.`,
         accent: '#dc2626',
@@ -1600,7 +2333,7 @@ export class GameEngine {
       {
         id: 'max_mp',
         kind: 'max_mp',
-        category: 'Arcane Pool',
+        category: 'Arcane Relic',
         title: 'Max MP +2',
         description: `Adds +2 Mana blocks (Max ${p.maxMp + 2}) and restores +2 MP immediately.`,
         accent: '#3b82f6',
@@ -1621,25 +2354,52 @@ export class GameEngine {
         description: `Restores +${p.mpRegenLevel + 1} MP each time you enter a new raid room.`,
         accent: '#60a5fa',
       },
+      {
+        id: `altar-assassin-${p.assassinTrainingLevel + 1}`,
+        kind: 'assassin_training',
+        category: 'Shadow Relic',
+        title: `Shadow Assassin +${p.assassinTrainingLevel + 1}`,
+        description: '+6% Crit Chance, +12% Assassination Damage & longer Shadow Chain burst.',
+        accent: '#f43f5e',
+      },
+      {
+        id: `altar-swift-${p.swiftFootworkLevel + 1}`,
+        kind: 'swift_footwork',
+        category: 'Agility Relic',
+        title: `Swift Footwork +${p.swiftFootworkLevel + 1}`,
+        description: '+4% Move Speed & 5% faster Skill and Spell cooldowns.',
+        accent: '#38bdf8',
+      },
     ];
 
+    if (poolMode === 'boss') {
+      // BOSS RELICS: Exclusively Weapon & Spell Relics (Weapon Lv, Spell Lv, + New Weapon/Spell unlock or Special Relic)!
+      const chosen: UpgradeOption[] = [weaponMasteryOpt, spellMasteryOpt];
+      const thirdPool = shuffle([...weaponSpellUnlockPool, ...specialPool]);
+      if (thirdPool.length > 0) {
+        chosen.push(thirdPool[0]);
+      } else {
+        chosen.push(vitPool[0]);
+      }
+      return chosen;
+    }
+
+    // NON-BOSS ALTARS: Vitality, Arcane, Recovery, Shadow/Agility & Special Relics (NO weapon/spell upgrades!)
     const chosen: UpgradeOption[] = [];
     const pickFrom = (pool: UpgradeOption[]) => {
       const candidates = shuffle(pool).filter((o) => !chosen.some((c) => c.id === o.id));
       if (candidates.length > 0) chosen.push(candidates[0]);
     };
+    pickFrom(vitPool.slice(0, 2)); // HP or MP
+    pickFrom(vitPool.slice(2));    // Regen, Shadow, or Agility
+    pickFrom(specialPool.length > 0 ? specialPool : vitPool);
 
-    pickFrom(unlockPool);
-    pickFrom(powerPool);
-    pickFrom(vitPool);
-
-    const remainder = shuffle([...unlockPool, ...powerPool, ...vitPool]).filter(
+    const remainder = shuffle([...vitPool, ...specialPool]).filter(
       (o) => !chosen.some((c) => c.id === o.id)
     );
     while (chosen.length < 3 && remainder.length > 0) {
       chosen.push(remainder.shift()!);
     }
-
     return chosen;
   }
 
@@ -1681,6 +2441,7 @@ export class GameEngine {
       case 'upgrade_ability_slot': {
         const sIdx = opt.slotIndex ?? 0;
         p.abilitySlotLevels[sIdx] += 1;
+        p.runRelicLevels.spell += 1;
         const spUpgrades = p.abilitySlotLevels[sIdx] - 1;
         if (spUpgrades > 0 && spUpgrades % 5 === 0) {
           const evoTier = spUpgrades / 5;
@@ -1718,33 +2479,44 @@ export class GameEngine {
       }
       case 'weapon_damage': {
         p.weaponDamageBonus += 1;
+        p.runRelicLevels.weapon += 1;
         // affinity-v1: the evolution moment (every 5 upgrades) is fired by the FX system on the next live frame.
         break;
       }
       case 'max_hp': {
-        p.maxHp += 1;
-        p.hp = Math.min(p.maxHp, p.hp + 2);
+        p.runRelicLevels.hp += 1;
+        if (p.runRelicLevels.hp % 2 === 0) {
+          p.maxHp += 1;
+        }
+        p.hp = Math.min(p.maxHp, p.hp + 1);
         break;
       }
       case 'max_mp': {
-        p.maxMp += 2;
-        p.mp = Math.min(p.maxMp, p.mp + 2);
+        p.runRelicLevels.mp += 1;
+        if (p.runRelicLevels.mp % 2 === 0) {
+          p.maxMp += 1;
+        }
+        p.mp = Math.min(p.maxMp, p.mp + 1);
         break;
       }
       case 'hp_regen': {
         p.hpRegenLevel += 1;
+        p.runRelicLevels.regen += 1;
         break;
       }
       case 'mp_regen': {
         p.mpRegenLevel += 1;
+        p.runRelicLevels.regen += 1;
         break;
       }
       case 'assassin_training': {
         p.assassinTrainingLevel += 1;
+        p.runRelicLevels.agility += 1;
         break;
       }
       case 'swift_footwork': {
         p.swiftFootworkLevel += 1;
+        p.runRelicLevels.agility += 1;
         break;
       }
       case 'element_affinity': {
@@ -1978,8 +2750,8 @@ export class GameEngine {
     while (p.xp >= p.xpToNext) {
       p.xp -= p.xpToNext;
       p.level += 1;
-      // Clean, readable XP curve: Lv1→2 = 3 XP, Lv2→3 = 4 XP, Lv3→4 = 5 XP, Lv4→5 = 6 XP, Lv5→6 = 7 XP...
-      p.xpToNext = 2 + p.level;
+      // Smoother, steady XP curve: Lv1→2 = 5 XP, Lv2→3 = 8 XP, Lv3→4 = 11 XP, Lv4→5 = 14 XP...
+      p.xpToNext = 5 + (p.level - 1) * 3;
       this.pendingLevelUpLevels.push(p.level);
       this.levelUpDelayTimer = 0.42;
       const isAffinityLevel = p.level % 5 === 0;
@@ -2014,15 +2786,15 @@ export class GameEngine {
   private buildElementAffinityOptions(): UpgradeOption[] {
     const p = this.player;
 
-    // 1st Elemental Affinity (Lv 5): Choose 1 of 3 Base Elements from the 6 initial affinities!
+    // 1st Elemental Affinity (Lv 5): Player chooses 1 from 6 randomly drawn out of the 10 Base Affinities!
     if (p.baseElements.length === 0) {
-      const picks = shuffle(BASE_ELEMENT_ORDER).slice(0, 3);
-      return picks.map((elId) => {
+      const offered = shuffle([...BASE_ELEMENT_ORDER]).slice(0, 6);
+      return offered.map((elId) => {
         const def = BASE_ELEMENTS[elId];
         return {
           id: `affinity-base-${elId}`,
           kind: 'element_affinity',
-          category: `Elemental Affinity · ${def.title}`,
+          category: `Base Affinity · ${def.title}`,
           title: `${def.name} Affinity`,
           description: def.description,
           accent: def.primaryColor,
@@ -2031,12 +2803,11 @@ export class GameEngine {
       });
     }
 
-    // 2nd Elemental Affinity (Lv 10): Pick a different Base Element to FUSE into a Combined Element!
+    // 2nd Elemental Affinity (Lv 10): Player chooses 1 from 6 randomly drawn remaining Base Elements to FUSE!
     if (p.baseElements.length === 1) {
       const firstEl = p.baseElements[0];
-      const remaining = BASE_ELEMENT_ORDER.filter((id) => id !== firstEl);
-      const picks = shuffle(remaining).slice(0, 3);
-      return picks.map((elId) => {
+      const remaining = shuffle(BASE_ELEMENT_ORDER.filter((id) => id !== firstEl)).slice(0, 6);
+      return remaining.map((elId) => {
         const baseDef = BASE_ELEMENTS[elId];
         const fusedId = getCombinedElementId(firstEl, elId);
         const fusedDef = fusedId ? COMBINED_ELEMENTS[fusedId] : null;
@@ -2044,7 +2815,7 @@ export class GameEngine {
           id: `affinity-fuse-${elId}`,
           kind: 'element_affinity',
           category: fusedDef
-            ? `Elemental Fusion · ${BASE_ELEMENTS[firstEl].name} + ${baseDef.name}`
+            ? `Fusion · ${BASE_ELEMENTS[firstEl].name} + ${baseDef.name}`
             : `Elemental Affinity · ${baseDef.title}`,
           title: fusedDef ? `${baseDef.name} → ${fusedDef.name}` : `${baseDef.name} Affinity`,
           description: fusedDef ? fusedDef.description : baseDef.description,
@@ -2099,72 +2870,72 @@ export class GameEngine {
   private buildLevelUpOptions(): UpgradeOption[] {
     const p = this.player;
 
-    // Simple, clean level-up reward cards: always guarantee Weapon OR Spell progression so 5-upgrade evolutions feel crisp!
-    const nextWepLv = 2 + p.weaponDamageBonus;
-    const wepInfo = getWeaponMilestoneInfo(nextWepLv);
-    const weaponOpt: UpgradeOption = {
-      id: `lvl-wep-${nextWepLv}`,
-      kind: 'weapon_damage',
-      category: `Weapon · ${wepInfo.tag}`,
-      title: wepInfo.title,
-      description: wepInfo.description,
-      accent: '#e5a93c',
-      weaponId: p.weapon,
+    // Level-ups focus on HP & MP Relics + Utility/Regen/Shadow/Agility.
+    // Weapon & Spell Relics are reserved exclusively for defeating Bosses!
+    const nextHpLv = p.runRelicLevels.hp + 1;
+    const nextMpLv = p.runRelicLevels.mp + 1;
+
+    const hpOpt: UpgradeOption = {
+      id: `lvl-hp-${nextHpLv}`,
+      kind: 'max_hp',
+      category: `Vitality Relic · Lv ${nextHpLv}/10`,
+      title: nextHpLv % 2 === 0 ? '+1 Max HP & Heal' : 'Vitality Relic (+1 HP Heal)',
+      description:
+        nextHpLv % 2 === 0
+          ? 'Gain +1 Max HP & restore +1 HP. (Sacrifice 10 HP Relics at Camp Altar for +1 permanent HP!)'
+          : 'Restore +1 HP & advance toward +1 Max HP next level. (10 levels can be sacrificed at Camp Altar.)',
+      accent: '#ef4444',
     };
 
-    const equippedSpell = p.abilitySlots[0];
-    const nextSpellLv = p.abilitySlotLevels[0] + 1;
-    const spInfo = getSpellMilestoneInfo(equippedSpell, nextSpellLv);
-    const spellOpt: UpgradeOption = {
-      id: `lvl-spell-${nextSpellLv}`,
-      kind: 'upgrade_ability_slot',
-      category: `Spell [4] · ${spInfo.tag}`,
-      title: `${ABILITIES[equippedSpell].shortName} Lv ${nextSpellLv}`,
-      description: spInfo.summary,
-      accent: ABILITIES[equippedSpell].accent,
-      abilityId: equippedSpell,
-      slotIndex: 0,
+    const mpOpt: UpgradeOption = {
+      id: `lvl-mp-${nextMpLv}`,
+      kind: 'max_mp',
+      category: `Arcane Relic · Lv ${nextMpLv}/10`,
+      title: nextMpLv % 2 === 0 ? '+1 Max MP & Restore' : 'Arcane Relic (+1 MP Restore)',
+      description:
+        nextMpLv % 2 === 0
+          ? 'Gain +1 Max MP & restore +1 MP. (Sacrifice 10 MP Relics at Camp Altar for +1 permanent MP!)'
+          : 'Restore +1 MP & advance toward +1 Max MP next level. (10 levels can be sacrificed at Camp Altar.)',
+      accent: '#60a5fa',
     };
 
-    const secondaryPool: UpgradeOption[] = [
+    const thirdPool: UpgradeOption[] = [
       {
-        id: `lvl-hp-${p.maxHp + 1}`,
-        kind: 'max_hp',
-        category: 'Vitality',
-        title: '+1 Max HP & Heal',
-        description: 'Gain +1 Max HP and immediately restore +2 HP.',
-        accent: '#ef4444',
+        id: `lvl-hp-regen-${p.hpRegenLevel + 1}`,
+        kind: 'hp_regen',
+        category: `HP Recovery · Lv ${p.hpRegenLevel + 1}`,
+        title: `Room HP Regen Lv ${p.hpRegenLevel + 1}`,
+        description: `Restore +${p.hpRegenLevel + 1} HP automatically whenever you enter a new raid room.`,
+        accent: '#f87171',
       },
       {
-        id: `lvl-mp-${p.maxMp + 2}`,
-        kind: 'max_mp',
-        category: 'Arcane',
-        title: '+2 Max MP & Restore',
-        description: 'Gain +2 Max MP and immediately restore +2 MP.',
-        accent: '#60a5fa',
+        id: `lvl-mp-regen-${p.mpRegenLevel + 1}`,
+        kind: 'mp_regen',
+        category: `MP Recovery · Lv ${p.mpRegenLevel + 1}`,
+        title: `Room MP Regen Lv ${p.mpRegenLevel + 1}`,
+        description: `Restore +${p.mpRegenLevel + 1} MP automatically whenever you enter a new raid room.`,
+        accent: '#38bdf8',
       },
       {
         id: `lvl-assassin-${p.assassinTrainingLevel + 1}`,
         kind: 'assassin_training',
-        category: 'Shadow',
+        category: `Shadow Relic · Lv ${p.runRelicLevels.agility + 1}/10`,
         title: `Shadow Assassin +${p.assassinTrainingLevel + 1}`,
-        description: '+12% Crit Chance, +25% Assassination Damage & longer Shadow Chain burst.',
+        description: '+6% Crit Chance, +12% Assassination Damage & longer Shadow Chain burst.',
         accent: '#f43f5e',
       },
       {
         id: `lvl-swift-${p.swiftFootworkLevel + 1}`,
         kind: 'swift_footwork',
-        category: 'Agility',
+        category: `Agility Relic · Lv ${p.runRelicLevels.agility + 1}/10`,
         title: `Swift Footwork +${p.swiftFootworkLevel + 1}`,
-        description: '+7% Move Speed & 10% faster Skill and Spell cooldowns.',
-        accent: '#38bdf8',
+        description: '+4% Move Speed & 5% faster Skill and Spell cooldowns.',
+        accent: '#22d3ee',
       },
     ];
 
-    // Present Weapon Mastery, Spell Mastery, and 1 random clean stat boost (or 1 mastery + 2 boosts if desired)
-    // Always offering Weapon + Spell + 1 clean perk makes every level-up super intuitive and drives 5-upgrade evolutions!
-    const pickedSecondary = shuffle(secondaryPool)[0];
-    return [weaponOpt, spellOpt, pickedSecondary];
+    const pickedThird = shuffle(thirdPool)[0];
+    return [hpOpt, mpOpt, pickedThird];
   }
 
   private updateCrumblingPlatforms(dt: number): void {
@@ -2590,9 +3361,148 @@ export class GameEngine {
     const heightMul = attackHeightMul(p.attackWeapon, evoT, flags, c);
     const weaponLv = 1 + p.weaponDamageBonus;
 
-    if (p.attackWeapon === 'spire_staff') {
-      // Wizard attacks with a projectile (arcane bolt), no melee hitbox.
+    if (
+      p.attackWeapon === 'spire_staff' ||
+      p.attackWeapon === 'arcane_wand' ||
+      p.attackWeapon === 'orbiting_grimoire' ||
+      p.attackWeapon === 'burst_crossbow' ||
+      p.attackWeapon === 'twin_chakram'
+    ) {
+      // Ranged & thrown weapons fire projectiles instead of melee hitboxes.
       return null;
+    }
+
+    // Tower Shield & Mace: sturdy heavy close-mid blunt strike + auto frontal shield guard!
+    if (p.attackWeapon === 'shield_mace') {
+      const maceW = reach * 1.02;
+      const maceH = h * 1.24 * heightMul;
+      const originX = p.x + p.facing * (p.baseW * scale * 0.16);
+      return {
+        x: p.facing === 1 ? originX : originX - maceW,
+        y: p.y - h * 1.08,
+        w: maceW,
+        h: maceH,
+      };
+    }
+
+    // Monk Chain-Sickle (Kusarigama): close slash + weighted mid-range chain yank!
+    if (p.attackWeapon === 'kusarigama') {
+      const chainW = reach * (weaponLv >= 4 ? 1.85 : 1.65);
+      const chainH = Math.max(36, h * 0.92 * heightMul);
+      const originX = p.x + p.facing * (p.baseW * scale * 0.14);
+      return {
+        x: p.facing === 1 ? originX : originX - chainW,
+        y: p.y - h * 0.62 - chainH / 2,
+        w: chainW,
+        h: chainH,
+      };
+    }
+
+    // Blade-Dancer Solar Crescent Glaive: sweeping twin-ended golden poleblade arc!
+    if (p.attackWeapon === 'solar_glaive') {
+      const glaiveW = reach * (weaponLv >= 4 ? 1.56 : 1.38);
+      const glaiveH = h * 1.48 * heightMul;
+      const startX = p.facing === 1 ? p.x - 16 * scale : p.x + 16 * scale - glaiveW;
+      return {
+        x: startX,
+        y: p.y - h * 1.18,
+        w: glaiveW,
+        h: glaiveH,
+      };
+    }
+
+    // Prism Striker Pinball Gauntlets: agile short-burst crystal fists!
+    if (p.attackWeapon === 'prism_gauntlets') {
+      const fistW = reach * (weaponLv >= 4 ? 1.12 : 0.96);
+      const fistH = h * 0.92 * heightMul;
+      const originX = p.x + p.facing * (p.baseW * scale * 0.12);
+      return {
+        x: p.facing === 1 ? originX : originX - fistW,
+        y: p.y - h * 0.9,
+        w: fistW,
+        h: fistH,
+      };
+    }
+
+    // 1. Quick Thrust Base Weapon (Needle Estoc)
+    if (p.attackWeapon === 'estoc_spear') {
+      const thrustReach = reach * (weaponLv >= 4 ? 1.3 : 1.16);
+      const hitH = Math.max(16, 20 * scale * heightMul);
+      const originX = p.x + p.facing * (p.baseW * scale * 0.22);
+      const centerY = p.y - h * 0.56;
+      return {
+        x: p.facing === 1 ? originX : originX - thrustReach,
+        y: centerY - hitH / 2,
+        w: thrustReach,
+        h: hitH,
+      };
+    }
+
+    // 2. Quick Small Slash Base Weapon (Swift Dirk)
+    if (p.attackWeapon === 'short_blade') {
+      const slashW = reach * (weaponLv >= 4 ? 0.92 : 0.78);
+      const slashH = h * 0.92 * heightMul;
+      const originX = p.x + p.facing * (p.baseW * scale * 0.14);
+      return {
+        x: p.facing === 1 ? originX : originX - slashW,
+        y: p.y - h * 0.96,
+        w: slashW,
+        h: slashH,
+      };
+    }
+
+    // 3. Slow Wide Charging Slash Base Weapon (Cleaver Greatsword)
+    if (p.attackWeapon === 'cleaver_greatsword') {
+      const chargeScale = 1 + Math.min(0.42, p.weaponChargeTimer * 0.4);
+      const slashW = reach * 1.62 * chargeScale;
+      const slashH = h * 2.18 * heightMul * Math.min(1.25, chargeScale);
+      const startX = p.facing === 1 ? p.x - 18 * scale : p.x + 18 * scale - slashW;
+      return {
+        x: startX,
+        y: p.y - h * 1.56,
+        w: slashW,
+        h: slashH,
+      };
+    }
+
+    // 4. Slow Long Charging Thrust Base Weapon (Imperial War-Lance)
+    if (p.attackWeapon === 'joust_lance') {
+      const chargeScale = 1 + Math.min(0.45, p.weaponChargeTimer * 0.42);
+      const lanceReach = reach * 1.85 * chargeScale;
+      const hitH = Math.max(24, 30 * scale * heightMul);
+      const originX = p.x + p.facing * (p.baseW * scale * 0.2);
+      const centerY = p.y - h * 0.54;
+      return {
+        x: p.facing === 1 ? originX : originX - lanceReach,
+        y: centerY - hitH / 2,
+        w: lanceReach,
+        h: hitH,
+      };
+    }
+
+    // 5. Super Wide, Very Short Distance Quick Weapon (Crescent War Fans)
+    if (p.attackWeapon === 'war_fans') {
+      const fanHalfW = Math.max(54, reach * 0.64);
+      const fanH = h * 1.9 * heightMul;
+      return {
+        x: p.x - fanHalfW,
+        y: p.y - h * 1.44,
+        w: fanHalfW * 2,
+        h: fanH,
+      };
+    }
+
+    // 6. Slow Impact AoE Weapon (Seismic Impact Flail)
+    if (p.attackWeapon === 'meteor_flail') {
+      const blastR = Math.max(118, reach * (weaponLv >= 4 ? 1.55 : 1.38));
+      const impactX = p.x + p.facing * 72 * scale;
+      const impactY = p.y - h * 0.28;
+      return {
+        x: impactX - blastR,
+        y: impactY - blastR,
+        w: blastR * 2,
+        h: blastR * 2,
+      };
     }
 
     if (p.attackWeapon === 'shadow_daggers') {
@@ -2742,6 +3652,10 @@ export class GameEngine {
       if (item.kind === 'camp_hero_monk' && p.characterId === 'monk') continue;
       if (item.kind === 'camp_hero_wizard' && p.characterId === 'wizard') continue;
       if (item.kind === 'camp_hero_assassin' && p.characterId === 'assassin') continue;
+      if (item.kind === 'camp_hero_ranger' && p.characterId === 'ranger') continue;
+      if (item.kind === 'camp_hero_vanguard' && p.characterId === 'vanguard') continue;
+      if (item.kind === 'camp_hero_dancer' && p.characterId === 'dancer') continue;
+      if (item.kind === 'camp_hero_bouncer' && p.characterId === 'bouncer') continue;
       const d = Math.hypot(p.x - item.x, p.y - item.y);
       if (d < bestDist) {
         bestDist = d;
@@ -2997,6 +3911,9 @@ export class GameEngine {
     }
 
     if (!this.currentStage.isCamp) {
+      if (this.status === 'PLAYING') {
+        this.raidElapsedSeconds += safeDt;
+      }
       // Eclipse Hourglass slows foes to 14%; Minstrel Whip-Zip creates tactical 42% slow-motion!
       const minstrelSlow = this.player.minstrelZipActive ? this.charTune('minstrel').zipSlowMo : 1.0;
       const enemySlowMult = Math.min(this.eclipseFreezeTimer > 0 ? 0.14 : 1.0, minstrelSlow);
@@ -3008,6 +3925,7 @@ export class GameEngine {
       this.updateHangingBraziers(enemyDt, tuning);
       this.updateSecretWalls(safeDt);
       this.updatePhantomAllies(safeDt, tuning);
+      this.updatePickups(safeDt, tuning);
       this.updateBossDeathSequences(safeDt);
       this.updateAffinityZones(safeDt, tuning);
       this.checkCombatCollisions(tuning);
@@ -3052,9 +3970,9 @@ export class GameEngine {
           this.pendingUpgrades = this.buildElementAffinityOptions();
           this.upgradePromptTitle =
             this.player.baseElements.length === 0
-              ? `Level ${reachedLv} · Choose Your Elemental Affinity`
+              ? `Level ${reachedLv} · Choose 1 of 6 Elemental Affinities`
               : this.player.baseElements.length === 1
-                ? `Level ${reachedLv} · Fuse a Combined Element!`
+                ? `Level ${reachedLv} · Fuse 1 of 6 Combined Elements!`
                 : `Level ${reachedLv} · Elemental Resonance`;
         } else {
           this.pendingUpgrades = this.buildLevelUpOptions();
@@ -3075,7 +3993,13 @@ export class GameEngine {
     const p = this.player;
     const cDef = this.cdef(p.characterId);
     const scale = tuning.playerScale;
-    const cdSpeedMult = 1 + p.swiftFootworkLevel * 0.1;
+    const cdSpeedMult =
+      1 +
+      p.swiftFootworkLevel * 0.05 +
+      Math.max(0, p.abilitySlotLevels[0] - 1) * 0.03 +
+      this.permAltarBonuses.agility * 0.04 +
+      (this.hasBossCharm('paradox_hourglass') ? 0.25 : 0) +
+      (this.hasCharmSynergy('neon_paradox') ? 0.18 : 0);
     this.frameInput = input;
     p.animTime += dt;
     if (p.landTimer > 0) p.landTimer = Math.max(0, p.landTimer - dt);
@@ -3111,6 +4035,7 @@ export class GameEngine {
       p.weaponSkillCooldown = Math.max(0, p.weaponSkillCooldown - dt * cdSpeedMult);
     }
     if (p.parryWindowTimer > 0) p.parryWindowTimer = Math.max(0, p.parryWindowTimer - dt);
+    if (p.parryCooldownTimer > 0) p.parryCooldownTimer = Math.max(0, p.parryCooldownTimer - dt);
     if (p.tagPartnerCooldown > 0) {
       p.tagPartnerCooldown = Math.max(0, p.tagPartnerCooldown - dt * cdSpeedMult);
     }
@@ -3387,6 +4312,314 @@ export class GameEngine {
       return;
     }
 
+    // Active VANGUARD KEY [3] — Bulwark Shield Bash (armored charge that stuns & slams enemies!)
+    if (p.vanguardBashTimer > 0) {
+      p.vanguardBashTimer = Math.max(0, p.vanguardBashTimer - dt);
+      p.shieldGuardActive = true;
+      p.vx = p.facing * 520;
+      p.vy = Math.min(p.vy, 60);
+      this.applyPlayerPhysics(dt, tuning, false);
+
+      const bashBox: Rect = {
+        x: p.x + (p.facing === 1 ? -6 : -78) * scale,
+        y: p.y - p.baseH * scale * 0.96,
+        w: 84 * scale,
+        h: p.baseH * scale * 0.94,
+      };
+      const weaponLv = 1 + p.weaponDamageBonus;
+      for (const enemy of this.enemies) {
+        if (enemy.dead || p.vanguardBashHitIds.has(enemy.id)) continue;
+        if (rectsOverlap(bashBox, this.getEnemyRect(enemy, tuning.enemyScale))) {
+          p.vanguardBashHitIds.add(enemy.id);
+          sound.playHammerBoom();
+          this.triggerShake(7.5, 0.16);
+          this.handlePlayerHitEnemy(enemy, tuning, 'weapon', weaponLv + 1, {
+            bonusDamage: 2,
+            guardBreak: true,
+            kbX: 460,
+            kbY: 165,
+            stun: 0.7,
+          });
+        }
+      }
+      return;
+    }
+
+    // Update active Prism Glass Walls (shimmering crystalline bounce barriers!)
+    for (let gi = this.glassWalls.length - 1; gi >= 0; gi--) {
+      const gw = this.glassWalls[gi];
+      gw.life -= dt;
+      gw.flashTimer = Math.max(0, gw.flashTimer - dt);
+      if (gw.life <= 0) {
+        this.spawnSparkles(gw.x + gw.w * 0.5, gw.y + gw.h * 0.5, 10, gw.color, '#ffffff', 0.85);
+        this.glassWalls.splice(gi, 1);
+      }
+    }
+
+    // Active PRISM STRIKER — Penetrating Physics Ricochet Bounce Flight!
+    // (Frontal dash invulnerability is enforced directionally inside damagePlayer!)
+    if (p.bounceActive) {
+      p.bounceTimer -= dt;
+      p.bounceWallCooldown = Math.max(0, p.bounceWallCooldown - dt);
+      const halfW = (p.baseW * scale) / 2;
+      const h = p.baseH * scale;
+      const weaponLv = 1 + p.weaponDamageBonus;
+      const evoTier = this.getWeaponEvoTier();
+
+      // Afterimages along ricochet path
+      this.afterimageAccum += dt;
+      if (this.afterimageAccum >= 0.02) {
+        this.afterimageAccum = 0;
+        this.afterimages.push({
+          x: p.x,
+          y: p.y,
+          facing: p.facing,
+          crouching: false,
+          color: p.bouncesLeft <= 1 ? '#f472b6' : '#22d3ee',
+          life: 0.22,
+          maxLife: 0.22,
+        });
+      }
+
+      // Physics gravity + optional manual directional steering/dampening
+      const steerX = (input.right ? 1 : 0) - (input.left ? 1 : 0);
+      const steerY = (input.down ? 1 : 0) - (input.up ? 1 : 0);
+      const manualDampen =
+        (steerX !== 0 && Math.sign(steerX) !== Math.sign(p.vx)) || input.down;
+      p.vy += tuning.gravity * 0.42 * dt;
+      if (steerX !== 0) p.vx += steerX * 420 * dt;
+      if (steerY !== 0) p.vy += steerY * 380 * dt;
+
+      const prevX = p.x;
+      const prevY = p.y;
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.bounceDistLeft -= Math.hypot(p.x - prevX, p.y - prevY);
+      p.facing = p.vx >= 0 ? 1 : -1;
+
+      // Penetrate straight through enemies & bosses on the way!
+      const pierceBox: Rect = {
+        x: p.x - halfW - 14 * scale,
+        y: p.y - h - 6,
+        w: (halfW * 2 + 28 * scale),
+        h: h + 10,
+      };
+      for (const enemy of this.enemies) {
+        if (enemy.dead || p.bounceHitIds.has(enemy.id)) continue;
+        if (rectsOverlap(pierceBox, this.getEnemyRect(enemy, tuning.enemyScale))) {
+          p.bounceHitIds.add(enemy.id);
+          const speedBonus = Math.min(3, Math.floor(Math.hypot(p.vx, p.vy) / 260));
+          this.handlePlayerHitEnemy(enemy, tuning, 'weapon', weaponLv, {
+            bonusDamage: speedBonus,
+            guardBreak: true,
+            kbX: 85,
+            stun: 0.24,
+          });
+          this.spawnSparkles(enemy.x, enemy.y - enemy.baseH * tuning.enemyScale * 0.5, 10, '#22d3ee', '#f472b6', 1.0);
+        }
+      }
+
+      // Check surface collision (Glass Walls, Platforms, Arena Bounds, Ceiling)
+      let hitNormalX = 0;
+      let hitNormalY = 0;
+      let hitGlass: GlassWall | null = null;
+      const pRect: Rect = { x: p.x - halfW, y: p.y - h, w: halfW * 2, h };
+
+      // 1. Prism Glass Walls (highest priority for box-machine ricochets!)
+      for (const gw of this.glassWalls) {
+        if (rectsOverlap(pRect, gw)) {
+          hitGlass = gw;
+          if (gw.orientation === 'vertical') {
+            if (p.vx > 0) {
+              p.x = gw.x - halfW - 1;
+              hitNormalX = -1;
+            } else {
+              p.x = gw.x + gw.w + halfW + 1;
+              hitNormalX = 1;
+            }
+          } else {
+            if (p.vy > 0) {
+              p.y = gw.y - 1;
+              hitNormalY = -1;
+            } else {
+              p.y = gw.y + gw.h + h + 1;
+              hitNormalY = 1;
+            }
+          }
+          break;
+        }
+      }
+
+      // 2. Stage Platforms (solid walls/floors/ceilings + one-way tops when falling)
+      if (hitNormalX === 0 && hitNormalY === 0) {
+        for (const plat of this.platforms) {
+          if (!this.isPlatformSolid(plat)) continue;
+          if (plat.oneWay) {
+            if (
+              p.vy > 0 &&
+              p.x + halfW > plat.x + 2 &&
+              p.x - halfW < plat.x + plat.w - 2 &&
+              prevY <= plat.y + 14 &&
+              p.y >= plat.y
+            ) {
+              p.y = plat.y - 1;
+              hitNormalY = -1;
+              break;
+            }
+          } else if (rectsOverlap(pRect, plat)) {
+            if (p.vy >= 0 && prevY <= plat.y + 16) {
+              p.y = plat.y - 1;
+              hitNormalY = -1;
+            } else if (p.vy < 0 && prevY - h >= plat.y + plat.h - 16) {
+              p.y = plat.y + plat.h + h + 1;
+              hitNormalY = 1;
+            } else if (p.vx > 0 && prevX + halfW <= plat.x + 18) {
+              p.x = plat.x - halfW - 1;
+              hitNormalX = -1;
+            } else if (p.vx < 0 && prevX - halfW >= plat.x + plat.w - 18) {
+              p.x = plat.x + plat.w + halfW + 1;
+              hitNormalX = 1;
+            } else {
+              hitNormalY = p.vy >= 0 ? -1 : 1;
+            }
+            break;
+          }
+        }
+      }
+
+      // 3. World edges & top ceiling
+      if (hitNormalX === 0 && hitNormalY === 0) {
+        if (p.x - halfW <= 8) {
+          p.x = halfW + 10;
+          hitNormalX = 1;
+        } else if (p.x + halfW >= this.currentStage.worldWidth - 8) {
+          p.x = this.currentStage.worldWidth - halfW - 10;
+          hitNormalX = -1;
+        } else if (p.y - h <= 24) {
+          p.y = 26 + h;
+          hitNormalY = 1;
+        }
+      }
+
+      if ((hitNormalX !== 0 || hitNormalY !== 0) && p.bounceWallCooldown <= 0) {
+        p.bounceWallCooldown = 0.045;
+        p.bouncesLeft -= 1;
+        p.bounceHitIds.clear();
+        if (hitGlass) {
+          hitGlass.flashTimer = 0.28;
+        }
+
+        if (p.bouncesLeft <= 0) {
+          // FINAL BOUNCE SURFACE EXPLOSION!
+          p.bounceActive = false;
+          p.bounceTimer = 0;
+          const blastR = 138 + evoTier * 18;
+          sound.playExplosion(true);
+          this.triggerShake(10.5, 0.24);
+          this.hitstopTimer = Math.max(this.hitstopTimer, 0.075);
+          this.shockwaves.push({
+            x: p.x,
+            y: p.y - h * 0.5,
+            radius: 14,
+            maxRadius: blastR,
+            color: '#f472b6',
+            life: 0.3,
+            maxLife: 0.3,
+          });
+          this.shockwaves.push({
+            x: p.x,
+            y: p.y - h * 0.5,
+            radius: 8,
+            maxRadius: blastR * 0.72,
+            color: '#22d3ee',
+            life: 0.24,
+            maxLife: 0.24,
+          });
+          this.spawnSparkles(p.x, p.y - h * 0.5, 28, '#22d3ee', '#f472b6', 1.4);
+          for (const enemy of this.enemies) {
+            if (enemy.dead) continue;
+            const ey = enemy.y - enemy.baseH * tuning.enemyScale * 0.5;
+            if (Math.hypot(enemy.x - p.x, ey - (p.y - h * 0.5)) <= blastR) {
+              this.handlePlayerHitEnemy(enemy, tuning, 'weapon', weaponLv + 1, {
+                bonusDamage: 3 + evoTier * 2,
+                guardBreak: true,
+                kbX: 280,
+                kbY: 165,
+                stun: 0.58,
+              });
+            }
+          }
+          this.spawnDamageNumber(p.x, p.y - h - 18, 'PRISM DETONATION!', '#f472b6', 1.2);
+          // Graceful rebound hop out of impact
+          p.vx = hitNormalX !== 0 ? hitNormalX * 210 : -p.facing * 140;
+          p.vy = hitNormalY === -1 ? -320 : -190;
+          p.onGround = false;
+          return;
+        }
+
+        // Reflect velocity off the hit surface (physics ricochet + optional manual dampening!)
+        // Every bounce expands maximum travel reach so chained ricochets cover wider arenas!
+        p.bounceCountDone += 1;
+        const speedBoost = manualDampen ? 0.72 : Math.min(1.28, 1.0 + p.bounceCountDone * 0.06);
+        const nextReach = (210 + p.bounceCountDone * 95) * scale;
+        p.bounceDistLeft = manualDampen ? nextReach * 0.72 : nextReach;
+
+        if (hitNormalX !== 0) {
+          p.vx = -p.vx * speedBoost;
+          if (Math.abs(p.vx) < (manualDampen ? 260 : 480)) {
+            p.vx = hitNormalX * (manualDampen ? 290 : 540);
+          }
+          // Slight vertical pop so wall-to-wall pinball stays lively!
+          p.vy = p.vy * 0.78 - (input.up ? 190 : 75);
+        }
+        if (hitNormalY !== 0) {
+          p.vy = -p.vy * speedBoost;
+          if (hitNormalY === -1 && p.vy > (manualDampen ? -240 : -440)) {
+            p.vy = manualDampen ? -270 : -480;
+          } else if (hitNormalY === 1 && p.vy < 240) {
+            p.vy = 320;
+          }
+          p.vx = p.vx * (manualDampen ? 0.78 : 1.02);
+          if (Math.abs(p.vx) < 220) {
+            p.vx = (steerX !== 0 ? steerX : p.facing) * (manualDampen ? 240 : 450);
+          }
+        }
+        p.facing = p.vx >= 0 ? 1 : -1;
+        p.bounceTimer = Math.max(p.bounceTimer, 1.5);
+        sound.playParry(true);
+        this.triggerShake(4.8, 0.11);
+        this.shockwaves.push({
+          x: p.x,
+          y: p.y - h * 0.5,
+          radius: 8,
+          maxRadius: 68,
+          color: hitGlass ? '#67e8f9' : '#22d3ee',
+          life: 0.2,
+          maxLife: 0.2,
+        });
+        this.spawnSparkles(p.x, p.y - h * 0.5, 14, '#22d3ee', '#ffffff', 1.1);
+        this.spawnDamageNumber(
+          p.x,
+          p.y - h - 12,
+          manualDampen ? `SOFT BOUNCE (${p.bouncesLeft})` : `RICOCHET! (${p.bouncesLeft})`,
+          '#67e8f9',
+          0.95
+        );
+      }
+
+      if (p.bounceDistLeft <= 0 || p.bounceTimer <= 0 || p.y > this.currentStage.worldHeight + 40) {
+        if (p.bounceDistLeft <= 0) {
+          p.vx *= 0.35;
+          p.vy *= 0.35;
+          this.spawnSparkles(p.x, p.y - h * 0.5, 8, '#22d3ee', '#e0f2fe', 0.8);
+        }
+        p.bounceActive = false;
+        p.bouncesLeft = 0;
+        p.bounceDistLeft = 0;
+      }
+      return;
+    }
+
     // Active MONK KEY [3] — Pyre Dash (long, wide, invulnerable power dash that hurls foes aside)
     if (p.monkDashTimer > 0) {
       this.updateMonkPyreDash(dt, tuning);
@@ -3568,11 +4801,13 @@ export class GameEngine {
       return;
     }
 
-    // Trigger Weapon Skill (Key 3) — immediately responsive, grants Universal Parry Window & auto-triggers Tag Partner!
+    // Trigger Weapon Skill (Key 3) — grants rare 0.10s Perfect Parry ONLY if 12s Parry Cooldown is ready!
     if (input.backdashJustPressed && p.weaponSkillCooldown <= 0) {
       if (this.triggerWeaponSkill(tuning)) {
         this.applySkill3Cast(tuning);
-        p.parryWindowTimer = Math.max(p.parryWindowTimer, 0.24);
+        if (p.parryCooldownTimer <= 0) {
+          p.parryWindowTimer = Math.max(p.parryWindowTimer, 0.10);
+        }
         if (p.tagPartner && p.tagPartnerCooldown <= 0 && !this.currentStage.isCamp) {
           this.summonPhantomAlly(p.tagPartner, tuning);
           p.tagPartnerCooldown = 7.5;
@@ -3589,6 +4824,47 @@ export class GameEngine {
         return;
       }
     }
+
+    // Orbiting Grimoire passive: smoothly regenerate up to 3 orbiting elemental orbs!
+    if (p.weapon === 'orbiting_grimoire' && p.grimoireOrbs < 3) {
+      p.grimoireOrbRechargeTimer += dt;
+      if (p.grimoireOrbRechargeTimer >= 0.85) {
+        p.grimoireOrbRechargeTimer = 0;
+        p.grimoireOrbs = Math.min(3, p.grimoireOrbs + 1);
+      }
+    }
+
+    // Automatic Click-to-Charge buildup for Cleaver Greatsword & Imperial War-Lance (NO hold required!)
+    if (
+      p.attackState === 'startup' &&
+      (p.attackWeapon === 'cleaver_greatsword' || p.attackWeapon === 'joust_lance')
+    ) {
+      const pct =
+        p.attackTotalStartup > 0
+          ? Math.max(0, Math.min(1, 1 - p.attackTimer / p.attackTotalStartup))
+          : 1;
+      p.weaponChargeTimer = pct * 0.85;
+      if (Math.random() < 0.65) {
+        const chH = (p.attackWasCrouching ? p.crouchBaseH : p.baseH) * scale;
+        this.particles.push({
+          x: p.x + (Math.random() - 0.5) * 34,
+          y: p.y - chH * 0.6 + (Math.random() - 0.5) * 28,
+          vx: (Math.random() - 0.5) * 45,
+          vy: -38 - Math.random() * 42,
+          size: 3.6,
+          color: p.attackWeapon === 'cleaver_greatsword' ? '#fb923c' : '#fde047',
+          life: 0.22,
+          maxLife: 0.22,
+          kind: 'sparkle',
+          rotation: Math.random() * Math.PI,
+        });
+      }
+    }
+
+    // Tower Shield auto-guard is active while swinging Shield & Mace or during Bulwark Bash!
+    p.shieldGuardActive =
+      p.vanguardBashTimer > 0 ||
+      (p.attackWeapon === 'shield_mace' && (p.attackState === 'startup' || p.attackState === 'active'));
 
     // Update Weapon Attack State Machine
     this.updatePlayerAttack(dt, tuning);
@@ -3667,10 +4943,13 @@ export class GameEngine {
       }
     }
 
-    // Start buffered weapon attack (Key 1 or Mobile Auto-Attack) — grants Universal Zero-Extra-Button Perfect Parry Window for ALL 4 Heroes!
+    // Start buffered weapon attack (Key 1 or Mobile Auto-Attack) — rare tight 0.10s Parry Window ONLY if 12s Parry Cooldown is ready!
     if (p.attackBufferTimer > 0 && p.attackState === 'idle') {
       p.attackBufferTimer = 0;
-      p.parryWindowTimer = Math.max(p.parryWindowTimer, 0.22);
+      p.weaponChargeTimer = 0;
+      if (p.parryCooldownTimer <= 0) {
+        p.parryWindowTimer = Math.max(p.parryWindowTimer, 0.10);
+      }
 
       // Minstrel Ribbon/Silk Whip:
       // - Manual Standing / Airborne [1] attempts 8-way directional Whip-Zip!
@@ -3715,10 +4994,66 @@ export class GameEngine {
         p.attackTotalStartup = Math.max(0.22, (tuning.attackStartupMs / 1000) * 3.4);
         p.attackTimer = p.attackTotalStartup;
         sound.playHammerCharge();
-      } else if (p.weapon === 'rapier') {
-        p.attackTotalStartup = (tuning.attackStartupMs / 1000) * 0.58;
+      } else if (p.weapon === 'rapier' || p.weapon === 'estoc_spear') {
+        p.attackTotalStartup = (tuning.attackStartupMs / 1000) * (p.weapon === 'estoc_spear' ? 0.56 : 0.58);
         p.attackTimer = p.attackTotalStartup;
         sound.playRapierThrust(wepEvoTier);
+      } else if (p.weapon === 'short_blade') {
+        p.attackTotalStartup = (tuning.attackStartupMs / 1000) * 0.46;
+        p.attackTimer = p.attackTotalStartup;
+        sound.playDaggerSlash(1, wepEvoTier);
+      } else if (p.weapon === 'cleaver_greatsword') {
+        // Click-to-charge: single click auto-charges cleanly then unleashes full wide cleave!
+        p.attackTotalStartup = Math.max(0.32, (tuning.attackStartupMs / 1000) * 5.2);
+        p.attackTimer = p.attackTotalStartup;
+        sound.playHammerCharge();
+      } else if (p.weapon === 'joust_lance') {
+        // Click-to-charge: single click auto-charges cleanly then unleashes long skewer!
+        p.attackTotalStartup = Math.max(0.28, (tuning.attackStartupMs / 1000) * 4.6);
+        p.attackTimer = p.attackTotalStartup;
+        sound.playHammerCharge();
+      } else if (p.weapon === 'arcane_wand') {
+        p.attackTotalStartup = (tuning.attackStartupMs / 1000) * 1.05;
+        p.attackTimer = p.attackTotalStartup;
+      } else if (p.weapon === 'orbiting_grimoire') {
+        p.attackTotalStartup = (tuning.attackStartupMs / 1000) * 0.85;
+        p.attackTimer = p.attackTotalStartup;
+      } else if (p.weapon === 'burst_crossbow') {
+        p.attackTotalStartup = (tuning.attackStartupMs / 1000) * 0.72;
+        p.attackTimer = p.attackTotalStartup;
+      } else if (p.weapon === 'shield_mace') {
+        p.attackTotalStartup = Math.max(0.14, (tuning.attackStartupMs / 1000) * 2.1);
+        p.attackTimer = p.attackTotalStartup;
+        p.shieldGuardActive = true;
+        sound.playArmorBlock();
+      } else if (p.weapon === 'kusarigama') {
+        p.attackTotalStartup = (tuning.attackStartupMs / 1000) * 0.68;
+        p.attackTimer = p.attackTotalStartup;
+        sound.playWhip(wepEvoTier);
+      } else if (p.weapon === 'twin_chakram') {
+        p.attackTotalStartup = (tuning.attackStartupMs / 1000) * 0.65;
+        p.attackTimer = p.attackTotalStartup;
+        sound.playKatanaSlash(wepEvoTier);
+      } else if (p.weapon === 'solar_glaive') {
+        p.attackTotalStartup = (tuning.attackStartupMs / 1000) * 0.82;
+        p.attackTimer = p.attackTotalStartup;
+        sound.playNaginataSlash(wepEvoTier);
+      } else if (p.weapon === 'prism_lance') {
+        p.attackTotalStartup = (tuning.attackStartupMs / 1000) * 0.45;
+        p.attackTimer = p.attackTotalStartup;
+        sound.playRapierThrust(wepEvoTier);
+      } else if (p.weapon === 'prism_gauntlets') {
+        p.attackTotalStartup = (tuning.attackStartupMs / 1000) * 0.42;
+        p.attackTimer = p.attackTotalStartup;
+        sound.playMonkFist(1, wepEvoTier);
+      } else if (p.weapon === 'war_fans') {
+        p.attackTotalStartup = (tuning.attackStartupMs / 1000) * 0.52;
+        p.attackTimer = p.attackTotalStartup;
+        sound.playKatanaSlash(wepEvoTier);
+      } else if (p.weapon === 'meteor_flail') {
+        p.attackTotalStartup = Math.max(0.28, (tuning.attackStartupMs / 1000) * 4.4);
+        p.attackTimer = p.attackTotalStartup;
+        sound.playHammerCharge();
       } else if (p.weapon === 'naginata') {
         p.attackTotalStartup = (tuning.attackStartupMs / 1000) * 0.9;
         p.attackTimer = p.attackTotalStartup;
@@ -3769,22 +5104,32 @@ export class GameEngine {
     const freezeGround = isAttacking && p.onGround && tuning.freezeOnAttack;
     const lockAirDirection = isAttacking && !p.onGround && tuning.lockAirDirectionOnAttack;
 
-    const swiftMult = 1 + p.swiftFootworkLevel * 0.07;
+    const swiftMult = 1 + p.swiftFootworkLevel * 0.04 + this.permAltarBonuses.agility * 0.04;
     const elSpeedBonus =
-      p.combinedElement === 'aether' || p.combinedElement === 'phantom'
+      p.combinedElement === 'aether' || p.combinedElement === 'phantom' || p.combinedElement === 'tempest'
         ? 0.2
-        : p.combinedElement === 'lightning'
+        : p.combinedElement === 'lightning' || p.combinedElement === 'crimson_storm'
           ? 0.18
-          : p.combinedElement === 'frost' || p.combinedElement === 'sandstorm'
+          : p.combinedElement === 'frost' || p.combinedElement === 'sandstorm' || this.hasElement('storm')
             ? 0.14
             : this.hasElement('air')
               ? 0.16
               : 0;
-    const chainSpeedMult = p.shadowChainTimer > 0 ? 1.32 : 1.0;
+    const chainSpeedMult = p.shadowChainTimer > 0 ? 1.34 : 1.0;
     const chainJumpMult = p.shadowChainTimer > 0 ? 1.12 : 1.0;
-    const effectiveMoveSpeed = tuning.moveSpeed * cDef.speedMult * (swiftMult + elSpeedBonus) * chainSpeedMult;
-    const effectiveJumpForce = tuning.jumpForce * cDef.jumpMult * chainJumpMult;
-    const maxHeroAirJumps = cDef.airJumps > 0 ? Math.max(cDef.airJumps, tuning.airJumps) : 0;
+    const charmSpeedBonus =
+      (this.hasBossCharm('sunscarab_seal') ? 0.14 : 0) +
+      (this.hasBossCharm('neon_overclock_chip') ? 0.16 : 0) +
+      (this.hasCharmSynergy('neon_paradox') ? 0.12 : 0) +
+      (this.hasCharmSynergy('solar_singularity') ? 0.1 : 0);
+    const charmJumpMult =
+      (this.hasBossCharm('jade_feather_pearl') ? 1.12 : 1.0) *
+      (this.hasBossCharm('abyssal_trident_pearl') ? 1.14 : 1.0);
+    const effectiveMoveSpeed = tuning.moveSpeed * cDef.speedMult * (swiftMult + elSpeedBonus + charmSpeedBonus) * chainSpeedMult;
+    const effectiveJumpForce = tuning.jumpForce * cDef.jumpMult * chainJumpMult * charmJumpMult;
+    const maxHeroAirJumps =
+      (cDef.airJumps > 0 ? Math.max(cDef.airJumps, tuning.airJumps) : 0) +
+      (this.isCursedChamber ? 1 : 0);
     const monkCharging = p.characterId === 'monk' && p.monkChargeTimer > 0 && p.onGround && input.jumpHeld;
     if (monkCharging) {
       p.crouching = true;
@@ -3814,10 +5159,10 @@ export class GameEngine {
       // Lock horizontal direction, velocity, and facing while attacking mid-air
     } else if (p.onGround) {
       if (p.crouching) {
-        // Crouch-Walking! Sneak quietly at 48% speed with reduced enemy detection range!
+        // Crouch-Walking at crisp 75% walk speed for snappy stealth assassinations!
         if (moveDir !== 0 && !isAttacking) {
           p.facing = moveDir > 0 ? 1 : -1;
-          p.vx = moveDir * effectiveMoveSpeed * 0.48;
+          p.vx = moveDir * effectiveMoveSpeed * 0.75;
         } else {
           p.vx = 0;
         }
@@ -4555,6 +5900,526 @@ export class GameEngine {
           '#f472b6',
           1.05 + evoTier * 0.1
         );
+        return true;
+      }
+
+      case 'estoc_spear': {
+        // Quick Thrust [3]: NEEDLE FLURRY — rapid piercing dash lunge
+        p.weaponSkillCooldown = wDef.skillCooldown;
+        p.rapierLungeTimer = 0.22 + evoTier * 0.04;
+        p.rapierLungeHitIds.clear();
+        p.invulnTimer = Math.max(p.invulnTimer, 0.24);
+        p.vx = p.facing * 640;
+        sound.playRapierThrust(evoTier);
+        this.spawnSparkles(p.x + p.facing * 26, p.y - h * 0.55, 14, '#e2e8f0', '#38bdf8', 1.1);
+        this.spawnDamageNumber(p.x, p.y - h - 18, 'NEEDLE FLURRY!', '#e2e8f0', 1.0);
+        return true;
+      }
+
+      case 'short_blade': {
+        // Quick Small Slash [3]: RIPOSTE STEP — agile blink-slash behind foes
+        p.weaponSkillCooldown = wDef.skillCooldown;
+        p.rapierLungeTimer = 0.18;
+        p.rapierLungeHitIds.clear();
+        p.invulnTimer = Math.max(p.invulnTimer, 0.30);
+        p.vx = p.facing * 560;
+        sound.playDaggerSlash(2, evoTier);
+        this.spawnSparkles(p.x, p.y - h * 0.55, 14, '#94a3b8', '#f8fafc', 1.0);
+        this.spawnDamageNumber(p.x, p.y - h - 18, 'RIPOSTE STEP!', '#cbd5e1', 1.0);
+        return true;
+      }
+
+      case 'cleaver_greatsword': {
+        // Slow Wide Charging Slash [3]: SUNDERING ARC — huge shockwave slash
+        p.weaponSkillCooldown = wDef.skillCooldown;
+        p.axeSpinTimer = 0.44 + evoTier * 0.1;
+        p.axeSpinTickTimer = 0.02;
+        p.invulnTimer = Math.max(p.invulnTimer, 0.35);
+        sound.playGreataxeSwing();
+        this.triggerShake(7.5, 0.22);
+        this.shockwaves.push({
+          x: p.x + p.facing * 42,
+          y: p.y - h * 0.5,
+          radius: 14,
+          maxRadius: 150,
+          color: '#fb923c',
+          life: 0.26,
+          maxLife: 0.26,
+        });
+        this.spawnDamageNumber(p.x, p.y - h - 18, 'SUNDERING ARC!', '#fb923c', 1.08);
+        return true;
+      }
+
+      case 'joust_lance': {
+        // Slow Long Charging Thrust [3]: IMPERIAL CHARGE — unstoppable lance thrust forward
+        p.weaponSkillCooldown = wDef.skillCooldown;
+        p.rapierLungeTimer = 0.32 + evoTier * 0.06;
+        p.rapierLungeHitIds.clear();
+        p.invulnTimer = Math.max(p.invulnTimer, 0.36);
+        p.vx = p.facing * 720;
+        sound.playNaginataSlash(evoTier);
+        this.triggerShake(6.5, 0.2);
+        this.spawnSparkles(p.x + p.facing * 36, p.y - h * 0.52, 18, '#facc15', '#fef08a', 1.25);
+        this.spawnDamageNumber(p.x, p.y - h - 18, 'IMPERIAL CHARGE!', '#facc15', 1.08);
+        return true;
+      }
+
+      case 'arcane_wand': {
+        // Ranged Weapon [3]: ARCANE FAN — fires 3 spread elemental bolts!
+        p.weaponSkillCooldown = wDef.skillCooldown;
+        for (const vyOff of [-125, 0, 125]) {
+          this.spawnWizardBolt(tuning);
+          const last = this.projectiles[this.projectiles.length - 1];
+          if (last) last.vy = vyOff;
+        }
+        this.spawnSparkles(p.x + p.facing * 26, p.y - h * 0.58, 16, '#818cf8', '#e0e7ff', 1.15);
+        this.spawnDamageNumber(p.x, p.y - h - 18, 'ARCANE FAN!', '#a5b4fc', 1.05);
+        return true;
+      }
+
+      case 'war_fans': {
+        // Super Wide Short Quick Weapon [3]: GALE FLOURISH — close-range 360° whirlwind
+        p.weaponSkillCooldown = wDef.skillCooldown;
+        p.minstrelDanceTimer = 0.54 + evoTier * 0.1;
+        p.minstrelDanceTickTimer = 0.02;
+        p.invulnTimer = Math.max(p.invulnTimer, 0.36);
+        sound.playKatanaSlash(evoTier);
+        this.shockwaves.push({
+          x: p.x,
+          y: p.y - h * 0.55,
+          radius: 10,
+          maxRadius: 96,
+          color: '#2dd4bf',
+          life: 0.22,
+          maxLife: 0.22,
+        });
+        this.spawnDamageNumber(p.x, p.y - h - 18, 'GALE FLOURISH!', '#2dd4bf', 1.05);
+        return true;
+      }
+
+      case 'meteor_flail': {
+        // Slow Impact AoE Weapon [3]: CATACLYSM SMASH — massive leaping area detonation!
+        p.weaponSkillCooldown = wDef.skillCooldown;
+        p.hammerLeapState = 'rising';
+        p.hammerLeapTimer = 0.26;
+        p.vy = -520;
+        p.vx = p.facing * 185;
+        p.onGround = false;
+        p.invulnTimer = Math.max(p.invulnTimer, 0.6);
+        sound.playHammerCharge();
+        this.spawnDamageNumber(p.x, p.y - h - 18, 'CATACLYSM SMASH!', '#ef4444', 1.12);
+        return true;
+      }
+
+      case 'orbiting_grimoire': {
+        // Orbiting Grimoire [3]: SHIFT ELEMENT — cycles Fire -> Glacial -> Storm -> Venom -> Shadow -> Light!
+        const GRIM_CYCLE: BaseElementId[] = ['fire', 'glacial', 'storm', 'venom', 'shadow', 'light'];
+        p.grimoireElementIndex = (p.grimoireElementIndex + 1) % GRIM_CYCLE.length;
+        const nextEl = GRIM_CYCLE[p.grimoireElementIndex];
+        const elDef = BASE_ELEMENTS[nextEl];
+        p.grimoireOrbs = Math.min(3, p.grimoireOrbs + 1);
+        p.weaponSkillCooldown = wDef.skillCooldown;
+        sound.playBuff(evoTier);
+        this.shockwaves.push({
+          x: p.x,
+          y: p.y - h * 0.55,
+          radius: 10,
+          maxRadius: 92,
+          color: elDef.primaryColor,
+          life: 0.24,
+          maxLife: 0.24,
+        });
+        this.spawnSparkles(p.x, p.y - h * 0.55, 16, elDef.primaryColor, elDef.glowColor, 1.1);
+        this.spawnDamageNumber(p.x, p.y - h - 18, `GRIMOIRE: ${elDef.name.toUpperCase()}!`, elDef.primaryColor, 1.05);
+        return true;
+      }
+
+      case 'burst_crossbow': {
+        // Dusk Ranger [3]: VAULT VOLLEY — evasive backflip + 5-bolt piercing fan!
+        p.weaponSkillCooldown = wDef.skillCooldown;
+        p.vx = -p.facing * 265;
+        p.vy = -300;
+        p.onGround = false;
+        p.invulnTimer = Math.max(p.invulnTimer, 0.42);
+        sound.playBackdash();
+        sound.playDaggerSlash(2, evoTier);
+        const wLv = 1 + p.weaponDamageBonus;
+        const fanAngles = [-0.26, -0.13, 0, 0.13, 0.26];
+        for (const a of fanAngles) {
+          const spd = 650;
+          this.projectiles.push({
+            id: this.nextProjectileId++,
+            x: p.x + p.facing * 22 * scale,
+            y: p.y - h * 0.58,
+            vx: Math.cos(a) * spd * p.facing,
+            vy: Math.sin(a) * spd,
+            radius: 7,
+            fromEnemy: false,
+            damage: Math.max(2, wLv),
+            life: 0.9,
+            rotation: Math.atan2(Math.sin(a) * spd, Math.cos(a) * spd * p.facing),
+            kind: 'crossbow_bolt',
+            color: '#34d399',
+            color2: '#d1fae5',
+            pierce: true,
+            hitIds: [],
+            slotLevel: wLv,
+          });
+        }
+        this.spawnSparkles(p.x + p.facing * 20, p.y - h * 0.56, 16, '#10b981', '#a7f3d0', 1.15);
+        this.spawnDamageNumber(p.x, p.y - h - 18, 'VAULT VOLLEY!', '#34d399', 1.08);
+        return true;
+      }
+
+      case 'shield_mace': {
+        // Iron Vanguard [3]: BULWARK BASH — armored forward Tower-Shield charge smashing foes!
+        p.weaponSkillCooldown = wDef.skillCooldown;
+        p.vanguardBashTimer = 0.36 + evoTier * 0.05;
+        p.vanguardBashHitIds.clear();
+        p.shieldGuardActive = true;
+        p.invulnTimer = Math.max(p.invulnTimer, 0.44);
+        sound.playArmorBlock();
+        this.triggerShake(6.5, 0.18);
+        this.shockwaves.push({
+          x: p.x + p.facing * 24,
+          y: p.y - h * 0.54,
+          radius: 10,
+          maxRadius: 105,
+          color: '#38bdf8',
+          life: 0.22,
+          maxLife: 0.22,
+        });
+        this.spawnDamageNumber(p.x, p.y - h - 18, 'BULWARK BASH!', '#38bdf8', 1.1);
+        return true;
+      }
+
+      case 'kusarigama': {
+        // Monk Chain-Sickle [3]: CHAIN TEMPEST — 360° chain whirl that yanks all nearby foes into melee & shreds them!
+        p.weaponSkillCooldown = wDef.skillCooldown;
+        p.invulnTimer = Math.max(p.invulnTimer, 0.34);
+        const pullR = (235 + evoTier * 35) * scale;
+        const wLv = 1 + p.weaponDamageBonus;
+        sound.playWhip(evoTier);
+        sound.playKatanaSlash(evoTier);
+        this.triggerShake(6.5, 0.18);
+        this.shockwaves.push({
+          x: p.x,
+          y: p.y - h * 0.55,
+          radius: 16,
+          maxRadius: pullR,
+          color: '#f59e0b',
+          life: 0.28,
+          maxLife: 0.28,
+        });
+        this.spawnSparkles(p.x, p.y - h * 0.55, 22, '#f59e0b', '#fef08a', 1.25);
+        for (const enemy of this.enemies) {
+          if (enemy.dead) continue;
+          const ey = enemy.y - (enemy.baseH * tuning.enemyScale) / 2;
+          const dist = Math.hypot(enemy.x - p.x, ey - (p.y - h * 0.55));
+          if (dist <= pullR) {
+            if (!enemy.isBoss) {
+              // Yank enemy right toward the Monk!
+              const dirToPlayer = p.x >= enemy.x ? 1 : -1;
+              enemy.x += (p.x - enemy.x) * 0.52;
+              enemy.vx = dirToPlayer * 240;
+              enemy.vy = -125;
+              enemy.onGround = false;
+            }
+            this.handlePlayerHitEnemy(enemy, tuning, 'weapon', wLv, {
+              bonusDamage: 1,
+              stun: 0.4,
+              kbX: 0,
+            });
+          }
+        }
+        this.spawnDamageNumber(p.x, p.y - h - 18, 'CHAIN TEMPEST!', '#f59e0b', 1.1);
+        return true;
+      }
+
+      case 'twin_chakram': {
+        // Sun Blade-Dancer [3]: CHAKRAM WARP (if a chakram is airborne) OR RAZOR VORTEX trap!
+        p.weaponSkillCooldown = wDef.skillCooldown;
+        const activeChakrams = this.projectiles.filter((pr) => !pr.fromEnemy && pr.kind === 'chakram');
+        const wLv = 1 + p.weaponDamageBonus;
+        if (activeChakrams.length > 0) {
+          // Warp directly to the farthest airborne Chakram in a golden slashing cyclone!
+          let farthest = activeChakrams[0];
+          let bestD = -1;
+          for (const ch of activeChakrams) {
+            const d = Math.hypot(ch.x - p.x, ch.y - p.y);
+            if (d > bestD) {
+              bestD = d;
+              farthest = ch;
+            }
+          }
+          this.spawnSparkles(p.x, p.y - h * 0.5, 16, '#fbbf24', '#ffffff', 1.1);
+          p.x = Math.max(40, Math.min(this.currentStage.worldWidth - 40, farthest.x));
+          p.y = Math.min(this.currentStage.floorY, farthest.y + h * 0.45);
+          p.vy = -210;
+          p.invulnTimer = Math.max(p.invulnTimer, 0.42);
+          sound.playBackdash();
+          sound.playKatanaSlash(evoTier);
+          this.triggerShake(7, 0.18);
+          this.shockwaves.push({
+            x: p.x,
+            y: p.y - h * 0.5,
+            radius: 12,
+            maxRadius: 128,
+            color: '#fbbf24',
+            life: 0.25,
+            maxLife: 0.25,
+          });
+          this.spawnSparkles(p.x, p.y - h * 0.5, 24, '#fbbf24', '#fef08a', 1.35);
+          for (const enemy of this.enemies) {
+            if (enemy.dead) continue;
+            const ey = enemy.y - (enemy.baseH * tuning.enemyScale) / 2;
+            if (Math.hypot(enemy.x - p.x, ey - (p.y - h * 0.5)) <= 132) {
+              this.handlePlayerHitEnemy(enemy, tuning, 'weapon', wLv + 1, { bonusDamage: 2, stun: 0.35 });
+            }
+          }
+          this.spawnDamageNumber(p.x, p.y - h - 18, 'CHAKRAM WARP!', '#fbbf24', 1.12);
+        } else {
+          // Deploy a hovering Razor Vortex trap ahead that slices foes rapidly!
+          const vxX = Math.max(40, Math.min(this.currentStage.worldWidth - 40, p.x + p.facing * 135 * scale));
+          const vxY = p.y - h * 0.55;
+          this.projectiles.push({
+            id: this.nextProjectileId++,
+            x: vxX,
+            y: vxY,
+            vx: 0,
+            vy: 0,
+            radius: 44,
+            fromEnemy: false,
+            damage: Math.max(1, wLv),
+            life: 2.6 + evoTier * 0.4,
+            maxLife: 2.6 + evoTier * 0.4,
+            rotation: 0,
+            kind: 'chakram_vortex',
+            color: '#fbbf24',
+            color2: '#f59e0b',
+            returnTimer: 0.05,
+            slotLevel: wLv,
+          });
+          sound.playKatanaSlash(evoTier);
+          this.spawnSparkles(vxX, vxY, 18, '#fbbf24', '#fef08a', 1.2);
+          this.spawnDamageNumber(p.x, p.y - h - 18, 'RAZOR VORTEX!', '#fbbf24', 1.08);
+        }
+        return true;
+      }
+
+      case 'prism_lance': {
+        // Prism Striker [3]: EVOLVING PRISM GLASS WALL BOX MACHINE!
+        // Lv 1-4: 1 wall behind enemy | Lv 5-9: 2 opposing walls | Lv 10-14: 3 walls (+ceiling) | Lv 15+: Full 4-wall Box!
+        p.weaponSkillCooldown = wDef.skillCooldown;
+        this.glassWalls = [];
+        let target: Enemy | null = null;
+        let bestScore = Infinity;
+        for (const e of this.enemies) {
+          if (e.dead) continue;
+          const dxE = e.x - p.x;
+          const dyE = e.y - p.y;
+          const d = Math.hypot(dxE, dyE);
+          if (d > 480) continue;
+          const inFront = dxE * p.facing >= -20 ? 0.65 : 1.35;
+          if (d * inFront < bestScore) {
+            bestScore = d * inFront;
+            target = e;
+          }
+        }
+        const dir = target ? (target.x >= p.x ? 1 : -1) : p.facing;
+        const cx = target
+          ? target.x
+          : Math.max(120, Math.min(this.currentStage.worldWidth - 120, p.x + p.facing * 170));
+        const baseFloorY = target ? target.y : p.y;
+        const spanX = target?.isBoss ? 128 : 96;
+        const wallH = target?.isBoss ? 225 : 185;
+        const topY = Math.max(48, baseFloorY - wallH);
+        const wallLife = 7.5 + evoTier * 1.2;
+
+        // Wall 1 (Base): Tall Glass Wall directly BEHIND the enemy!
+        const backX = Math.max(24, Math.min(this.currentStage.worldWidth - 38, cx + dir * spanX));
+        this.glassWalls.push({
+          id: this.nextGlassWallId++,
+          x: backX,
+          y: topY,
+          w: 16,
+          h: wallH + 12,
+          orientation: 'vertical',
+          life: wallLife,
+          maxLife: wallLife,
+          flashTimer: 0.35,
+          color: '#22d3ee',
+        });
+
+        // Wall 2 (Evo Tier >= 1, Weapon Lv 5+): Front opposing Glass Wall (ping-pong corridor!)
+        if (evoTier >= 1) {
+          const frontX = Math.max(24, Math.min(this.currentStage.worldWidth - 38, cx - dir * spanX));
+          this.glassWalls.push({
+            id: this.nextGlassWallId++,
+            x: frontX,
+            y: topY,
+            w: 16,
+            h: wallH + 12,
+            orientation: 'vertical',
+            life: wallLife,
+            maxLife: wallLife,
+            flashTimer: 0.35,
+            color: '#38bdf8',
+          });
+        }
+
+        // Wall 3 (Evo Tier >= 2, Weapon Lv 10+): Overhead Ceiling Glass Slab!
+        if (evoTier >= 2) {
+          const leftX = Math.max(24, cx - spanX);
+          this.glassWalls.push({
+            id: this.nextGlassWallId++,
+            x: leftX,
+            y: topY,
+            w: spanX * 2 + 16,
+            h: 16,
+            orientation: 'horizontal',
+            life: wallLife,
+            maxLife: wallLife,
+            flashTimer: 0.35,
+            color: '#a78bfa',
+          });
+        }
+
+        // Wall 4 (Evo Tier >= 3, Weapon Lv 15+): Reinforced Floor Glass Prism — FULL BOUNCE BOX MACHINE!
+        if (evoTier >= 3) {
+          const leftX = Math.max(24, cx - spanX);
+          this.glassWalls.push({
+            id: this.nextGlassWallId++,
+            x: leftX,
+            y: baseFloorY + 2,
+            w: spanX * 2 + 16,
+            h: 16,
+            orientation: 'horizontal',
+            life: wallLife,
+            maxLife: wallLife,
+            flashTimer: 0.35,
+            color: '#f472b6',
+          });
+        }
+
+        sound.playParry(false);
+        this.triggerShake(5.5, 0.14);
+        this.spawnSparkles(backX + 8, topY + wallH * 0.5, 20, '#22d3ee', '#ffffff', 1.25);
+        const wallMsg =
+          evoTier >= 3
+            ? 'PRISM BOX MACHINE!'
+            : evoTier === 2
+              ? '3-WALL PRISM CAGE!'
+              : evoTier === 1
+                ? 'TWIN GLASS WALLS!'
+                : 'GLASS WALL!';
+        this.spawnDamageNumber(cx, topY - 14, wallMsg, '#67e8f9', 1.15);
+        return true;
+      }
+
+      case 'solar_glaive': {
+        // Blade-Dancer [3]: SUNBURST SPIN-DASH — invulnerable spinning golden dash-slash + burning sun ring + air jump reset!
+        p.weaponSkillCooldown = wDef.skillCooldown;
+        const wLv = 1 + p.weaponDamageBonus;
+        const dashDist = (175 + evoTier * 36) * scale;
+        const startX = p.x;
+        const endX = Math.max(40, Math.min(this.currentStage.worldWidth - 40, p.x + p.facing * dashDist));
+        const midY = p.y - h * 0.52;
+        this.spawnSparkles(startX, midY, 16, '#fbbf24', '#f97316', 1.2);
+        p.x = endX;
+        p.vx = p.facing * 260;
+        p.vy = -195;
+        p.invulnTimer = Math.max(p.invulnTimer, 0.48);
+        p.airJumpsRemaining = Math.max(p.airJumpsRemaining, this.cdef(p.characterId).airJumps);
+        sound.playBackdash(evoTier);
+        sound.playNaginataSlash(evoTier);
+        this.triggerShake(6.5, 0.18);
+        this.shockwaves.push({
+          x: endX,
+          y: midY,
+          radius: 14,
+          maxRadius: 122 + evoTier * 22,
+          color: '#f97316',
+          life: 0.28,
+          maxLife: 0.28,
+        });
+        this.spawnSparkles(endX, midY, 24, '#fbbf24', '#fef08a', 1.35);
+        const minX = Math.min(startX, endX) - 42;
+        const maxX = Math.max(startX, endX) + 42;
+        for (const enemy of this.enemies) {
+          if (enemy.dead) continue;
+          const ey = enemy.y - (enemy.baseH * tuning.enemyScale) / 2;
+          if (enemy.x >= minX && enemy.x <= maxX && Math.abs(ey - midY) <= 105) {
+            enemy.burnTimer = Math.max(enemy.burnTimer ?? 0, 3.2);
+            this.handlePlayerHitEnemy(enemy, tuning, 'weapon', wLv + 1, {
+              bonusDamage: 1 + evoTier,
+              stun: 0.35,
+              dirX: p.facing,
+            });
+          }
+        }
+        this.spawnDamageNumber(endX, p.y - h - 18, 'SUNBURST SPIN!', '#fb923c', 1.12);
+        return true;
+      }
+
+      case 'prism_gauntlets': {
+        // Prism Striker [3]: RICOCHET NOVA SLAM — launches 4 X-cross prism bolts + upward vault + prism shockwave!
+        p.weaponSkillCooldown = wDef.skillCooldown;
+        const wLv = 1 + p.weaponDamageBonus;
+        const cx = p.x;
+        const cy = p.y - h * 0.52;
+        p.vy = -380;
+        p.onGround = false;
+        p.invulnTimer = Math.max(p.invulnTimer, 0.35);
+        const angles = [-Math.PI * 0.78, -Math.PI * 0.22, Math.PI * 0.22, Math.PI * 0.78];
+        for (const ang of angles) {
+          const spd = 560 + evoTier * 55;
+          this.projectiles.push({
+            id: this.nextProjectileId++,
+            x: cx,
+            y: cy,
+            vx: Math.cos(ang) * spd,
+            vy: Math.sin(ang) * spd,
+            radius: 10,
+            fromEnemy: false,
+            damage: Math.max(2, wLv + evoTier),
+            life: 0.85 + evoTier * 0.15,
+            rotation: ang,
+            kind: 'crossbow_bolt',
+            color: '#e879f9',
+            color2: '#67e8f9',
+            pierce: true,
+            hitIds: [],
+            slotLevel: wLv,
+          });
+        }
+        sound.playParry(false);
+        sound.playHammerBoom();
+        this.triggerShake(7, 0.2);
+        this.shockwaves.push({
+          x: cx,
+          y: cy,
+          radius: 12,
+          maxRadius: 130 + evoTier * 24,
+          color: '#e879f9',
+          life: 0.28,
+          maxLife: 0.28,
+        });
+        this.spawnSparkles(cx, cy, 26, '#e879f9', '#67e8f9', 1.35);
+        for (const enemy of this.enemies) {
+          if (enemy.dead) continue;
+          const ey = enemy.y - (enemy.baseH * tuning.enemyScale) / 2;
+          if (Math.hypot(enemy.x - cx, ey - cy) <= 135 + evoTier * 24) {
+            this.handlePlayerHitEnemy(enemy, tuning, 'weapon', wLv + 1, {
+              bonusDamage: 1,
+              kbX: 310,
+              kbY: 220,
+              stun: 0.45,
+              dirX: enemy.x >= cx ? 1 : -1,
+            });
+          }
+        }
+        this.spawnDamageNumber(cx, p.y - h - 18, 'RICOCHET NOVA!', '#e879f9', 1.14);
         return true;
       }
     }
@@ -5382,6 +7247,387 @@ export class GameEngine {
         this.triggerImpactFlash(el.c1, 0.16, p.x, p.y - h * 0.6, 1.0, 0.14);
         for (const enemy of hit) {
           this.handlePlayerHitEnemy(enemy, tuning, 'fireball', slotLevel, { kbX: 80, stun: 0.6, dirX: enemy.x >= p.x ? 1 : -1 });
+        }
+        return false;
+      }
+
+      case 'ricochet_snare': {
+        // Ranger starter spell: weighted green snare bola that pierces, binds & stuns foes in a razor burst!
+        const ox = p.x + p.facing * 20 * scale;
+        const oy = p.y - h * 0.56;
+        const count = spellEvo >= 2 ? 3 : spellEvo >= 1 ? 2 : 1;
+        for (let i = 0; i < count; i++) {
+          const spread = (i - (count - 1) / 2) * 0.16;
+          const spd = 620 + spellEvo * 55;
+          this.projectiles.push({
+            id: this.nextProjectileId++,
+            x: ox,
+            y: oy,
+            vx: p.facing * Math.cos(spread) * spd,
+            vy: Math.sin(spread) * spd + (input.up ? -90 : 0),
+            radius: 10 + spellEvo * 2,
+            fromEnemy: false,
+            damage: 2 + flatBonus,
+            life: 1.05 + spellEvo * 0.15,
+            rotation: 0,
+            kind: 'crossbow_bolt',
+            color: '#10b981',
+            color2: '#a7f3d0',
+            pierce: true,
+            hitIds: [],
+            slotLevel,
+          });
+        }
+        // Also immediately snare-bind nearby enemies in front cone for crisp CC feel!
+        const snareRange = 220 + spellEvo * 45;
+        for (const enemy of this.enemies) {
+          if (enemy.dead) continue;
+          const dx = (enemy.x - p.x) * p.facing;
+          const dy = Math.abs(enemy.y - p.y);
+          if (dx >= -15 && dx <= snareRange && dy <= 95) {
+            enemy.hurtStunTimer = Math.max(enemy.hurtStunTimer, 1.1 + spellEvo * 0.25);
+            enemy.chillTimer = Math.max(enemy.chillTimer ?? 0, 2.5);
+            this.spawnSparkles(enemy.x, enemy.y - enemy.baseH * tuning.enemyScale * 0.5, 10, '#10b981', '#d1fae5', 0.9);
+          }
+        }
+        sound.playGrapple(spellEvo);
+        this.spawnSparkles(ox, oy, 14, '#10b981', '#fef08a', 1.0);
+        this.spawnDamageNumber(p.x, p.y - h - 14, 'SNARE BOLA!', '#34d399', 0.95);
+        return false;
+      }
+
+      case 'aegis_slam': {
+        // Vanguard starter spell: +1 Armor Shield + twin iron shockwaves left & right staggering enemies!
+        p.armorShield = Math.min(4, p.armorShield + 1 + (spellEvo >= 2 ? 1 : 0));
+        p.armorTimer = Math.max(p.armorTimer, 14 + spellEvo * 4);
+        const radius = 148 + spellEvo * 32;
+        const cx = p.x;
+        const cy = p.y - h * 0.35;
+        sound.playArmorBlock();
+        sound.playHammerBoom();
+        this.triggerShake(7.5 + spellEvo * 1.5, 0.22);
+        this.shockwaves.push({
+          x: cx,
+          y: cy,
+          radius: 14,
+          maxRadius: radius,
+          color: '#38bdf8',
+          life: 0.3,
+          maxLife: 0.3,
+        });
+        for (const dir of [-1, 1] as const) {
+          this.projectiles.push({
+            id: this.nextProjectileId++,
+            x: cx + dir * 24,
+            y: p.y - 14,
+            vx: dir * (390 + spellEvo * 50),
+            vy: 0,
+            radius: 18 + spellEvo * 3,
+            fromEnemy: false,
+            damage: 2 + flatBonus,
+            life: 0.55 + spellEvo * 0.12,
+            rotation: 0,
+            kind: 'player_quake',
+            color: '#38bdf8',
+            color2: '#e0f2fe',
+            pierce: true,
+            hitIds: [],
+            slotLevel,
+          });
+        }
+        for (const enemy of this.enemies) {
+          if (enemy.dead) continue;
+          const ey = enemy.y - (enemy.baseH * tuning.enemyScale) / 2;
+          if (Math.hypot(enemy.x - cx, ey - cy) <= radius) {
+            this.handlePlayerHitEnemy(enemy, tuning, 'fireball', slotLevel, {
+              kbX: 300,
+              kbY: 210,
+              stun: 0.85,
+              guardBreak: true,
+              dirX: enemy.x >= cx ? 1 : -1,
+            });
+          }
+        }
+        this.spawnSparkles(cx, cy, 22, '#38bdf8', '#ffffff', 1.2);
+        this.spawnDamageNumber(p.x, p.y - h - 14, 'AEGIS SLAM (+1 ARMOR)', '#38bdf8', 1.0);
+        return false;
+      }
+
+      case 'solar_bloom': {
+        // Blade-Dancer starter spell: radiant sun-ring AoE slicing & igniting nearby enemies!
+        const cx = p.x;
+        const cy = p.y - h * 0.52;
+        const radius = 158 + spellEvo * 32;
+        sound.playKatanaSlash(spellEvo);
+        sound.playFireball(spellEvo);
+        this.triggerShake(6.5, 0.2);
+        this.shockwaves.push({
+          x: cx,
+          y: cy,
+          radius: 12,
+          maxRadius: radius,
+          color: '#fbbf24',
+          life: 0.3,
+          maxLife: 0.3,
+        });
+        this.shockwaves.push({
+          x: cx,
+          y: cy,
+          radius: 8,
+          maxRadius: radius * 0.65,
+          color: '#f97316',
+          life: 0.22,
+          maxLife: 0.22,
+        });
+        this.spawnSparkles(cx, cy, 28 + spellEvo * 8, '#fbbf24', '#fef08a', 1.35);
+        for (const enemy of this.enemies) {
+          if (enemy.dead) continue;
+          const ey = enemy.y - (enemy.baseH * tuning.enemyScale) / 2;
+          if (Math.hypot(enemy.x - cx, ey - cy) <= radius + 12) {
+            enemy.burnTimer = Math.max(enemy.burnTimer ?? 0, 3.6 + spellEvo * 0.6);
+            this.handlePlayerHitEnemy(enemy, tuning, 'fireball', slotLevel, {
+              bonusDamage: 1,
+              kbX: 220,
+              kbY: 160,
+              stun: 0.45,
+              dirX: enemy.x >= cx ? 1 : -1,
+            });
+          }
+        }
+        this.spawnDamageNumber(p.x, p.y - h - 14, 'SOLAR BLOOM!', '#fbbf24', 1.04);
+        return false;
+      }
+
+      case 'prism_beam': {
+        // Prism Striker starter spell: instant refracted cyan crystal beam piercing every foe ahead!
+        const beamLen = (420 + spellEvo * 65) * scale;
+        const ox = p.x + p.facing * 20 * scale;
+        const oy = p.y - h * 0.56;
+        const endX = ox + p.facing * beamLen;
+        this.elementalArcs.push({
+          kind: 'beam',
+          x1: ox,
+          y1: oy,
+          x2: endX,
+          y2: oy,
+          color: '#22d3ee',
+          secondaryColor: '#e879f9',
+          life: 0.34,
+          maxLife: 0.34,
+          seed: Math.random() * 100,
+        });
+        sound.playParry(false);
+        sound.playWizardBolt(spellEvo, true);
+        this.triggerShake(6.5, 0.18);
+        this.spawnSparkles(ox, oy, 16, '#22d3ee', '#ffffff', 1.15);
+        const minX = Math.min(ox, endX);
+        const maxX = Math.max(ox, endX);
+        const halfH = (34 + spellEvo * 8) * scale;
+        for (const enemy of this.enemies) {
+          if (enemy.dead) continue;
+          const ey = enemy.y - (enemy.baseH * tuning.enemyScale) / 2;
+          const ew = (enemy.baseW * tuning.enemyScale) / 2;
+          if (enemy.x + ew >= minX && enemy.x - ew <= maxX && Math.abs(ey - oy) <= halfH + (enemy.baseH * tuning.enemyScale) * 0.45) {
+            this.spawnSparkles(enemy.x, ey, 12, '#67e8f9', '#e879f9', 1.05);
+            this.handlePlayerHitEnemy(enemy, tuning, 'fireball', slotLevel, {
+              bonusDamage: 1 + spellEvo,
+              kbX: 250,
+              stun: 0.55,
+              guardBreak: true,
+              dirX: p.facing,
+            });
+          }
+        }
+        this.spawnDamageNumber(p.x, p.y - h - 14, 'PRISM BEAM!', '#22d3ee', 1.05);
+        return false;
+      }
+
+      case 'frost_nova': {
+        // Forge-exclusive spell: Glacial Nova freezing all nearby enemies; bonus shatter damage to chilled foes!
+        const cx = p.x;
+        const cy = p.y - h * 0.5;
+        const radius = 172 + spellEvo * 34;
+        sound.playElementalProc('water');
+        this.triggerShake(6.5, 0.2);
+        this.shockwaves.push({
+          x: cx,
+          y: cy,
+          radius: 12,
+          maxRadius: radius,
+          color: '#7dd3fc',
+          life: 0.34,
+          maxLife: 0.34,
+        });
+        this.spawnSparkles(cx, cy, 30 + spellEvo * 10, '#7dd3fc', '#ffffff', 1.35);
+        for (const enemy of this.enemies) {
+          if (enemy.dead) continue;
+          const ey = enemy.y - (enemy.baseH * tuning.enemyScale) / 2;
+          if (Math.hypot(enemy.x - cx, ey - cy) <= radius + 10) {
+            const wasChilled = (enemy.chillTimer ?? 0) > 0;
+            enemy.chillTimer = Math.max(enemy.chillTimer ?? 0, 4.2 + spellEvo * 0.8);
+            this.handlePlayerHitEnemy(enemy, tuning, 'fireball', slotLevel, {
+              bonusDamage: wasChilled ? 3 + spellEvo : 1,
+              kbX: 160,
+              stun: 0.75 + spellEvo * 0.2,
+              dirX: enemy.x >= cx ? 1 : -1,
+            });
+          }
+        }
+        this.spawnDamageNumber(p.x, p.y - h - 14, 'GLACIAL NOVA!', '#7dd3fc', 1.08);
+        return false;
+      }
+
+      case 'phantom_blades': {
+        // Forge-exclusive spell: summons a fan of 5 spectral purple daggers that pierce rapidly!
+        const count = 5 + spellEvo * 2;
+        const ox = p.x + p.facing * 20 * scale;
+        const oy = p.y - h * 0.62;
+        const spd = 720 + spellEvo * 50;
+        for (let i = 0; i < count; i++) {
+          const spread = (i - (count - 1) / 2) * 0.14;
+          this.projectiles.push({
+            id: this.nextProjectileId++,
+            x: ox,
+            y: oy + (i - (count - 1) / 2) * 5,
+            vx: p.facing * Math.cos(spread) * spd,
+            vy: Math.sin(spread) * spd + (input.up ? -85 : 0),
+            radius: 7,
+            fromEnemy: false,
+            damage: Math.max(1, 1 + Math.floor(flatBonus * 0.75)),
+            life: 0.75 + spellEvo * 0.12,
+            rotation: Math.atan2(Math.sin(spread) * spd, p.facing * Math.cos(spread) * spd),
+            kind: 'crossbow_bolt',
+            color: '#c084fc',
+            color2: '#f5d0fe',
+            pierce: true,
+            hitIds: [],
+            slotLevel,
+          });
+        }
+        sound.playVenomNeedles(spellEvo);
+        this.spawnSparkles(ox, oy, 18, '#c084fc', '#ffffff', 1.1);
+        this.spawnDamageNumber(p.x, p.y - h - 14, 'PHANTOM BLADES!', '#c084fc', 1.02);
+        return false;
+      }
+
+      case 'meteor_call': {
+        // Forge-exclusive spell: calls a blazing meteor directly onto the nearest enemy ahead!
+        let target: Enemy | null = null;
+        let bestScore = Infinity;
+        for (const e of this.enemies) {
+          if (e.dead) continue;
+          const d = Math.hypot(e.x - p.x, e.y - p.y);
+          if (d > 520) continue;
+          const frontBias = (e.x - p.x) * p.facing >= -20 ? 0.65 : 1.4;
+          if (d * frontBias < bestScore) {
+            bestScore = d * frontBias;
+            target = e;
+          }
+        }
+        const tx = target ? target.x : Math.max(60, Math.min(this.currentStage.worldWidth - 60, p.x + p.facing * 200));
+        const ty = target ? target.y - 16 : p.y - 16;
+        const blastR = 148 + spellEvo * 32;
+        this.elementalArcs.push({
+          kind: 'beam',
+          x1: tx - p.facing * 90,
+          y1: Math.max(20, ty - 340),
+          x2: tx,
+          y2: ty,
+          color: '#ef4444',
+          secondaryColor: '#fde047',
+          life: 0.4,
+          maxLife: 0.4,
+          seed: Math.random() * 100,
+        });
+        sound.playHammerBoom();
+        sound.playFireball(Math.max(1, spellEvo));
+        this.triggerShake(9.5 + spellEvo * 2, 0.3);
+        this.shockwaves.push({
+          x: tx,
+          y: ty,
+          radius: 16,
+          maxRadius: blastR,
+          color: '#ef4444',
+          life: 0.36,
+          maxLife: 0.36,
+        });
+        this.shockwaves.push({
+          x: tx,
+          y: ty,
+          radius: 10,
+          maxRadius: blastR * 0.6,
+          color: '#fef08a',
+          life: 0.24,
+          maxLife: 0.24,
+        });
+        this.spawnSparkles(tx, ty, 38, '#ef4444', '#fde047', 1.55);
+        for (const enemy of this.enemies) {
+          if (enemy.dead) continue;
+          const ey = enemy.y - (enemy.baseH * tuning.enemyScale) / 2;
+          if (Math.hypot(enemy.x - tx, ey - ty) <= blastR + 12) {
+            enemy.burnTimer = Math.max(enemy.burnTimer ?? 0, 4.5);
+            this.handlePlayerHitEnemy(enemy, tuning, 'fireball', slotLevel, {
+              bonusDamage: 3 + spellEvo * 2,
+              kbX: 310,
+              kbY: 260,
+              stun: 0.9,
+              guardBreak: true,
+              dirX: enemy.x >= tx ? 1 : -1,
+            });
+          }
+        }
+        this.spawnDamageNumber(tx, ty - 42, 'METEOR CALL!', '#ef4444', 1.2);
+        return false;
+      }
+
+      case 'blood_siphon': {
+        // Forge-exclusive spell: crimson pulse draining nearby foes and restoring +1 HP!
+        const cx = p.x;
+        const cy = p.y - h * 0.52;
+        const radius = 165 + spellEvo * 28;
+        let drained = 0;
+        for (const enemy of this.enemies) {
+          if (enemy.dead) continue;
+          const ey = enemy.y - (enemy.baseH * tuning.enemyScale) / 2;
+          if (Math.hypot(enemy.x - cx, ey - cy) <= radius + 10) {
+            drained++;
+            this.elementalArcs.push({
+              kind: 'lightning',
+              x1: enemy.x,
+              y1: ey,
+              x2: cx,
+              y2: cy,
+              color: '#be123c',
+              secondaryColor: '#fda4af',
+              life: 0.34,
+              maxLife: 0.34,
+              seed: Math.random() * 100,
+            });
+            this.handlePlayerHitEnemy(enemy, tuning, 'fireball', slotLevel, {
+              bonusDamage: 1,
+              kbX: 110,
+              stun: 0.35,
+              dirX: enemy.x >= cx ? 1 : -1,
+            });
+          }
+        }
+        sound.playBuff(spellEvo);
+        this.shockwaves.push({
+          x: cx,
+          y: cy,
+          radius: 12,
+          maxRadius: radius,
+          color: '#be123c',
+          life: 0.3,
+          maxLife: 0.3,
+        });
+        this.spawnSparkles(cx, cy, 22, '#be123c', '#fda4af', 1.2);
+        if (drained > 0) {
+          const healAmt = spellEvo >= 2 && drained >= 3 ? 2 : 1;
+          p.hp = Math.min(p.maxHp, p.hp + healAmt);
+          this.spawnDamageNumber(p.x, p.y - h - 16, `SIPHON +${healAmt} HP`, '#fb7185', 1.08);
+        } else {
+          this.spawnDamageNumber(p.x, p.y - h - 16, 'BLOOD SIPHON', '#be123c', 0.92);
         }
         return false;
       }
@@ -6789,13 +9035,94 @@ export class GameEngine {
     p.specialItemCounts[id] -= 1;
     p.specialItemCooldown = def.cooldown;
 
+    if (id === 'smoke_vial') {
+      // SHADOW SMOKE VIAL: Obscuring smoke bomb — instant 3.5s Ambush Stealth + blinds & stuns nearby foes!
+      p.ambushTimer = Math.max(p.ambushTimer, 3.5);
+      p.shadowChainTimer = Math.max(p.shadowChainTimer, 3.5);
+      p.invulnTimer = Math.max(p.invulnTimer, 0.55);
+      sound.playGasBreak();
+      this.triggerShake(6, 0.2);
+      this.shockwaves.push({
+        x: p.x,
+        y: p.y - h * 0.5,
+        radius: 14,
+        maxRadius: 210,
+        color: '#94a3b8',
+        life: 0.36,
+        maxLife: 0.36,
+      });
+      for (let i = 0; i < 24; i++) {
+        this.particles.push({
+          x: p.x + (Math.random() - 0.5) * 90,
+          y: p.y - h * 0.5 + (Math.random() - 0.5) * 50,
+          vx: (Math.random() - 0.5) * 140,
+          vy: -30 - Math.random() * 80,
+          size: 8 + Math.random() * 10,
+          color: i % 2 === 0 ? '#64748b' : '#334155',
+          life: 0.85,
+          maxLife: 0.85,
+          kind: 'gas',
+          rotation: Math.random() * Math.PI,
+        });
+      }
+      for (const enemy of this.enemies) {
+        if (enemy.dead) continue;
+        if (Math.hypot(enemy.x - p.x, enemy.y - p.y) <= 230) {
+          enemy.hurtStunTimer = Math.max(enemy.hurtStunTimer, enemy.isBoss ? 0.35 : 1.5);
+          if (!enemy.isBoss) enemy.alerted = false;
+          this.spawnDamageNumber(enemy.x, enemy.y - 44, 'BLINDED', '#cbd5e1', 0.9);
+        }
+      }
+      this.spawnDamageNumber(p.x, p.y - h - 22, 'SMOKE VIAL!', '#cbd5e1', 1.1, 'AMBUSH STEALTH');
+      return;
+    }
+
+    if (id === 'fire_bomb') {
+      // ALCHEMIST FIRE BOMB: Blazing AoE fire detonation with guard-break & 4s Burn!
+      sound.playExplosion(false);
+      this.triggerShake(10, 0.28);
+      this.triggerImpactFlash('#f97316', 0.42, p.x, p.y - h * 0.5, 1.35, 0.25);
+      this.shockwaves.push({
+        x: p.x,
+        y: p.y - h * 0.5,
+        radius: 14,
+        maxRadius: 235,
+        color: '#f97316',
+        life: 0.34,
+        maxLife: 0.34,
+      });
+      this.spawnSparkles(p.x, p.y - h * 0.5, 28, '#f97316', '#fde047', 1.45);
+      this.spawnDamageNumber(p.x, p.y - h - 22, 'FIRE BOMB!', '#fb923c', 1.15, 'AOE BURN');
+      for (const enemy of this.enemies) {
+        if (enemy.dead) continue;
+        if (Math.hypot(enemy.x - p.x, enemy.y - p.y) <= 250) {
+          const ey = enemy.y - (enemy.baseH * tuning.enemyScale) / 2;
+          const dmg = 5 + this.getWeaponFlatBonus(1 + p.weaponDamageBonus);
+          enemy.shieldActive = false;
+          enemy.hp = Math.max(0, enemy.hp - dmg);
+          this.raidDamageDealt += dmg;
+          enemy.flashTimer = 0.22;
+          enemy.hurtStunTimer = enemy.isBoss ? 0.14 : 0.45;
+          this.applyBurn(enemy, 4.0);
+          this.spawnBloodBurst(enemy.x, ey, enemy.x >= p.x ? 1 : -1, 14, 1.05, 2);
+          this.spawnDamageNumber(enemy.x, ey - 16, `${dmg}`, '#fb923c', 1.2, 'BURN');
+          if (enemy.hp <= 0) {
+            this.handleEnemyKilled(enemy, enemy.x, ey);
+          }
+        }
+      }
+      return;
+    }
+
     if (id === 'hero_tag_horn') {
       // PHANTOM TAG HORN: Summon TWO spectral companion heroes simultaneously + heal +1 HP & +2 MP!
       p.hp = Math.min(p.maxHp, p.hp + 1);
       p.mp = Math.min(p.maxMp, p.mp + 2);
       p.invulnTimer = Math.max(p.invulnTimer, 0.75);
       const others = shuffle(
-        (['hunter', 'brute', 'ronin', 'minstrel'] as CharacterId[]).filter((c) => c !== p.characterId)
+        (['hunter', 'brute', 'ronin', 'minstrel', 'monk', 'wizard', 'assassin'] as CharacterId[]).filter(
+          (c) => c !== p.characterId
+        )
       );
       this.summonPhantomAlly(others[0], tuning, p.facing * 54);
       this.summonPhantomAlly(others[1], tuning, -p.facing * 54);
@@ -6931,15 +9258,28 @@ export class GameEngine {
   /** Weapon reach used by mobile auto-attack (matches the swing reach, times the tuning multiplier). */
   private getAutoAttackReach(tuning: TuningConfig): number {
     const p = this.player;
-    if (p.weapon === 'spire_staff') {
-      // Wizard: auto-attack fires the bolt at foes inside ~90% of its range.
+    if (p.weapon === 'spire_staff' || p.weapon === 'arcane_wand' || p.weapon === 'orbiting_grimoire') {
       const ct = this.charTune('wizard');
       return ct.wizardBoltRange * tuning.playerScale * 0.9 * (tuning.mobileAutoAttackRange ?? 1);
     }
+    if (p.weapon === 'burst_crossbow') {
+      return 390 * tuning.playerScale * (tuning.mobileAutoAttackRange ?? 1);
+    }
+    if (p.weapon === 'twin_chakram') {
+      return 275 * tuning.playerScale * (tuning.mobileAutoAttackRange ?? 1);
+    }
+    if (p.weapon === 'prism_lance' || p.weapon === 'prism_gauntlets') {
+      return (p.weapon === 'prism_lance' ? 240 : 175) * tuning.playerScale * (tuning.mobileAutoAttackRange ?? 1);
+    }
     const longReach =
-      p.weapon === 'whip' || p.weapon === 'naginata' || p.weapon === 'ribbon_whip' || p.weapon === 'silk_whip';
+      p.weapon === 'whip' ||
+      p.weapon === 'naginata' ||
+      p.weapon === 'solar_glaive' ||
+      p.weapon === 'ribbon_whip' ||
+      p.weapon === 'silk_whip' ||
+      p.weapon === 'kusarigama';
     const reachM = attackReachMul(p.weapon, evoCombatTier(p, tuning), affFlags(p, tuning), combatTune(tuning));
-    return tuning.attackRange * (longReach ? 1.18 : 1.05) * tuning.playerScale * (tuning.mobileAutoAttackRange ?? 1) * reachM;
+    return tuning.attackRange * (longReach ? 1.24 : 1.05) * tuning.playerScale * (tuning.mobileAutoAttackRange ?? 1) * reachM;
   }
 
   /** True when a hit on this enemy right now would count as a stealth assassination. */
@@ -6948,8 +9288,8 @@ export class GameEngine {
     if (!tuning.assassinationEnabled || enemy.isBoss || enemy.dead) return false;
     if (p.ambushTimer > 0) return true;
     if (enemy.alerted) return false;
-    const isBehindEnemy = (p.x - enemy.x) * enemy.facing < 0;
-    const isDrop = !p.onGround && p.y < enemy.y - 26 && Math.abs(p.x - enemy.x) < 120;
+    const isBehindEnemy = (p.x - enemy.x) * enemy.facing < 24;
+    const isDrop = !p.onGround && p.y < enemy.y - 22 && Math.abs(p.x - enemy.x) < 145;
     return isBehindEnemy || isDrop;
   }
 
@@ -6965,7 +9305,11 @@ export class GameEngine {
     const p = this.player;
     if (this.currentStage.isCamp) return null;
     const reach =
-      p.weapon === 'spire_staff'
+      p.weapon === 'spire_staff' ||
+      p.weapon === 'arcane_wand' ||
+      p.weapon === 'orbiting_grimoire' ||
+      p.weapon === 'burst_crossbow' ||
+      p.weapon === 'twin_chakram'
         ? 95 * tuning.playerScale
         : this.getAutoAttackReach(tuning) / Math.max(0.1, tuning.mobileAutoAttackRange ?? 1);
     const pyMid = p.y - (p.crouching ? p.crouchBaseH : p.baseH) * tuning.playerScale * 0.5;
@@ -7076,6 +9420,22 @@ export class GameEngine {
       this.selectCharacter('assassin', tuning);
       return;
     }
+    if (target.kind === 'camp_hero_ranger') {
+      this.selectCharacter('ranger', tuning);
+      return;
+    }
+    if (target.kind === 'camp_hero_vanguard') {
+      this.selectCharacter('vanguard', tuning);
+      return;
+    }
+    if (target.kind === 'camp_hero_dancer') {
+      this.selectCharacter('dancer', tuning);
+      return;
+    }
+    if (target.kind === 'camp_hero_bouncer') {
+      this.selectCharacter('bouncer', tuning);
+      return;
+    }
     if (target.kind === 'camp_weapon_rack') {
       this.toggleInventory();
       return;
@@ -7131,8 +9491,8 @@ export class GameEngine {
         const nextIdx = this.stageIndex + 1;
         const nextRoom = rooms[nextIdx];
         this.startRoomTransition(
-          `CURSED · ${nextRoom.name}`,
-          'Cursed Chamber · Double Shards · +1 Bonus XP · Cursed Shrine & Extra Boss Core',
+          `SHATTERED MIRROR CATHEDRAL · ${nextRoom.name}`,
+          'Twisted Gravity · Phantom Reflections · 2x Shards · Mirror Shrine & Extra Boss Core',
           () => {
             this.loadStage(nextIdx, tuning, true, true, true);
           }
@@ -7147,9 +9507,9 @@ export class GameEngine {
     switch (target.kind) {
       case 'cursed_shrine': {
         sound.playCursedShrine();
-        this.spawnSparkles(target.x, target.y - 42, 24, '#f43f5e', '#c084fc', 1.35);
+        this.spawnSparkles(target.x, target.y - 42, 24, '#67e8f9', '#f472b6', 1.35);
         this.pendingUpgrades = this.buildCursedPactOptions();
-        this.upgradePromptTitle = 'Cursed Blood Shrine — Seal a Forbidden Pact';
+        this.upgradePromptTitle = 'Shattered Mirror Shrine — Seal a Forbidden Pact';
         this.status = 'CHOOSING_UPGRADE';
         break;
       }
@@ -7162,7 +9522,7 @@ export class GameEngine {
         this.grantXp(2, target.x, target.y - 68, 'SECRET CACHE');
         this.spawnSparkles(target.x, target.y - 26, 26, '#ffd166', '#c084fc', 1.35);
         if (target.isBigBossRelic) {
-          this.openUpgradeDraft('Hidden Alcove Relic — Choose 1 of 3');
+          this.openUpgradeDraft('Hidden Alcove Relic — Choose 1 of 3', 'altar');
         } else {
           this.spawnDamageNumber(
             target.x,
@@ -7217,7 +9577,7 @@ export class GameEngine {
         } else {
           this.triggerShake(5, 0.16);
           this.spawnSparkles(target.x, target.y - 44, 26, relicGlow, '#ffffff', 1.35);
-          this.openUpgradeDraft(`${this.currentStage.bossName} Relic — Choose 1 of 3`);
+          this.openUpgradeDraft(`${this.currentStage.bossName} Weapon & Spell Relic — Choose 1 of 3`, 'boss');
         }
         break;
       }
@@ -7238,7 +9598,7 @@ export class GameEngine {
       }
       case 'upgrade_altar': {
         this.spawnSparkles(target.x, target.y - 52, 20, '#ffd166', '#ffffff', 1.2);
-        this.openUpgradeDraft('Relic Blessing — Choose 1 of 3');
+        this.openUpgradeDraft('Vitality & Arcane Shrine — Choose 1 of 3', 'altar');
         break;
       }
     }
@@ -7420,9 +9780,235 @@ export class GameEngine {
               maxLife: 0.16,
             });
           }
-        } else if (p.attackWeapon === 'spire_staff') {
+        } else if (p.attackWeapon === 'spire_staff' || p.attackWeapon === 'arcane_wand') {
           p.attackTimer = 0.06;
           this.spawnWizardBolt(tuning);
+        } else if (p.attackWeapon === 'orbiting_grimoire') {
+          // Orbiting Grimoire: launches one of the orbiting elemental orbs that EXPLODES on contact!
+          p.attackTimer = 0.08;
+          const GRIM_CYCLE: BaseElementId[] = ['fire', 'glacial', 'storm', 'venom', 'shadow', 'light'];
+          const orbEl = GRIM_CYCLE[p.grimoireElementIndex % GRIM_CYCLE.length];
+          const elDef = BASE_ELEMENTS[orbEl];
+          const empowered = p.grimoireOrbs > 0;
+          if (p.grimoireOrbs > 0) p.grimoireOrbs -= 1;
+          sound.playFireball();
+          this.projectiles.push({
+            id: this.nextProjectileId++,
+            x: p.x + p.facing * 26 * scale,
+            y: p.y - h * 0.58,
+            vx: p.facing * (empowered ? 530 : 450),
+            vy: 0,
+            radius: empowered ? 12 : 9,
+            fromEnemy: false,
+            damage: Math.max(2, weaponLv + (empowered ? 1 : 0)),
+            life: 1.15,
+            rotation: 0,
+            kind: 'grimoire_orb',
+            color: elDef.primaryColor,
+            color2: elDef.glowColor,
+            orbElement: orbEl,
+            overcharged: empowered,
+            slotLevel: weaponLv,
+          });
+          this.spawnSparkles(p.x + p.facing * 24 * scale, p.y - h * 0.58, 10, elDef.primaryColor, elDef.glowColor, 0.95);
+        } else if (p.attackWeapon === 'burst_crossbow') {
+          // Dusk Ranger Burst Crossbow: crisp 3-bolt spread fan!
+          p.attackTimer = 0.07;
+          sound.playDaggerSlash(1, this.getWeaponEvoTier());
+          const angles = [-0.09, 0, 0.09];
+          for (const a of angles) {
+            const spd = 690;
+            this.projectiles.push({
+              id: this.nextProjectileId++,
+              x: p.x + p.facing * 24 * scale,
+              y: p.y - h * 0.58,
+              vx: Math.cos(a) * spd * p.facing,
+              vy: Math.sin(a) * spd,
+              radius: 6,
+              fromEnemy: false,
+              damage: Math.max(1, Math.round(weaponLv * 0.72)),
+              life: 0.72,
+              rotation: Math.atan2(Math.sin(a) * spd, Math.cos(a) * spd * p.facing),
+              kind: 'crossbow_bolt',
+              color: '#34d399',
+              color2: '#ecfdf5',
+              pierce: this.getWeaponEvoTier() >= 2,
+              hitIds: [],
+              slotLevel: weaponLv,
+            });
+          }
+          this.spawnSparkles(p.x + p.facing * 24 * scale, p.y - h * 0.58, 8, '#10b981', '#fef08a', 0.8);
+        } else if (p.attackWeapon === 'twin_chakram') {
+          // Sun Blade-Dancer: mid-range looping boomerang Chakram!
+          p.attackTimer = 0.07;
+          const activeCount = this.projectiles.filter((pr) => !pr.fromEnemy && pr.kind === 'chakram').length;
+          if (activeCount < 3) {
+            this.projectiles.push({
+              id: this.nextProjectileId++,
+              x: p.x + p.facing * 24 * scale,
+              y: p.y - h * 0.56,
+              vx: p.facing * 590,
+              vy: 0,
+              radius: 15,
+              fromEnemy: false,
+              damage: Math.max(2, weaponLv),
+              life: 1.65,
+              rotation: 0,
+              kind: 'chakram',
+              color: '#fbbf24',
+              color2: '#fef3c7',
+              returning: false,
+              returnAge: 0,
+              hitIds: [],
+              slotLevel: weaponLv,
+            });
+            this.spawnSparkles(p.x + p.facing * 24 * scale, p.y - h * 0.56, 9, '#fbbf24', '#ffffff', 0.9);
+          }
+        } else if (p.attackWeapon === 'prism_lance') {
+          // Prism Striker: 8-way directional launch with medium starting reach that expands on every bounce!
+          // Starts with 2 bounces, +1 bounce every 5 weapon levels!
+          p.attackTimer = 0.05;
+          p.crouching = false;
+          const totalBounces = 2 + Math.floor(weaponLv / 5);
+          const inp = this.frameInput;
+          let dirX = inp ? (inp.right ? 1 : 0) - (inp.left ? 1 : 0) : 0;
+          let dirY = inp ? (inp.down ? 1 : 0) - (inp.up ? 1 : 0) : 0;
+          if (dirX !== 0) {
+            p.facing = dirX > 0 ? 1 : -1;
+          }
+          if (dirX === 0 && dirY === 0) {
+            dirX = p.facing;
+            dirY = -0.14;
+          } else if (dirY === 0) {
+            // Slight lift on pure horizontal aim so the lunge skims cleanly without scraping the floor
+            dirY = -0.14;
+          }
+          const mag = Math.hypot(dirX, dirY) || 1;
+          const launchSpd = 640;
+          p.vx = (dirX / mag) * launchSpd;
+          p.vy = (dirY / mag) * launchSpd;
+          const aimingIntoFloor = dirY > 0 && p.onGround;
+          if (aimingIntoFloor) {
+            p.y -= 2;
+          }
+          p.onGround = false;
+          p.bounceActive = true;
+          p.bouncesLeft = totalBounces;
+          p.maxBounces = totalBounces;
+          p.bounceCountDone = 0;
+          p.bounceDistLeft = 210 * scale;
+          p.bounceTimer = 1.6;
+          p.bounceSpeed = launchSpd;
+          p.bounceHitIds.clear();
+          p.bounceWallCooldown = aimingIntoFloor ? 0 : 0.03;
+          this.spawnSparkles(p.x, p.y - h * 0.5, 14, '#22d3ee', '#ffffff', 1.15);
+        } else if (p.attackWeapon === 'prism_gauntlets') {
+          // Prism Pinball Gauntlets: punch + agile short-burst directional ricochet!
+          p.attackTimer = (tuning.attackActiveMs / 1000) * 0.72;
+          const totalBounces = 2 + Math.floor(weaponLv / 5);
+          const inp = this.frameInput;
+          let dirX = inp ? (inp.right ? 1 : 0) - (inp.left ? 1 : 0) : 0;
+          let dirY = inp ? (inp.down ? 1 : 0) - (inp.up ? 1 : 0) : 0;
+          if (dirX !== 0) p.facing = dirX > 0 ? 1 : -1;
+          if (dirX === 0 && dirY === 0) {
+            dirX = p.facing;
+            dirY = -0.18;
+          } else if (dirY === 0) {
+            dirY = -0.16;
+          }
+          const mag = Math.hypot(dirX, dirY) || 1;
+          const launchSpd = 690;
+          p.vx = (dirX / mag) * launchSpd;
+          p.vy = (dirY / mag) * launchSpd;
+          p.onGround = false;
+          p.bounceActive = true;
+          p.bouncesLeft = totalBounces;
+          p.maxBounces = totalBounces;
+          p.bounceCountDone = 0;
+          p.bounceDistLeft = 148 * scale;
+          p.bounceTimer = 1.25;
+          p.bounceSpeed = launchSpd;
+          p.bounceHitIds.clear();
+          p.bounceWallCooldown = 0.025;
+          this.spawnSparkles(p.x + p.facing * 26 * scale, p.y - h * 0.55, 14, '#e879f9', '#67e8f9', 1.15);
+        } else if (p.attackWeapon === 'solar_glaive') {
+          p.attackTimer = (tuning.attackActiveMs / 1000) * 1.05;
+          this.spawnSparkles(p.x + p.facing * 64 * scale, p.y - h * 0.58, 12, '#f97316', '#fef08a', 1.05);
+        } else if (p.attackWeapon === 'shield_mace') {
+          p.attackTimer = Math.max(0.14, (tuning.attackActiveMs / 1000) * 1.15);
+          sound.playHammerBoom();
+          this.triggerShake(5.5, 0.14);
+          this.spawnSparkles(p.x + p.facing * 48 * scale, p.y - h * 0.52, 14, '#38bdf8', '#e0f2fe', 1.1);
+        } else if (p.attackWeapon === 'kusarigama') {
+          p.attackTimer = (tuning.attackActiveMs / 1000) * 0.88;
+          this.spawnSparkles(p.x + p.facing * tuning.attackRange * scale * 1.35, p.y - h * 0.58, 10, '#f59e0b', '#fef08a', 0.95);
+        } else if (p.attackWeapon === 'estoc_spear') {
+          p.attackTimer = (tuning.attackActiveMs / 1000) * 0.72;
+          this.spawnSparkles(p.x + p.facing * tuning.attackRange * scale * 1.0, p.y - h * 0.56, 7, '#e2e8f0', '#38bdf8', 0.85);
+        } else if (p.attackWeapon === 'short_blade') {
+          p.attackTimer = (tuning.attackActiveMs / 1000) * 0.62;
+          this.spawnSparkles(p.x + p.facing * tuning.attackRange * scale * 0.65, p.y - h * 0.56, 6, '#cbd5e1', '#f8fafc', 0.75);
+        } else if (p.attackWeapon === 'cleaver_greatsword') {
+          p.attackTimer = Math.max(0.15, (tuning.attackActiveMs / 1000) * 1.25);
+          sound.playGreataxeSwing();
+          this.triggerShake(p.weaponChargeTimer > 0.35 ? 9.5 : 6.0, 0.2);
+          const cx = p.x + p.facing * 52 * scale;
+          const cy = p.y - h * 0.5;
+          this.spawnSparkles(cx, cy, p.weaponChargeTimer > 0.35 ? 24 : 14, '#fb923c', '#fef08a', 1.3);
+          this.shockwaves.push({
+            x: cx,
+            y: cy,
+            radius: 14,
+            maxRadius: (108 + p.weaponChargeTimer * 70) * scale,
+            color: '#fb923c',
+            life: 0.24,
+            maxLife: 0.24,
+          });
+        } else if (p.attackWeapon === 'joust_lance') {
+          p.attackTimer = Math.max(0.14, (tuning.attackActiveMs / 1000) * 1.15);
+          sound.playNaginataSlash(this.getWeaponEvoTier());
+          this.triggerShake(p.weaponChargeTimer > 0.35 ? 8.5 : 5.0, 0.18);
+          const lx = p.x + p.facing * 95 * scale;
+          const ly = p.y - h * 0.54;
+          this.spawnSparkles(lx, ly, p.weaponChargeTimer > 0.35 ? 22 : 12, '#facc15', '#ffffff', 1.25);
+          this.shockwaves.push({
+            x: lx,
+            y: ly,
+            radius: 10,
+            maxRadius: (75 + p.weaponChargeTimer * 55) * scale,
+            color: '#facc15',
+            life: 0.2,
+            maxLife: 0.2,
+          });
+        } else if (p.attackWeapon === 'war_fans') {
+          p.attackTimer = (tuning.attackActiveMs / 1000) * 0.72;
+          this.spawnSparkles(p.x, p.y - h * 0.58, 12, '#2dd4bf', '#ccfbf1', 0.95);
+        } else if (p.attackWeapon === 'meteor_flail') {
+          p.attackTimer = Math.max(0.18, (tuning.attackActiveMs / 1000) * 1.3);
+          const impactX = p.x + p.facing * 72 * scale;
+          const impactY = p.y - h * 0.28;
+          const blastR = Math.max(118, tuning.attackRange * scale * (weaponLv >= 4 ? 1.55 : 1.38));
+          sound.playHammerBoom();
+          this.triggerShake(Math.max(9.5, tuning.critShakeIntensity), 0.28);
+          this.spawnSparkles(impactX, impactY, 32, '#ef4444', '#fde047', 1.55);
+          this.shockwaves.push({
+            x: impactX,
+            y: impactY,
+            radius: 14,
+            maxRadius: blastR,
+            color: '#ef4444',
+            life: 0.28,
+            maxLife: 0.28,
+          });
+          this.shockwaves.push({
+            x: impactX,
+            y: impactY,
+            radius: 8,
+            maxRadius: blastR * 0.65,
+            color: '#fef08a',
+            life: 0.2,
+            maxLife: 0.2,
+          });
         } else if (p.attackWeapon === 'sword') {
           p.attackTimer = (tuning.attackActiveMs / 1000) * 1.1;
           if (p.fireWeaponTimer > 0 || weaponLv >= 4) {
@@ -7477,18 +10063,28 @@ export class GameEngine {
       } else if (p.attackState === 'active') {
         p.attackState = 'recovery';
         p.attackTimer =
-          p.attackWeapon === 'hammer'
-            ? Math.max(0.18, (tuning.attackRecoveryMs / 1000) * 1.45)
-            : p.attackWeapon === 'greataxe'
-              ? Math.max(0.15, (tuning.attackRecoveryMs / 1000) * 1.22)
-              : p.attackWeapon === 'rapier'
-                ? (tuning.attackRecoveryMs / 1000) * 0.62
+          p.attackWeapon === 'hammer' || p.attackWeapon === 'meteor_flail'
+            ? Math.max(0.18, (tuning.attackRecoveryMs / 1000) * 1.48)
+            : p.attackWeapon === 'greataxe' || p.attackWeapon === 'cleaver_greatsword' || p.attackWeapon === 'joust_lance'
+              ? Math.max(0.15, (tuning.attackRecoveryMs / 1000) * 1.24)
+              : p.attackWeapon === 'rapier' || p.attackWeapon === 'estoc_spear' || p.attackWeapon === 'war_fans'
+                ? (tuning.attackRecoveryMs / 1000) * 0.58
+                : p.attackWeapon === 'short_blade'
+                  ? (tuning.attackRecoveryMs / 1000) * 0.46
                 : p.attackWeapon === 'shadow_daggers'
                   ? (tuning.attackRecoveryMs / 1000) * (p.assassinComboStep === 2 ? 0.95 : 0.4)
                 : p.attackWeapon === 'ash_wraps'
                   ? (tuning.attackRecoveryMs / 1000) * (p.monkComboStep === 2 ? 1.25 : 0.55)
-                  : p.attackWeapon === 'spire_staff'
-                    ? (tuning.attackRecoveryMs / 1000) * 2.2
+                  : p.attackWeapon === 'spire_staff' || p.attackWeapon === 'arcane_wand' || p.attackWeapon === 'orbiting_grimoire'
+                    ? (tuning.attackRecoveryMs / 1000) * 1.65
+                  : p.attackWeapon === 'burst_crossbow'
+                    ? Math.max(0.24, (tuning.attackRecoveryMs / 1000) * 2.55)
+                  : p.attackWeapon === 'twin_chakram' || p.attackWeapon === 'kusarigama' || p.attackWeapon === 'solar_glaive'
+                    ? (tuning.attackRecoveryMs / 1000) * 0.9
+                  : p.attackWeapon === 'prism_gauntlets'
+                    ? (tuning.attackRecoveryMs / 1000) * 0.55
+                  : p.attackWeapon === 'shield_mace'
+                    ? Math.max(0.16, (tuning.attackRecoveryMs / 1000) * 1.32)
                 : p.attackWeapon === 'katana'
                   ? (tuning.attackRecoveryMs / 1000) * 0.78
                   : p.attackWeapon === 'sword' || p.attackWeapon === 'naginata'
@@ -7497,6 +10093,7 @@ export class GameEngine {
       } else {
         p.attackState = 'idle';
         p.attackTimer = 0;
+        p.weaponChargeTimer = 0;
       }
     }
   }
@@ -7535,11 +10132,18 @@ export class GameEngine {
     const prevY = p.y;
     const hover = opts?.noGravity || p.wizardFloatTimer > 0;
     if (!hover) {
-      let effectiveGravity = tuning.gravity;
+      // Shattered Mirror Cathedral twists gravity (0.72x); Alien Mothership has crisp low-gravity (0.80x)!
+      const realmGravMult =
+        this.currentStage.environment === 'mirror_cathedral'
+          ? 0.72
+          : this.currentStage.environment === 'alien'
+            ? 0.80
+            : 1.0;
+      let effectiveGravity = tuning.gravity * realmGravMult;
       if (!p.onGround && Math.abs(p.vy) < 95) {
-        effectiveGravity = tuning.gravity * tuning.apexHangGravityMult;
+        effectiveGravity = tuning.gravity * tuning.apexHangGravityMult * realmGravMult;
       } else if (p.vy > 0) {
-        effectiveGravity = tuning.gravity * tuning.fallGravityMult;
+        effectiveGravity = tuning.gravity * tuning.fallGravityMult * realmGravMult;
       }
       p.vy = Math.min(tuning.maxFallSpeed, p.vy + effectiveGravity * dt);
     }
@@ -7555,6 +10159,46 @@ export class GameEngine {
       if (plat.oneWay) {
         if (ignoreOneWay) continue;
         if (p.vy >= 0 && prevY <= plat.y + 8 && p.y >= plat.y) {
+          if (plat.style === 'bounce_cap') {
+            // Mushroom Kingdom Bouncy Toadstool Pad — launches the hero skyward!
+            p.y = plat.y - 2;
+            p.vy = -785;
+            p.onGround = false;
+            p.airJumpsRemaining = Math.max(1, p.airJumpsRemaining);
+            sound.playJump();
+            this.shockwaves.push({
+              x: p.x,
+              y: plat.y + 6,
+              radius: 10,
+              maxRadius: 72,
+              color: '#34d399',
+              life: 0.24,
+              maxLife: 0.24,
+            });
+            this.spawnSparkles(p.x, plat.y + 2, 14, '#ec4899', '#6ee7b7', 1.15);
+            this.spawnDamageNumber(p.x, plat.y - 16, 'BOUNCE!', '#6ee7b7', 0.9);
+            continue;
+          }
+          if (plat.style === 'wind_pad') {
+            // Dragon Crane Emerald Updraft Column — lifts hero gracefully onto high pagoda roofs!
+            p.y = plat.y - 2;
+            p.vy = -735;
+            p.onGround = false;
+            p.airJumpsRemaining = Math.max(1, p.airJumpsRemaining);
+            sound.playBackdash();
+            this.shockwaves.push({
+              x: p.x,
+              y: plat.y + 4,
+              radius: 10,
+              maxRadius: 78,
+              color: '#5eead4',
+              life: 0.26,
+              maxLife: 0.26,
+            });
+            this.spawnSparkles(p.x, plat.y + 2, 16, '#34d399', '#fef08a', 1.15);
+            this.spawnDamageNumber(p.x, plat.y - 16, 'UPDRAFT!', '#5eead4', 0.9);
+            continue;
+          }
           p.y = plat.y;
           p.vy = 0;
           p.onGround = true;
@@ -7662,6 +10306,62 @@ export class GameEngine {
           'PHASE II — ENRAGED!',
           '#ff334b',
           1.25
+        );
+      }
+
+      // Shattered Mirror Cathedral: At <= 60% HP, the room boss refracts a crystalline Phantom Mirror Copy!
+      if (
+        this.isCursedChamber &&
+        enemy.isBoss &&
+        !enemy.isMirrorPhantom &&
+        !enemy.mirrorSplitDone &&
+        enemy.hp <= enemy.maxHp * 0.6
+      ) {
+        enemy.mirrorSplitDone = true;
+        const mirrorX = Math.max(
+          this.currentStage.bossZoneStartX + 90,
+          Math.min(this.currentStage.worldWidth - 110, enemy.x + (enemy.x > this.player.x ? -155 : 155))
+        );
+        const phantomHp = Math.max(4, Math.round(enemy.maxHp * 0.32));
+        this.enemies.push({
+          ...enemy,
+          id: this.nextEnemyId++,
+          name: `Mirror ${enemy.name}`,
+          x: mirrorX,
+          homeX: mirrorX,
+          facing: (this.player.x < mirrorX ? -1 : 1) as 1 | -1,
+          hp: phantomHp,
+          maxHp: phantomHp,
+          isBoss: false,
+          isBigBoss: false,
+          summoned: true,
+          isMirrorPhantom: true,
+          mirrorSplitDone: true,
+          alerted: true,
+          invulnTimer: 0.35,
+          flashTimer: 0.35,
+          attackCooldown: 1.0,
+          attackChargeTimer: 0,
+        });
+        this.totalEnemies += 1;
+        sound.playCursedShrine();
+        this.shockwaves.push({
+          x: mirrorX,
+          y: enemy.y - enemy.baseH * eScale * 0.5,
+          radius: 14,
+          maxRadius: 155,
+          color: '#67e8f9',
+          life: 0.38,
+          maxLife: 0.38,
+        });
+        this.spawnSparkles(mirrorX, enemy.y - enemy.baseH * eScale * 0.5, 26, '#67e8f9', '#f472b6', 1.4);
+        this.spawnDamageNumber(
+          mirrorX,
+          enemy.y - enemy.baseH * eScale - 24,
+          'MIRROR REFLECTION!',
+          '#67e8f9',
+          1.2,
+          'SHATTERED CATHEDRAL'
         );
       }
 
@@ -7785,31 +10485,57 @@ export class GameEngine {
           enemy.lungeTimer = 0;
         }
       } else if (!enemy.alerted) {
-        const inFront = dx * enemy.facing > -24;
-        // Crouch-walking AND Shadow Chain Momentum dramatically shrink non-boss enemy detection!
+        // Enemies do NOT hear sounds behind their backs — strictly frontal line-of-sight!
+        // Vision cones start short on early raids & rooms, and grow longer as raids progress!
+        const inFront = dx * enemy.facing > 0;
+        const raidVisionScale = enemy.isBoss
+          ? 1.0
+          : Math.min(
+              1.5,
+              0.65 +
+                (this.getRaidOrderTier() - 1) * 0.18 +
+                Math.max(0, this.currentStage.roomNumber - 1) * 0.05
+            );
         const crouchStealth = p.crouching && !enemy.isBoss ? tuning.crouchStealthMult : 1.0;
         const chainStealth = p.shadowChainTimer > 0 && !enemy.isBoss ? tuning.chainStealthMult : 1.0;
-        // The Assassin is quieter: foes spot him from much less far away (and only up close at the edge).
-        const assassinQuiet = p.characterId === 'assassin' && !enemy.isBoss ? Math.max(0.1, this.charTune('assassin').assassinVisionMult) : 1;
+        const assassinQuiet =
+          p.characterId === 'assassin' && !enemy.isBoss
+            ? Math.max(0.1, this.charTune('assassin').assassinVisionMult)
+            : 1;
+        const mirageStealth =
+          (p.crouching || p.shadowChainTimer > 0) &&
+          !enemy.isBoss &&
+          this.hasCharmSynergy('mycelial_mirage')
+            ? 0.65
+            : 1.0;
         const effectiveVision =
-          enemy.visionRange * crouchStealth * chainStealth * et.visionMult * tuning.stealthVisionMult * assassinQuiet;
-        const closeSenseBase =
-          p.shadowChainTimer > 0
-            ? tuning.closeSenseChain
-            : p.crouching
-              ? tuning.closeSenseCrouch
-              : tuning.closeSenseNormal;
-        const closeSense = closeSenseBase * (assassinQuiet < 1 ? Math.max(0.4, assassinQuiet + 0.1) : 1);
-        const canSee = isFlying
-          ? Math.hypot(dx, dy) < effectiveVision
-          : enemy.isBoss
-            ? p.x >= bossStart
-            : (inFront || distX < closeSense) && distX < effectiveVision && distY < tuning.visionHeight;
+          enemy.visionRange *
+          raidVisionScale *
+          crouchStealth *
+          chainStealth *
+          mirageStealth *
+          et.visionMult *
+          tuning.stealthVisionMult *
+          assassinQuiet;
+        const canSee = enemy.isBoss
+          ? p.x >= bossStart
+          : isFlying
+            ? inFront && Math.hypot(dx, dy) < effectiveVision
+            : inFront && distX < effectiveVision && distY < Math.min(tuning.visionHeight, 88);
 
         if (canSee) {
           enemy.alerted = true;
-          enemy.alertTimer = 0.6;
-          enemy.attackCooldown = Math.max(enemy.attackCooldown, et.reactionSec / pace);
+          enemy.alertTimer = 0.7;
+          enemy.attackCooldown = Math.max(enemy.attackCooldown, et.reactionSec / (pace * 1.15));
+          if (!enemy.isBoss) {
+            this.spawnDamageNumber(
+              enemy.x,
+              enemy.y - enemy.baseH * eScale - 16,
+              'SPOTTED!',
+              '#ef4444',
+              0.92
+            );
+          }
         }
       }
 
@@ -7819,8 +10545,10 @@ export class GameEngine {
       const prevProjCount = this.projectiles.length;
       const prevHazardCount = this.groundHazards.length;
 
+      // Alerted non-boss enemies fight with heightened Alert Fury speed!
+      const alertFuryPace = !enemy.isBoss && enemy.alerted ? 1.22 : 1.0;
       const startTelegraph = (kind: string, baseDuration: number) => {
-        const dur = Math.max(0.25, baseDuration / enemyPace);
+        const dur = Math.max(0.22, baseDuration / (enemyPace * alertFuryPace));
         enemy.pendingAttackKind = kind;
         enemy.chargeDuration = dur;
         enemy.attackChargeTimer = dur;
@@ -9775,6 +12503,1028 @@ export class GameEngine {
           }
           break;
         }
+
+        case 'boss_mushroom_sovereign': {
+          // Sporelord Amanita · Mycelium Sovereign (Mushroom Kingdom Big Boss)
+          if (!enemy.alerted) {
+            enemy.vx = 0;
+            this.applyEnemyGroundPhysics(enemy, dt, tuning);
+            break;
+          }
+          const wasAirborne = !enemy.onGround;
+          if (enemy.attackChargeTimer > 0) {
+            enemy.vx = 0;
+            enemy.attackChargeTimer = Math.max(0, enemy.attackChargeTimer - dt);
+            if (enemy.attackChargeTimer <= 0) {
+              if (enemy.pendingAttackKind === 'spore_volley') {
+                const arcs = enemy.enraged ? [-260, -140, -35, 70, 175] : [-210, -85, 45];
+                for (const vxOff of arcs) {
+                  this.projectiles.push({
+                    id: this.nextProjectileId++,
+                    x: enemy.x + enemy.facing * 20,
+                    y: enemy.y - 96,
+                    vx: enemy.facing * 175 + vxOff * 0.7,
+                    vy: -(330 + Math.abs(vxOff) * 0.4),
+                    radius: 11,
+                    fromEnemy: true,
+                    damage: 2,
+                    life: 2.8,
+                    rotation: 0,
+                    kind: 'orb',
+                    color: '#34d399',
+                  });
+                }
+                sound.playFireball();
+              } else if (enemy.pendingAttackKind === 'slam') {
+                enemy.vy = -515;
+                enemy.vx = enemy.facing * 240;
+                enemy.onGround = false;
+              } else {
+                // Toxic spore shockwaves left + right
+                for (const dir of [-1, 1] as const) {
+                  this.projectiles.push({
+                    id: this.nextProjectileId++,
+                    x: enemy.x + dir * 34,
+                    y: enemy.y - 10,
+                    vx: dir * (enemy.enraged ? 285 : 235),
+                    vy: 0,
+                    radius: 15,
+                    fromEnemy: true,
+                    damage: 2,
+                    life: 2.2,
+                    rotation: 0,
+                    kind: 'shockwave',
+                    color: '#10b981',
+                  });
+                }
+                sound.playHammerBoom();
+              }
+              enemy.attackCooldown = 1.6 / enemyPace;
+              enemy.pendingAttackKind = '';
+            }
+          } else if (enemy.onGround) {
+            enemy.facing = dx >= 0 ? 1 : -1;
+            if (enemy.attackCooldown <= 0) {
+              enemy.stateTimer += 1;
+              const pat = enemy.stateTimer % 3;
+              startTelegraph(pat === 1 ? 'spore_volley' : pat === 2 ? 'slam' : 'wave', 0.62);
+              enemy.vx = 0;
+            } else {
+              enemy.vx = enemy.facing * (distX > 140 ? 64 : 26);
+            }
+          }
+          this.applyEnemyGroundPhysics(enemy, dt, tuning);
+          if (wasAirborne && enemy.onGround) {
+            sound.playHammerBoom();
+            this.triggerShake(11, 0.26);
+            this.shockwaves.push({
+              x: enemy.x,
+              y: enemy.y - 8,
+              radius: 18,
+              maxRadius: 175,
+              color: '#10b981',
+              life: 0.34,
+              maxLife: 0.34,
+            });
+            for (const dir of [-1, 1] as const) {
+              this.projectiles.push({
+                id: this.nextProjectileId++,
+                x: enemy.x + dir * 30,
+                y: enemy.y - 6,
+                vx: dir * 245,
+                vy: 0,
+                radius: 14,
+                fromEnemy: true,
+                damage: 2,
+                life: 2.0,
+                rotation: 0,
+                kind: 'shockwave',
+                color: '#34d399',
+              });
+            }
+          }
+          break;
+        }
+
+        case 'boss_sand_pharaoh': {
+          // Pharaoh-Khan Sethra · Dune Sovereign (Sand Fortress Big Boss)
+          if (!enemy.alerted) {
+            enemy.vx = 0;
+            this.applyEnemyGroundPhysics(enemy, dt, tuning);
+            break;
+          }
+          if (enemy.lungeTimer > 0) {
+            enemy.lungeTimer = Math.max(0, enemy.lungeTimer - dt);
+            enemy.vx = enemy.facing * (enemy.enraged ? 430 : 355);
+          } else if (enemy.attackChargeTimer > 0) {
+            enemy.vx = 0;
+            enemy.attackChargeTimer = Math.max(0, enemy.attackChargeTimer - dt);
+            if (enemy.attackChargeTimer <= 0) {
+              if (enemy.pendingAttackKind === 'mirage_blink') {
+                this.spawnSparkles(enemy.x, enemy.y - 60, 22, '#eab308', '#fef08a', 1.3);
+                const leftX = bossStart + 185;
+                const rightX = this.currentStage.worldWidth - 185;
+                enemy.x = Math.abs(enemy.x - leftX) < Math.abs(enemy.x - rightX) ? rightX : leftX;
+                enemy.facing = p.x >= enemy.x ? 1 : -1;
+                this.spawnSparkles(enemy.x, enemy.y - 60, 22, '#eab308', '#fef08a', 1.3);
+                const fan = enemy.enraged ? [-0.28, -0.14, 0, 0.14, 0.28] : [-0.18, 0, 0.18];
+                for (const a of fan) {
+                  this.projectiles.push({
+                    id: this.nextProjectileId++,
+                    x: enemy.x + enemy.facing * 26,
+                    y: enemy.y - 68,
+                    vx: Math.cos(a) * 285 * enemy.facing,
+                    vy: Math.sin(a) * 285,
+                    radius: 10,
+                    fromEnemy: true,
+                    damage: 2,
+                    life: 2.6,
+                    rotation: 0,
+                    kind: 'orb',
+                    color: '#facc15',
+                  });
+                }
+                sound.playBackdash();
+              } else if (enemy.pendingAttackKind === 'khopesh_charge') {
+                enemy.lungeTimer = 0.56;
+                sound.playSwordSlash();
+              } else {
+                // Twin Golden Dune Waves
+                for (let k = 0; k < (enemy.enraged ? 3 : 2); k++) {
+                  this.projectiles.push({
+                    id: this.nextProjectileId++,
+                    x: enemy.x + enemy.facing * 32,
+                    y: enemy.y - (32 + k * 46),
+                    vx: enemy.facing * (enemy.enraged ? 350 : 295),
+                    vy: 0,
+                    radius: 16,
+                    fromEnemy: true,
+                    damage: 2,
+                    life: 2.3,
+                    rotation: 0,
+                    kind: 'crimson_wave',
+                    color: '#eab308',
+                  });
+                }
+                sound.playSwordSlash();
+              }
+              enemy.attackCooldown = 1.55 / enemyPace;
+              enemy.pendingAttackKind = '';
+            }
+          } else if (enemy.onGround) {
+            enemy.facing = dx >= 0 ? 1 : -1;
+            if (enemy.attackCooldown <= 0) {
+              enemy.stateTimer += 1;
+              const pat = enemy.stateTimer % 3;
+              startTelegraph(pat === 1 ? 'khopesh_charge' : pat === 2 ? 'mirage_blink' : 'solar_wave', 0.56);
+              enemy.vx = 0;
+            } else {
+              enemy.vx = enemy.facing * (distX > 150 ? 78 : 30);
+            }
+          }
+          this.applyEnemyGroundPhysics(enemy, dt, tuning);
+          break;
+        }
+
+        case 'boss_alien_archon': {
+          // Void Archon Xel'Vora · Star Harvester (Hovering Alien Ship Big Boss)
+          if (!enemy.alerted) break;
+          enemy.facing = dx >= 0 ? 1 : -1;
+          const hoverY = this.currentStage.floorY - 195 + Math.sin(this.time * 2.5) * 44;
+          const targetX = p.x + (enemy.x >= p.x ? 260 : -260);
+          const clampedX = Math.max(bossStart + 140, Math.min(this.currentStage.worldWidth - 140, targetX));
+          if (enemy.attackChargeTimer > 0) {
+            enemy.attackChargeTimer = Math.max(0, enemy.attackChargeTimer - dt);
+            if (enemy.attackChargeTimer <= 0) {
+              if (enemy.pendingAttackKind === 'plasma_fan') {
+                const baseA = Math.atan2(p.y - 38 - (enemy.y - 60), p.x - enemy.x);
+                const fan = enemy.enraged ? [-0.36, -0.18, 0, 0.18, 0.36] : [-0.24, 0, 0.24];
+                for (const a of fan) {
+                  this.projectiles.push({
+                    id: this.nextProjectileId++,
+                    x: enemy.x + enemy.facing * 24,
+                    y: enemy.y - 60,
+                    vx: Math.cos(baseA + a) * 285,
+                    vy: Math.sin(baseA + a) * 285,
+                    radius: 10,
+                    fromEnemy: true,
+                    damage: 2,
+                    life: 2.9,
+                    rotation: 0,
+                    kind: 'orb',
+                    color: '#22d3ee',
+                  });
+                }
+                sound.playFireball();
+              } else {
+                // Phase-Warp + Ring of Void Orbs!
+                this.spawnSparkles(enemy.x, enemy.y - 55, 22, '#06b6d4', '#818cf8', 1.3);
+                enemy.x = Math.abs(enemy.x - (bossStart + 220)) < 250 ? this.currentStage.worldWidth - 220 : bossStart + 220;
+                this.spawnSparkles(enemy.x, enemy.y - 55, 22, '#06b6d4', '#818cf8', 1.3);
+                const count = enemy.enraged ? 8 : 6;
+                for (let k = 0; k < count; k++) {
+                  const a = (Math.PI * 2 * k) / count;
+                  this.projectiles.push({
+                    id: this.nextProjectileId++,
+                    x: enemy.x,
+                    y: enemy.y - 55,
+                    vx: Math.cos(a) * 215,
+                    vy: Math.sin(a) * 215,
+                    radius: 9,
+                    fromEnemy: true,
+                    damage: 2,
+                    life: 2.7,
+                    rotation: 0,
+                    kind: 'orb',
+                    color: '#818cf8',
+                  });
+                }
+                sound.playBackdash();
+              }
+              enemy.attackCooldown = 1.5 / enemyPace;
+              enemy.pendingAttackKind = '';
+            }
+          } else {
+            enemy.x += (clampedX - enemy.x) * Math.min(1, dt * 2.2);
+            enemy.y += (hoverY - enemy.y) * Math.min(1, dt * 3.0);
+            if (enemy.attackCooldown <= 0) {
+              enemy.stateTimer += 1;
+              startTelegraph(enemy.stateTimer % 2 === 1 ? 'plasma_fan' : 'warp_ring', 0.56);
+            }
+          }
+          break;
+        }
+
+        case 'boss_dragon_crane': {
+          // Longhe · Celestial Crane-Wyrm (Soaring Dragon Crane Big Boss)
+          if (!enemy.alerted) break;
+          enemy.facing = dx >= 0 ? 1 : -1;
+          if (enemy.lungeTimer > 0) {
+            enemy.lungeTimer = Math.max(0, enemy.lungeTimer - dt);
+            enemy.x = Math.max(bossStart + 90, Math.min(this.currentStage.worldWidth - 90, enemy.x + enemy.chargeVx * dt));
+            enemy.y = Math.max(420, Math.min(this.currentStage.floorY - 12, enemy.y + enemy.chargeVy * dt));
+          } else if (enemy.attackChargeTimer > 0) {
+            enemy.attackChargeTimer = Math.max(0, enemy.attackChargeTimer - dt);
+            if (enemy.attackChargeTimer <= 0) {
+              if (enemy.pendingAttackKind === 'crane_dive') {
+                const angle = Math.atan2(p.y - 30 - enemy.y, p.x - enemy.x);
+                const spd = enemy.enraged ? 520 : 440;
+                enemy.chargeVx = Math.cos(angle) * spd;
+                enemy.chargeVy = Math.sin(angle) * spd;
+                enemy.lungeTimer = 0.52;
+                sound.playSwordSlash();
+              } else {
+                // Jade Gale Blade Waves + Celestial Feather Fan
+                const baseA = Math.atan2(p.y - 36 - (enemy.y - 52), p.x - enemy.x);
+                const fan = enemy.enraged ? [-0.34, -0.17, 0, 0.17, 0.34] : [-0.22, 0, 0.22];
+                for (const a of fan) {
+                  this.projectiles.push({
+                    id: this.nextProjectileId++,
+                    x: enemy.x + enemy.facing * 28,
+                    y: enemy.y - 52,
+                    vx: Math.cos(baseA + a) * 320,
+                    vy: Math.sin(baseA + a) * 320,
+                    radius: 12,
+                    fromEnemy: true,
+                    damage: 2,
+                    life: 2.7,
+                    rotation: 0,
+                    kind: 'crimson_wave',
+                    color: '#34d399',
+                  });
+                }
+                sound.playSwordSlash();
+              }
+              enemy.attackCooldown = 1.48 / enemyPace;
+              enemy.pendingAttackKind = '';
+            }
+          } else {
+            const hoverY = this.currentStage.floorY - 220 + Math.sin(this.time * 3.1) * 52;
+            const targetX = p.x + (enemy.x >= p.x ? 250 : -250);
+            const clampedX = Math.max(bossStart + 130, Math.min(this.currentStage.worldWidth - 130, targetX));
+            enemy.x += (clampedX - enemy.x) * Math.min(1, dt * 2.5);
+            enemy.y += (hoverY - enemy.y) * Math.min(1, dt * 3.2);
+            if (enemy.attackCooldown <= 0) {
+              enemy.stateTimer += 1;
+              startTelegraph(enemy.stateTimer % 2 === 1 ? 'crane_dive' : 'gale_blades', 0.54);
+            }
+          }
+          break;
+        }
+
+        // ===== MUSHROOM KINGDOM BESPOKE ENEMIES =====
+        case 'spore_hopper': {
+          if (enemy.attackChargeTimer > 0) {
+            enemy.vx = 0;
+            enemy.attackChargeTimer = Math.max(0, enemy.attackChargeTimer - dt);
+            if (enemy.attackChargeTimer <= 0) {
+              enemy.vy = -435;
+              enemy.vx = enemy.facing * 225;
+              enemy.onGround = false;
+              enemy.attackCooldown = 1.15 / pace;
+              enemy.pendingAttackKind = '';
+              sound.playJump();
+            }
+          } else if (enemy.alerted && enemy.onGround) {
+            enemy.facing = dx >= 0 ? 1 : -1;
+            if (enemy.attackCooldown <= 0 && distX < 360) {
+              startTelegraph('hop', 0.34);
+              enemy.vx = 0;
+            } else {
+              enemy.vx = enemy.facing * 52;
+            }
+          } else if (!enemy.alerted && enemy.onGround) {
+            this.patrolHorizontal(enemy, 46);
+            if (enemy.attackCooldown <= 0) {
+              enemy.vy = -310;
+              enemy.onGround = false;
+              enemy.attackCooldown = 1.9;
+            }
+          }
+          const wasAir = !enemy.onGround;
+          this.applyEnemyGroundPhysics(enemy, dt, tuning);
+          if (wasAir && enemy.onGround && enemy.alerted) {
+            this.spawnSparkles(enemy.x, enemy.y - 6, 8, '#a3e635', '#d9f99d', 0.75);
+          }
+          break;
+        }
+
+        case 'mycelium_spitter': {
+          if (enemy.attackChargeTimer > 0) {
+            enemy.vx = 0;
+            enemy.attackChargeTimer = Math.max(0, enemy.attackChargeTimer - dt);
+            if (enemy.attackChargeTimer <= 0) {
+              const shots = enemy.pendingAttackKind === 'double_spore' ? [-18, 22] : [0];
+              for (const vxOff of shots) {
+                const distFactor = Math.max(0.45, Math.min(1.25, distX / 240));
+                this.projectiles.push({
+                  id: this.nextProjectileId++,
+                  x: enemy.x + enemy.facing * 12 * eScale,
+                  y: enemy.y - enemy.baseH * eScale * 0.75,
+                  vx: enemy.facing * (195 * distFactor) + vxOff,
+                  vy: -315 - Math.abs(vxOff) * 1.4,
+                  radius: 8,
+                  fromEnemy: true,
+                  damage: 1,
+                  life: 2.8,
+                  rotation: 0,
+                  kind: 'spore_glob',
+                  color: '#84cc16',
+                });
+              }
+              sound.playGasBreak();
+              enemy.attackCooldown = 1.9 / pace;
+              enemy.pendingAttackKind = '';
+            }
+          } else if (enemy.alerted) {
+            enemy.facing = dx >= 0 ? 1 : -1;
+            enemy.vx = distX < 130 ? -enemy.facing * 42 : 0;
+            if (enemy.attackCooldown <= 0 && distX < 410) {
+              enemy.stateTimer += 1;
+              startTelegraph(enemy.stateTimer % 2 === 0 ? 'double_spore' : 'spore', 0.56);
+            }
+          } else {
+            this.patrolHorizontal(enemy, 28);
+          }
+          this.applyEnemyGroundPhysics(enemy, dt, tuning);
+          break;
+        }
+
+        case 'cap_brute': {
+          if (enemy.attackChargeTimer > 0) {
+            enemy.vx = 0;
+            enemy.attackChargeTimer = Math.max(0, enemy.attackChargeTimer - dt);
+            if (enemy.attackChargeTimer <= 0) {
+              if (enemy.pendingAttackKind === 'cap_slam') {
+                enemy.vy = -380;
+                enemy.vx = enemy.facing * 150;
+                enemy.onGround = false;
+                enemy.attackCooldown = 1.9 / pace;
+              } else {
+                enemy.lungeTimer = 0.44;
+                enemy.chargeVx = enemy.facing * 240;
+                enemy.attackCooldown = 1.65 / pace;
+                sound.playHammerCharge();
+              }
+              enemy.pendingAttackKind = '';
+            }
+          } else if (enemy.lungeTimer > 0) {
+            enemy.lungeTimer = Math.max(0, enemy.lungeTimer - dt);
+            enemy.vx = enemy.chargeVx;
+          } else if (enemy.alerted && enemy.onGround) {
+            enemy.facing = dx >= 0 ? 1 : -1;
+            enemy.shieldActive = enemy.hurtStunTimer <= 0;
+            if (enemy.attackCooldown <= 0 && distX < 250) {
+              enemy.stateTimer += 1;
+              startTelegraph(enemy.stateTimer % 2 === 0 ? 'cap_slam' : 'cap_charge', 0.62);
+              enemy.vx = 0;
+            } else {
+              enemy.vx = enemy.facing * 56;
+            }
+          } else if (!enemy.alerted) {
+            this.patrolHorizontal(enemy, 38);
+          }
+          const wasAirBrute = !enemy.onGround;
+          this.applyEnemyGroundPhysics(enemy, dt, tuning);
+          if (wasAirBrute && enemy.onGround && enemy.alerted) {
+            sound.playHammerBoom();
+            this.triggerShake(5.5, 0.16);
+            for (const dir of [-1, 1] as const) {
+              this.projectiles.push({
+                id: this.nextProjectileId++,
+                x: enemy.x + dir * 20,
+                y: enemy.y - 6,
+                vx: dir * 210,
+                vy: 0,
+                radius: 10,
+                fromEnemy: true,
+                damage: 1,
+                life: 1.35,
+                rotation: 0,
+                kind: 'shockwave',
+                color: '#a855f7',
+              });
+            }
+          }
+          break;
+        }
+
+        // ===== SAND FORTRESS BESPOKE ENEMIES =====
+        case 'dune_stalker': {
+          if (enemy.attackChargeTimer > 0) {
+            enemy.vx = 0;
+            enemy.attackChargeTimer = Math.max(0, enemy.attackChargeTimer - dt);
+            if (enemy.attackChargeTimer <= 0) {
+              enemy.lungeTimer = 0.34;
+              enemy.chargeVx = enemy.facing * 350;
+              enemy.attackCooldown = 1.45 / pace;
+              enemy.pendingAttackKind = '';
+              sound.playWhip();
+            }
+          } else if (enemy.lungeTimer > 0) {
+            enemy.lungeTimer = Math.max(0, enemy.lungeTimer - dt);
+            enemy.vx = enemy.chargeVx;
+            if (enemy.lungeTimer <= 0 && enemy.onGround) {
+              // Quick desert back-hop after slash!
+              enemy.vy = -255;
+              enemy.vx = -enemy.facing * 145;
+              enemy.onGround = false;
+            }
+          } else if (enemy.alerted && enemy.onGround) {
+            enemy.facing = dx >= 0 ? 1 : -1;
+            if (enemy.attackCooldown <= 0 && distX < 250) {
+              startTelegraph('dune_dash', 0.44);
+              enemy.vx = 0;
+            } else {
+              enemy.vx = enemy.facing * (distX > 130 ? 115 : 55);
+            }
+          } else if (!enemy.alerted) {
+            this.patrolHorizontal(enemy, 74);
+          }
+          this.applyEnemyGroundPhysics(enemy, dt, tuning);
+          break;
+        }
+
+        case 'scarab_swarmer': {
+          if (enemy.alerted) {
+            enemy.facing = dx >= 0 ? 1 : -1;
+            enemy.vx = enemy.facing * 185;
+            if (enemy.onGround && enemy.attackCooldown <= 0 && distX < 185) {
+              enemy.vy = -340;
+              enemy.vx = enemy.facing * 245;
+              enemy.onGround = false;
+              enemy.attackCooldown = 1.05 / pace;
+            }
+          } else {
+            this.patrolHorizontal(enemy, 92);
+          }
+          this.applyEnemyGroundPhysics(enemy, dt, tuning);
+          break;
+        }
+
+        case 'sun_acolyte': {
+          if (enemy.attackChargeTimer > 0) {
+            enemy.attackChargeTimer = Math.max(0, enemy.attackChargeTimer - dt);
+            enemy.y = enemy.homeY + Math.sin(enemy.animTime * 4) * 8;
+            if (enemy.attackChargeTimer <= 0) {
+              const aim = Math.atan2(
+                p.y - p.baseH * tuning.playerScale * 0.5 - (enemy.y - enemy.baseH * eScale * 0.55),
+                p.x - enemy.x
+              );
+              for (const spread of [-0.18, 0.18]) {
+                this.projectiles.push({
+                  id: this.nextProjectileId++,
+                  x: enemy.x + enemy.facing * 14,
+                  y: enemy.y - enemy.baseH * eScale * 0.55,
+                  vx: Math.cos(aim + spread) * 235,
+                  vy: Math.sin(aim + spread) * 235,
+                  radius: 8,
+                  fromEnemy: true,
+                  damage: 1,
+                  life: 2.5,
+                  rotation: 0,
+                  kind: 'orb',
+                  color: '#fbbf24',
+                });
+              }
+              sound.playFireball();
+              enemy.attackCooldown = 2.0 / pace;
+              enemy.pendingAttackKind = '';
+            }
+          } else if (enemy.alerted) {
+            enemy.facing = dx >= 0 ? 1 : -1;
+            const hoverX = enemy.homeX + Math.sin(enemy.animTime * 0.9) * 88;
+            enemy.x += (hoverX - enemy.x) * Math.min(1, dt * 2.2);
+            enemy.y = enemy.homeY + Math.sin(enemy.animTime * 2.1) * 18;
+            if (enemy.attackCooldown <= 0 && Math.hypot(dx, dy) < 420) {
+              startTelegraph('sun_flare', 0.6);
+            }
+          } else {
+            enemy.x = enemy.homeX + Math.sin(enemy.animTime * 0.8) * 55;
+            enemy.y = enemy.homeY + Math.sin(enemy.animTime * 1.7) * 14;
+            enemy.facing = Math.cos(enemy.animTime * 0.8) >= 0 ? 1 : -1;
+          }
+          break;
+        }
+
+        // ===== ALIEN SHIP BESPOKE ENEMIES =====
+        case 'plasma_drone': {
+          if (enemy.attackChargeTimer > 0) {
+            enemy.attackChargeTimer = Math.max(0, enemy.attackChargeTimer - dt);
+            if (enemy.attackChargeTimer <= 0) {
+              const aim = Math.atan2(
+                p.y - p.baseH * tuning.playerScale * 0.5 - (enemy.y - enemy.baseH * eScale * 0.5),
+                p.x - enemy.x
+              );
+              for (const off of [-0.07, 0.07]) {
+                this.projectiles.push({
+                  id: this.nextProjectileId++,
+                  x: enemy.x + enemy.facing * 14,
+                  y: enemy.y - enemy.baseH * eScale * 0.5,
+                  vx: Math.cos(aim + off) * 340,
+                  vy: Math.sin(aim + off) * 340,
+                  radius: 6,
+                  fromEnemy: true,
+                  damage: 1,
+                  life: 2.1,
+                  rotation: aim + off,
+                  kind: 'rail_beam',
+                  color: '#38bdf8',
+                });
+              }
+              sound.playWizardBolt();
+              enemy.attackCooldown = 1.75 / pace;
+              enemy.pendingAttackKind = '';
+            }
+          } else if (enemy.alerted) {
+            enemy.facing = dx >= 0 ? 1 : -1;
+            const targetX = p.x + (enemy.x >= p.x ? 190 : -190);
+            enemy.x += Math.max(-110, Math.min(110, (targetX - enemy.x) * 1.6)) * dt;
+            enemy.y = enemy.homeY + Math.sin(enemy.animTime * 2.8) * 20;
+            if (enemy.attackCooldown <= 0 && Math.hypot(dx, dy) < 430) {
+              startTelegraph('plasma_twin', 0.48);
+            }
+          } else {
+            enemy.x = enemy.homeX + Math.sin(enemy.animTime * 1.1) * Math.min(95, enemy.patrolRadius);
+            enemy.y = enemy.homeY + Math.sin(enemy.animTime * 2.4) * 12;
+            enemy.facing = Math.cos(enemy.animTime * 1.1) >= 0 ? 1 : -1;
+          }
+          break;
+        }
+
+        case 'void_stalker': {
+          if (enemy.attackChargeTimer > 0) {
+            enemy.vx = 0;
+            enemy.attackChargeTimer = Math.max(0, enemy.attackChargeTimer - dt);
+            if (enemy.attackChargeTimer <= 0) {
+              if (enemy.pendingAttackKind === 'phase_blink') {
+                // Blink behind the hero on the same elevation!
+                const blinkX = Math.max(
+                  60,
+                  Math.min(this.currentStage.worldWidth - 60, p.x - p.facing * 86)
+                );
+                this.spawnSparkles(enemy.x, enemy.y - 24, 10, '#c084fc', '#38bdf8', 0.85);
+                enemy.x = blinkX;
+                enemy.facing = p.x >= enemy.x ? 1 : -1;
+                enemy.lungeTimer = 0.28;
+                enemy.chargeVx = enemy.facing * 290;
+                this.spawnSparkles(enemy.x, enemy.y - 24, 12, '#c084fc', '#ffffff', 0.95);
+                sound.playShadowStep();
+                enemy.attackCooldown = 1.85 / pace;
+              } else {
+                enemy.lungeTimer = 0.3;
+                enemy.chargeVx = enemy.facing * 310;
+                enemy.attackCooldown = 1.35 / pace;
+                sound.playSwordSlash();
+              }
+              enemy.pendingAttackKind = '';
+            }
+          } else if (enemy.lungeTimer > 0) {
+            enemy.lungeTimer = Math.max(0, enemy.lungeTimer - dt);
+            enemy.vx = enemy.chargeVx;
+          } else if (enemy.alerted && enemy.onGround) {
+            enemy.facing = dx >= 0 ? 1 : -1;
+            if (enemy.attackCooldown <= 0 && distX < 340) {
+              enemy.stateTimer += 1;
+              startTelegraph(enemy.stateTimer % 2 === 0 ? 'phase_blink' : 'void_slash', 0.52);
+              enemy.vx = 0;
+            } else {
+              enemy.vx = enemy.facing * 92;
+            }
+          } else if (!enemy.alerted) {
+            this.patrolHorizontal(enemy, 64);
+          }
+          this.applyEnemyGroundPhysics(enemy, dt, tuning);
+          break;
+        }
+
+        case 'mech_turret': {
+          enemy.vx = 0;
+          if (enemy.attackChargeTimer > 0) {
+            enemy.attackChargeTimer = Math.max(0, enemy.attackChargeTimer - dt);
+            if (enemy.attackChargeTimer <= 0) {
+              for (const k of [0, 1, 2]) {
+                this.projectiles.push({
+                  id: this.nextProjectileId++,
+                  x: enemy.x + enemy.facing * (18 + k * 24),
+                  y: enemy.y - enemy.baseH * eScale * 0.56,
+                  vx: enemy.facing * (375 + k * 22),
+                  vy: 0,
+                  radius: 6,
+                  fromEnemy: true,
+                  damage: 1,
+                  life: 2.0,
+                  rotation: enemy.facing === 1 ? 0 : Math.PI,
+                  kind: 'rail_beam',
+                  color: '#f43f5e',
+                });
+              }
+              sound.playFireball();
+              enemy.attackCooldown = 2.15 / pace;
+              enemy.pendingAttackKind = '';
+            }
+          } else if (enemy.alerted) {
+            enemy.facing = dx >= 0 ? 1 : -1;
+            if (enemy.attackCooldown <= 0 && distX < 460 && Math.abs(dy) < 120) {
+              startTelegraph('rail_burst', 0.62);
+            }
+          }
+          this.applyEnemyGroundPhysics(enemy, dt, tuning);
+          break;
+        }
+
+        // ===== DRAGON CRANE BESPOKE ENEMIES =====
+        case 'crane_disciple': {
+          if (enemy.attackChargeTimer > 0) {
+            enemy.vx = 0;
+            enemy.attackChargeTimer = Math.max(0, enemy.attackChargeTimer - dt);
+            if (enemy.attackChargeTimer <= 0) {
+              enemy.vy = -440;
+              enemy.vx = enemy.facing * 265;
+              enemy.onGround = false;
+              enemy.attackCooldown = 1.45 / pace;
+              enemy.pendingAttackKind = '';
+              sound.playJump();
+            }
+          } else if (enemy.alerted && enemy.onGround) {
+            enemy.facing = dx >= 0 ? 1 : -1;
+            if (enemy.attackCooldown <= 0 && distX < 280) {
+              startTelegraph('crane_kick', 0.42);
+              enemy.vx = 0;
+            } else {
+              enemy.vx = enemy.facing * (distX > 120 ? 118 : 60);
+            }
+          } else if (!enemy.alerted) {
+            this.patrolHorizontal(enemy, 76);
+          }
+          this.applyEnemyGroundPhysics(enemy, dt, tuning);
+          break;
+        }
+
+        case 'jade_sentinel': {
+          if (enemy.attackChargeTimer > 0) {
+            enemy.attackChargeTimer = Math.max(0, enemy.attackChargeTimer - dt);
+            if (enemy.attackChargeTimer <= 0) {
+              const aim = Math.atan2(
+                p.y - p.baseH * tuning.playerScale * 0.5 - (enemy.y - enemy.baseH * eScale * 0.55),
+                p.x - enemy.x
+              );
+              this.projectiles.push({
+                id: this.nextProjectileId++,
+                x: enemy.x + enemy.facing * 12,
+                y: enemy.y - enemy.baseH * eScale * 0.55,
+                vx: Math.cos(aim) * 230,
+                vy: Math.sin(aim) * 230,
+                radius: 7,
+                fromEnemy: true,
+                damage: 1,
+                life: 2.6,
+                rotation: aim,
+                kind: 'jade_bolt',
+                color: '#34d399',
+              });
+              sound.playWizardBolt();
+              enemy.attackCooldown = 1.85 / pace;
+              enemy.pendingAttackKind = '';
+            }
+          } else if (enemy.alerted) {
+            enemy.facing = dx >= 0 ? 1 : -1;
+            enemy.x = enemy.homeX + Math.sin(enemy.animTime * 1.1) * 70;
+            enemy.y = enemy.homeY + Math.cos(enemy.animTime * 2.0) * 22;
+            if (enemy.attackCooldown <= 0 && Math.hypot(dx, dy) < 420) {
+              startTelegraph('jade_arrow', 0.52);
+            }
+          } else {
+            enemy.x = enemy.homeX + Math.sin(enemy.animTime * 0.8) * 50;
+            enemy.y = enemy.homeY + Math.cos(enemy.animTime * 1.5) * 16;
+          }
+          break;
+        }
+
+        case 'cloud_wyrmling': {
+          if (enemy.attackChargeTimer > 0) {
+            enemy.attackChargeTimer = Math.max(0, enemy.attackChargeTimer - dt);
+            if (enemy.attackChargeTimer <= 0) {
+              const aim = Math.atan2(
+                p.y - p.baseH * tuning.playerScale * 0.45 - (enemy.y - enemy.baseH * eScale * 0.45),
+                p.x - enemy.x
+              );
+              for (const off of [-0.14, 0, 0.14]) {
+                this.projectiles.push({
+                  id: this.nextProjectileId++,
+                  x: enemy.x + enemy.facing * 16,
+                  y: enemy.y - enemy.baseH * eScale * 0.45,
+                  vx: Math.cos(aim + off) * 255,
+                  vy: Math.sin(aim + off) * 255,
+                  radius: 7,
+                  fromEnemy: true,
+                  damage: 1,
+                  life: 2.3,
+                  rotation: aim + off,
+                  kind: 'jade_bolt',
+                  color: '#2dd4bf',
+                });
+              }
+              sound.playWhip();
+              enemy.attackCooldown = 2.0 / pace;
+              enemy.pendingAttackKind = '';
+            }
+          } else if (enemy.alerted) {
+            enemy.facing = dx >= 0 ? 1 : -1;
+            const desiredX = p.x + (enemy.x >= p.x ? 165 : -165);
+            enemy.x += Math.max(-135, Math.min(135, (desiredX - enemy.x) * 1.8)) * dt;
+            enemy.y = enemy.homeY + Math.sin(enemy.animTime * 3.1) * 34;
+            if (enemy.attackCooldown <= 0 && Math.hypot(dx, dy) < 410) {
+              startTelegraph('wyrm_fan', 0.56);
+            }
+          } else {
+            enemy.x = enemy.homeX + Math.sin(enemy.animTime * 1.2) * 110;
+            enemy.y = enemy.homeY + Math.sin(enemy.animTime * 2.5) * 26;
+            enemy.facing = Math.cos(enemy.animTime * 1.2) >= 0 ? 1 : -1;
+          }
+          break;
+        }
+
+        case 'dwarf_miner': {
+          // Corrupted Pick-Miner: steady patrol; when alerted, winds up a crystal-sparking pickaxe charge!
+          if (enemy.lungeTimer > 0) {
+            enemy.lungeTimer = Math.max(0, enemy.lungeTimer - dt);
+            enemy.vx = enemy.facing * 320 * enemyPace;
+            if (enemy.lungeTimer <= 0) enemy.vx = 0;
+          } else if (enemy.attackChargeTimer > 0) {
+            enemy.vx = 0;
+            enemy.attackChargeTimer = Math.max(0, enemy.attackChargeTimer - dt);
+            if (enemy.attackChargeTimer <= 0) {
+              enemy.lungeTimer = 0.36;
+              enemy.attackCooldown = 1.65 / pace;
+              enemy.pendingAttackKind = '';
+              sound.playWhip();
+              this.spawnSparkles(enemy.x + enemy.facing * 18, enemy.y - 24, 10, '#c084fc', '#fde68a', 0.9);
+            }
+          } else if (enemy.alerted) {
+            enemy.facing = dx >= 0 ? 1 : -1;
+            if (distX < 185 && enemy.attackCooldown <= 0) {
+              startTelegraph('charge', 0.48);
+            } else {
+              enemy.vx = enemy.facing * 98 * enemyPace;
+            }
+          } else {
+            enemy.vx = enemy.facing * 52;
+            if (enemy.x < enemy.homeX - enemy.patrolRadius) enemy.facing = 1;
+            if (enemy.x > enemy.homeX + enemy.patrolRadius) enemy.facing = -1;
+          }
+          this.applyEnemyGroundPhysics(enemy, dt, tuning);
+          break;
+        }
+
+        case 'dwarf_sapper': {
+          // Crystal Keg-Sapper: simple patrol; lobs arcing amethyst powder-bombs when alerted!
+          if (enemy.attackChargeTimer > 0) {
+            enemy.vx = 0;
+            enemy.attackChargeTimer = Math.max(0, enemy.attackChargeTimer - dt);
+            if (enemy.attackChargeTimer <= 0) {
+              const lobVx = Math.max(-290, Math.min(290, dx * 1.15));
+              this.projectiles.push({
+                id: this.nextProjectileId++,
+                x: enemy.x + enemy.facing * 14,
+                y: enemy.y - enemy.baseH * eScale * 0.62,
+                vx: lobVx,
+                vy: -340,
+                radius: 9,
+                fromEnemy: true,
+                damage: 2,
+                life: 2.2,
+                rotation: 0,
+                kind: 'goblin_bomb',
+                color: '#a855f7',
+              });
+              sound.playWhip();
+              enemy.attackCooldown = 2.0 / pace;
+              enemy.pendingAttackKind = '';
+            }
+          } else if (enemy.alerted) {
+            enemy.facing = dx >= 0 ? 1 : -1;
+            if (distX < 340 && enemy.attackCooldown <= 0) {
+              startTelegraph('bomb', 0.56);
+            } else if (distX < 120) {
+              enemy.vx = -enemy.facing * 75 * enemyPace;
+            } else {
+              enemy.vx = enemy.facing * 64 * enemyPace;
+            }
+          } else {
+            enemy.vx = enemy.facing * 48;
+            if (enemy.x < enemy.homeX - enemy.patrolRadius) enemy.facing = 1;
+            if (enemy.x > enemy.homeX + enemy.patrolRadius) enemy.facing = -1;
+          }
+          this.applyEnemyGroundPhysics(enemy, dt, tuning);
+          break;
+        }
+
+        case 'runed_golem': {
+          // Runed Vault-Golem: armored patrol; slams ground sending purple crystal shockwaves!
+          if (enemy.attackChargeTimer > 0) {
+            enemy.vx = 0;
+            enemy.attackChargeTimer = Math.max(0, enemy.attackChargeTimer - dt);
+            if (enemy.attackChargeTimer <= 0) {
+              sound.playHammerBoom();
+              this.triggerShake(6.5, 0.16);
+              this.shockwaves.push({
+                x: enemy.x,
+                y: enemy.y - 10,
+                radius: 10,
+                maxRadius: 115,
+                color: '#c084fc',
+                life: 0.28,
+                maxLife: 0.28,
+              });
+              for (const dir of [-1, 1] as const) {
+                this.projectiles.push({
+                  id: this.nextProjectileId++,
+                  x: enemy.x + dir * 20,
+                  y: enemy.y - 16,
+                  vx: dir * 265,
+                  vy: 0,
+                  radius: 10,
+                  fromEnemy: true,
+                  damage: 2,
+                  life: 1.5,
+                  rotation: 0,
+                  kind: 'stone_shard',
+                  color: '#c084fc',
+                });
+              }
+              enemy.attackCooldown = 2.35 / pace;
+              enemy.pendingAttackKind = '';
+            }
+          } else if (enemy.alerted) {
+            enemy.facing = dx >= 0 ? 1 : -1;
+            if (distX < 250 && enemy.attackCooldown <= 0) {
+              startTelegraph('slam', 0.68);
+            } else {
+              enemy.vx = enemy.facing * 70 * enemyPace;
+            }
+          } else {
+            enemy.vx = enemy.facing * 42;
+            if (enemy.x < enemy.homeX - enemy.patrolRadius) enemy.facing = 1;
+            if (enemy.x > enemy.homeX + enemy.patrolRadius) enemy.facing = -1;
+          }
+          this.applyEnemyGroundPhysics(enemy, dt, tuning);
+          break;
+        }
+
+        case 'boss_dwarf_king': {
+          // THANE BORIN · THE GILDED HOLLOW — 3-Move Subterranean Boss (Amethyst Maul Slam, Crystal Volley, Gilded Charge)!
+          if (enemy.hp <= enemy.maxHp * 0.5 && !enemy.enraged) {
+            enemy.enraged = true;
+            sound.playBossIntro();
+            this.triggerShake(10, 0.3);
+            this.spawnDamageNumber(enemy.x, enemy.y - 125, 'HEART OF THE VEIN AWAKENS!', '#e879f9', 1.25);
+          }
+          const phaseMult = enemy.enraged ? 1.26 : 1.0;
+
+          if (enemy.lungeTimer > 0) {
+            enemy.lungeTimer = Math.max(0, enemy.lungeTimer - dt);
+            enemy.vx = enemy.facing * 430 * phaseMult;
+            if (enemy.lungeTimer <= 0) enemy.vx = 0;
+          } else if (enemy.attackChargeTimer > 0) {
+            enemy.vx = 0;
+            enemy.attackChargeTimer = Math.max(0, enemy.attackChargeTimer - dt);
+            if (enemy.attackChargeTimer <= 0) {
+              const kind = enemy.pendingAttackKind;
+              if (kind === 'charge') {
+                enemy.lungeTimer = 0.48;
+                sound.playHammerBoom();
+                this.spawnSparkles(enemy.x, enemy.y - 45, 18, '#fbbf24', '#c084fc', 1.2);
+              } else if (kind === 'slam') {
+                sound.playHammerBoom();
+                this.triggerShake(11, 0.28);
+                this.shockwaves.push({
+                  x: enemy.x,
+                  y: enemy.y - 12,
+                  radius: 16,
+                  maxRadius: 175,
+                  color: '#c084fc',
+                  life: 0.34,
+                  maxLife: 0.34,
+                });
+                for (const dir of [-1, 1] as const) {
+                  this.projectiles.push({
+                    id: this.nextProjectileId++,
+                    x: enemy.x + dir * 28,
+                    y: enemy.y - 18,
+                    vx: dir * (310 * phaseMult),
+                    vy: 0,
+                    radius: 13,
+                    fromEnemy: true,
+                    damage: 2,
+                    life: 2.0,
+                    rotation: 0,
+                    kind: 'shockwave',
+                    color: '#a855f7',
+                  });
+                }
+                // Spawn crystal spire pillars under player!
+                const pillars = enemy.enraged ? 3 : 2;
+                for (let k = 0; k < pillars; k++) {
+                  const px = p.x + (k - (pillars - 1) / 2) * 140;
+                  this.groundHazards.push({
+                    id: this.nextHazardId++,
+                    x: Math.max(120, Math.min(this.currentStage.worldWidth - 120, px)),
+                    y: this.currentStage.floorY,
+                    width: 48,
+                    height: 150,
+                    warnTimer: 0.72 / phaseMult,
+                    maxWarn: 0.72 / phaseMult,
+                    activeTimer: 0.45,
+                    maxActive: 0.45,
+                    damage: 2,
+                    kind: 'eclipse_pillar',
+                    hitPlayer: false,
+                  });
+                }
+              } else {
+                // Amethyst crystal fan volley
+                const aim = Math.atan2(p.y - 36 - (enemy.y - 68), p.x - enemy.x);
+                const angles = enemy.enraged ? [-0.36, -0.18, 0, 0.18, 0.36] : [-0.24, 0, 0.24];
+                for (const off of angles) {
+                  this.projectiles.push({
+                    id: this.nextProjectileId++,
+                    x: enemy.x + enemy.facing * 24,
+                    y: enemy.y - 68,
+                    vx: Math.cos(aim + off) * 320 * phaseMult,
+                    vy: Math.sin(aim + off) * 320 * phaseMult,
+                    radius: 9,
+                    fromEnemy: true,
+                    damage: 2,
+                    life: 2.6,
+                    rotation: aim + off,
+                    kind: 'stone_shard',
+                    color: '#e879f9',
+                  });
+                }
+                sound.playWhip();
+              }
+              enemy.attackCooldown = (enemy.enraged ? 1.35 : 1.75) / pace;
+              enemy.pendingAttackKind = '';
+            }
+          } else if (enemy.alerted) {
+            enemy.facing = dx >= 0 ? 1 : -1;
+            if (enemy.attackCooldown <= 0) {
+              const r = Math.random();
+              if (distX < 240 && r < 0.45) {
+                startTelegraph('slam', 0.62 / phaseMult);
+              } else if (r < 0.78) {
+                startTelegraph('charge', 0.52 / phaseMult);
+              } else {
+                startTelegraph('shards', 0.56 / phaseMult);
+              }
+            } else {
+              enemy.vx = enemy.facing * (distX > 190 ? 125 : 75) * phaseMult;
+            }
+          }
+          this.applyEnemyGroundPhysics(enemy, dt, tuning);
+          break;
+        }
       }
 
       this.applyEnemyAttackTuning(enemy, et, prevCooldown, prevCharge, prevProjCount, prevHazardCount);
@@ -9886,9 +13636,10 @@ export class GameEngine {
         proj.kind === 'gas_flask' ||
         proj.kind === 'goblin_bomb' ||
         proj.kind === 'tombstone' ||
-        proj.kind === 'lava_orb'
+        proj.kind === 'lava_orb' ||
+        proj.kind === 'spore_glob'
       ) {
-        proj.vy += (proj.kind === 'lava_orb' ? 480 : 740) * pdt;
+        proj.vy += (proj.kind === 'lava_orb' ? 480 : proj.kind === 'spore_glob' ? 620 : 740) * pdt;
         proj.rotation += (proj.kind === 'tombstone' ? 8 : 11) * pdt;
       } else if (proj.kind === 'goblin_dagger' || proj.kind === 'bone_scythe') {
         proj.rotation += 15 * pdt;
@@ -9899,6 +13650,47 @@ export class GameEngine {
             proj.returnTimer = 99;
           }
         }
+      } else if (proj.kind === 'chakram') {
+        proj.rotation += 24 * pdt;
+        proj.returnAge = (proj.returnAge ?? 0) + pdt;
+        if (!proj.returning && proj.returnAge >= 0.34) {
+          proj.returning = true;
+          proj.hitIds = [];
+          sound.playWhip();
+        }
+        if (proj.returning) {
+          const targetX = this.player.x;
+          const targetY = this.player.y - this.player.baseH * tuning.playerScale * 0.55;
+          const toX = targetX - proj.x;
+          const toY = targetY - proj.y;
+          const d = Math.hypot(toX, toY);
+          if (d < 28) {
+            this.projectiles.splice(i, 1);
+            continue;
+          }
+          const retSpd = 610;
+          proj.vx += ((toX / d) * retSpd - proj.vx) * Math.min(1, pdt * 9.5);
+          proj.vy += ((toY / d) * retSpd - proj.vy) * Math.min(1, pdt * 9.5);
+        } else {
+          // Slight deceleration toward apex of outbound arc
+          proj.vx *= Math.pow(0.28, pdt);
+        }
+      } else if (proj.kind === 'chakram_vortex') {
+        proj.rotation += 18 * pdt;
+        proj.vx = 0;
+        proj.vy = 0;
+      } else if (proj.kind === 'crossbow_bolt' || proj.kind === 'rail_beam') {
+        proj.rotation = Math.atan2(proj.vy, proj.vx);
+      } else if (proj.kind === 'jade_bolt') {
+        const targetX = this.player.x;
+        const targetY = this.player.y - this.player.baseH * tuning.playerScale * 0.5;
+        const desiredA = Math.atan2(targetY - proj.y, targetX - proj.x);
+        const speed = Math.hypot(proj.vx, proj.vy) || 225;
+        proj.vx += (Math.cos(desiredA) * speed - proj.vx) * Math.min(1, pdt * 0.9);
+        proj.vy += (Math.sin(desiredA) * speed - proj.vy) * Math.min(1, pdt * 0.9);
+        proj.rotation = Math.atan2(proj.vy, proj.vx);
+      } else if (proj.kind === 'grimoire_orb') {
+        proj.rotation += 9 * pdt;
       } else if (proj.kind === 'soul_skull') {
         // Gentle homing steer toward player while remaining dodgeable!
         const targetX = this.player.x;
@@ -9972,8 +13764,26 @@ export class GameEngine {
           continue;
         }
 
-        // Goblin Bomb, Tombstone, & Lava Orb detonate cleanly on solid ground or player hit
-        if (proj.kind === 'goblin_bomb' || proj.kind === 'tombstone' || proj.kind === 'lava_orb') {
+        // Iron Vanguard Tower Shield automatically intercepts frontal enemy projectiles!
+        if (
+          this.player.shieldGuardActive &&
+          rectsOverlap(projRect, pRect) &&
+          (proj.x - this.player.x) * this.player.facing >= -18
+        ) {
+          sound.playArmorBlock();
+          this.spawnSparkles(proj.x, proj.y, 12, '#60a5fa', '#ffffff', 0.95);
+          this.spawnDamageNumber(this.player.x, this.player.y - 54, 'SHIELDED', '#93c5fd', 0.9);
+          this.projectiles.splice(i, 1);
+          continue;
+        }
+
+        // Goblin Bomb, Tombstone, Lava Orb, & Spore Glob detonate cleanly on solid ground or player hit
+        if (
+          proj.kind === 'goblin_bomb' ||
+          proj.kind === 'tombstone' ||
+          proj.kind === 'lava_orb' ||
+          proj.kind === 'spore_glob'
+        ) {
           let hitGround = false;
           for (const plat of this.platforms) {
             if (!plat.oneWay && rectsOverlap(projRect, plat)) {
@@ -9983,14 +13793,19 @@ export class GameEngine {
           }
           const hitPlayer = rectsOverlap(projRect, pRect);
           if (hitGround || hitPlayer) {
-            const blastR = proj.kind === 'tombstone' ? 58 : 66;
+            const blastR = proj.kind === 'spore_glob' ? 50 : proj.kind === 'tombstone' ? 58 : 66;
             sound.playExplosion(false);
             this.shockwaves.push({
               x: proj.x,
               y: proj.y,
               radius: 10,
               maxRadius: blastR,
-              color: proj.kind === 'tombstone' ? '#94a3b8' : '#f97316',
+              color:
+                proj.kind === 'spore_glob'
+                  ? '#84cc16'
+                  : proj.kind === 'tombstone'
+                    ? '#94a3b8'
+                    : '#f97316',
               life: 0.24,
               maxLife: 0.24,
             });
@@ -9998,14 +13813,23 @@ export class GameEngine {
               proj.x,
               proj.y,
               14,
-              proj.kind === 'tombstone' ? '#cbd5e1' : '#f97316',
+              proj.kind === 'spore_glob'
+                ? '#a3e635'
+                : proj.kind === 'tombstone'
+                  ? '#cbd5e1'
+                  : '#f97316',
               '#fde047',
               1.05
             );
             const pCenterX = pRect.x + pRect.w / 2;
             const pCenterY = pRect.y + pRect.h / 2;
             if (hitPlayer || Math.hypot(pCenterX - proj.x, pCenterY - proj.y) <= blastR) {
-              this.damagePlayer(proj.damage, proj.x, proj.kind !== 'goblin_bomb', tuning);
+              this.damagePlayer(
+                proj.damage,
+                proj.x,
+                proj.kind !== 'goblin_bomb' && proj.kind !== 'spore_glob',
+                tuning
+              );
             }
             this.projectiles.splice(i, 1);
           }
@@ -10134,6 +13958,176 @@ export class GameEngine {
               if (j < i) i--;
             }
           }
+        }
+        continue;
+      }
+
+      // ===== ORBITING GRIMOIRE: ELEMENTAL EXPLOSIVE ORB =====
+      if (proj.kind === 'grimoire_orb') {
+        const orbColor = proj.color ?? '#f97316';
+        if (Math.random() < 0.7) {
+          this.particles.push({
+            x: proj.x + (Math.random() - 0.5) * 10,
+            y: proj.y + (Math.random() - 0.5) * 10,
+            vx: -proj.vx * 0.1 + (Math.random() - 0.5) * 35,
+            vy: (Math.random() - 0.5) * 35,
+            size: 3.2,
+            color: orbColor,
+            life: 0.22,
+            maxLife: 0.22,
+            kind: 'energy_wisp',
+            rotation: 0,
+          });
+        }
+        let hitFoe: Enemy | null = null;
+        for (const enemy of this.enemies) {
+          if (enemy.dead) continue;
+          if (rectsOverlap(projRect, this.getEnemyRect(enemy, tuning.enemyScale))) {
+            hitFoe = enemy;
+            break;
+          }
+        }
+        if (hitFoe || hitSolid) {
+          const blastR = 96;
+          const el = proj.orbElement ?? 'fire';
+          sound.playExplosion(false);
+          this.triggerShake(5.5, 0.14);
+          this.shockwaves.push({
+            x: proj.x,
+            y: proj.y,
+            radius: 12,
+            maxRadius: blastR,
+            color: orbColor,
+            life: 0.24,
+            maxLife: 0.24,
+          });
+          this.spawnSparkles(proj.x, proj.y, 18, orbColor, '#ffffff', 1.15);
+          let blastHits = 0;
+          for (const enemy of this.enemies) {
+            if (enemy.dead) continue;
+            const ey = enemy.y - enemy.baseH * tuning.enemyScale * 0.5;
+            if (Math.hypot(enemy.x - proj.x, ey - proj.y) <= blastR) {
+              blastHits++;
+              if (el === 'fire') {
+                enemy.burnTimer = Math.max(enemy.burnTimer ?? 0, 3.0);
+                enemy.burnTickTimer = 0.45;
+              } else if (el === 'glacial') {
+                enemy.chillTimer = Math.max(enemy.chillTimer ?? 0, 3.2);
+              } else if (el === 'venom') {
+                enemy.poisonTimer = Math.max(enemy.poisonTimer ?? 0, 3.5);
+                enemy.poisonTickTimer = 0.5;
+              }
+              this.handlePlayerHitEnemy(enemy, tuning, 'weapon', proj.slotLevel ?? 1, {
+                bonusDamage: el === 'shadow' ? 2 : 1,
+                guardBreak: el === 'storm' || el === 'fire',
+                stun: el === 'storm' ? 0.48 : 0.18,
+                kbX: 165,
+              });
+            }
+          }
+          if (el === 'light' && blastHits >= 2) {
+            this.player.mp = Math.min(this.player.maxMp, this.player.mp + 1);
+            this.spawnDamageNumber(proj.x, proj.y - 26, '+1 MP', '#fde047', 0.9);
+          }
+          this.projectiles.splice(i, 1);
+        }
+        continue;
+      }
+
+      // ===== DUSK RANGER: BURST CROSSBOW BOLT =====
+      if (proj.kind === 'crossbow_bolt') {
+        if (Math.random() < 0.45) {
+          this.particles.push({
+            x: proj.x,
+            y: proj.y,
+            vx: -proj.vx * 0.06,
+            vy: (Math.random() - 0.5) * 18,
+            size: 2.2,
+            color: proj.color ?? '#34d399',
+            life: 0.14,
+            maxLife: 0.14,
+            kind: 'energy_wisp',
+            rotation: 0,
+          });
+        }
+        const cHit = proj.hitIds ?? (proj.hitIds = []);
+        let hitFoe: Enemy | null = null;
+        for (const enemy of this.enemies) {
+          if (enemy.dead || cHit.includes(enemy.id)) continue;
+          if (rectsOverlap(projRect, this.getEnemyRect(enemy, tuning.enemyScale))) {
+            hitFoe = enemy;
+            break;
+          }
+        }
+        if (hitFoe) {
+          cHit.push(hitFoe.id);
+          this.handlePlayerHitEnemy(hitFoe, tuning, 'weapon', proj.slotLevel ?? 1, {
+            bonusDamage: proj.pierce ? 1 : 0,
+            kbX: 130,
+          });
+          if (!proj.pierce || hitFoe.isBoss) {
+            this.projectiles.splice(i, 1);
+          }
+        } else if (hitSolid) {
+          this.spawnSparkles(proj.x, proj.y, 5, '#6ee7b7', '#ffffff', 0.55);
+          this.projectiles.splice(i, 1);
+        }
+        continue;
+      }
+
+      // ===== SUN BLADE-DANCER: LOOPING TWIN CHAKRAM =====
+      if (proj.kind === 'chakram') {
+        if (Math.random() < 0.55) {
+          this.particles.push({
+            x: proj.x,
+            y: proj.y,
+            vx: (Math.random() - 0.5) * 28,
+            vy: (Math.random() - 0.5) * 28,
+            size: 2.6,
+            color: proj.returning ? '#fb7185' : '#fbbf24',
+            life: 0.18,
+            maxLife: 0.18,
+            kind: 'energy_wisp',
+            rotation: 0,
+          });
+        }
+        const chHit = proj.hitIds ?? (proj.hitIds = []);
+        for (const enemy of this.enemies) {
+          if (enemy.dead || chHit.includes(enemy.id)) continue;
+          if (rectsOverlap(projRect, this.getEnemyRect(enemy, tuning.enemyScale))) {
+            chHit.push(enemy.id);
+            this.handlePlayerHitEnemy(enemy, tuning, 'weapon', proj.slotLevel ?? 1, {
+              bonusDamage: proj.returning ? 1 : 0,
+              kbX: proj.returning ? -110 : 110,
+              stun: 0.15,
+            });
+          }
+        }
+        if (hitSolid && !proj.returning) {
+          proj.returning = true;
+          proj.hitIds = [];
+          this.spawnSparkles(proj.x, proj.y, 8, '#fbbf24', '#ffffff', 0.75);
+        }
+        continue;
+      }
+
+      // ===== SUN BLADE-DANCER [3]: RAZOR VORTEX HALO =====
+      if (proj.kind === 'chakram_vortex') {
+        proj.returnTimer = (proj.returnTimer ?? 0) - pdt;
+        if (proj.returnTimer <= 0) {
+          proj.returnTimer = 0.22;
+          for (const enemy of this.enemies) {
+            if (enemy.dead) continue;
+            const ey = enemy.y - enemy.baseH * tuning.enemyScale * 0.5;
+            if (Math.hypot(enemy.x - proj.x, ey - proj.y) <= 78) {
+              this.handlePlayerHitEnemy(enemy, tuning, 'weapon', proj.slotLevel ?? 1, {
+                bonusDamage: 0,
+                kbX: 40,
+                stun: 0.12,
+              });
+            }
+          }
+          this.spawnSparkles(proj.x, proj.y, 5, '#fbbf24', '#fb7185', 0.7);
         }
         continue;
       }
@@ -10532,7 +14526,7 @@ export class GameEngine {
                 kind: 'cursed_door',
                 x: cursedX,
                 y: door.y,
-                label: 'Enter Cursed Chamber · 2x Loot & Cursed Shrine',
+                label: 'Enter Shattered Mirror Cathedral · 2x Loot & Mirror Shrine',
                 used: false,
                 locked: false,
               });
@@ -10542,18 +14536,18 @@ export class GameEngine {
                 y: door.y - 68,
                 radius: 14,
                 maxRadius: 140,
-                color: '#f43f5e',
+                color: '#67e8f9',
                 life: 0.45,
                 maxLife: 0.45,
               });
-              this.spawnSparkles(cursedX, door.y - 68, 28, '#f43f5e', '#c084fc', 1.45);
+              this.spawnSparkles(cursedX, door.y - 68, 28, '#67e8f9', '#f472b6', 1.45);
               this.spawnDamageNumber(
                 cursedX,
                 door.y - 148,
-                'CURSED DOOR OPENED!',
-                '#f43f5e',
+                'MIRROR CATHEDRAL OPENED!',
+                '#67e8f9',
                 1.2,
-                'HIGH RISK · DOUBLE REWARD'
+                'CURSED PRISM · 2X REWARD'
               );
             }
           }
@@ -10741,15 +14735,146 @@ export class GameEngine {
       this.spawnDamageNumber(this.player.x, this.player.y - this.player.baseH - 22, '+1 MP', '#60a5fa', 0.88, 'CONDUIT');
     }
 
+    // Gold Coin drops on EVERY kill (+Assassination bonus + Boss jackpot!) plus occasional HP & MP Goblets!
+    const isElite =
+      enemy.type === 'knight' ||
+      enemy.type === 'goblin_brute' ||
+      enemy.type === 'obsidian_guard' ||
+      enemy.type === 'runed_golem';
+    const baseGold = isBig ? 120 : enemy.isBoss ? 45 : isElite ? 14 : 6;
+    const assassinGold = wasAssassination ? 12 : 0;
+    const charmGoldMult =
+      (this.hasBossCharm('deep_vein_heart') ? 1.3 : 1) *
+      (this.hasBossCharm('cursed_compass') ? 1.4 : 1) *
+      (this.hasBossCharm('velvet_signet') ? 1.25 : 1) *
+      (this.hasCharmSynergy('gilded_corsair') ? 1.3 : 1) *
+      (this.hasCharmSynergy('crystal_singularity') ? 1.2 : 1) *
+      (this.hasCharmSynergy('sunfire_ordnance') ? 1.25 : 1) *
+      (enemy.isBoss && this.hasBossCharm('astral_eclipse_prism') ? 1.25 : 1) *
+      (wasAssassination && !this.player.onGround && this.hasCharmSynergy('celestial_chalice') ? 1.8 : 1);
+    const totalGold = Math.round((baseGold + assassinGold) * charmGoldMult);
+    const coinPieces = isBig ? 6 : enemy.isBoss ? 4 : wasAssassination ? 3 : 2;
+    const goldPerPiece = Math.max(1, Math.round(totalGold / coinPieces));
+    for (let c = 0; c < coinPieces; c++) {
+      this.spawnWorldPickup(
+        'gold',
+        hitX + (Math.random() - 0.5) * 18,
+        hitY - 8,
+        goldPerPiece,
+        (Math.random() - 0.5) * 210,
+        -(180 + Math.random() * 120)
+      );
+    }
+    if (!enemy.summoned) {
+      const gobletRoll = Math.random();
+      if (enemy.isBoss || gobletRoll < 0.14) {
+        this.spawnWorldPickup('hp_goblet', hitX - 10, hitY - 10, 1, -75 - Math.random() * 50, -210);
+      }
+      if (enemy.isBoss || (gobletRoll >= 0.14 && gobletRoll < 0.28)) {
+        this.spawnWorldPickup('mp_goblet', hitX + 10, hitY - 10, 2, 75 + Math.random() * 50, -210);
+      }
+    }
+
+    // FINAL BIG BOSS SIGNATURE MYTHIC CHARM DROP!
+    if (isBig && !enemy.summoned) {
+      const charmId = RAID_BOSS_CHARM[this.activeRaidId];
+      if (charmId) {
+        this.spawnWorldPickup('boss_charm', hitX, Math.min(hitY - 24, this.currentStage.floorY - 44), 1, 0, 0, charmId);
+        this.awardBossCharm(charmId, hitX, hitY - 20);
+      }
+    }
+
+    // Boss Charm Kill Passives & Cross-Charm Synergies!
+    if (this.hasBossCharm('crimson_chalice')) {
+      this.chaliceKillCounter += 1;
+      if (this.chaliceKillCounter % 5 === 0) {
+        this.player.hp = Math.min(this.player.maxHp, this.player.hp + 1);
+        this.player.mp = Math.min(this.player.maxMp, this.player.mp + 2);
+        this.spawnDamageNumber(this.player.x, this.player.y - this.player.baseH - 26, '+1 HP +2 MP', '#ef4444', 0.95, 'CRIMSON CHALICE');
+      }
+    }
+    if (this.hasBossCharm('paradox_hourglass')) {
+      this.player.mp = Math.min(this.player.maxMp, this.player.mp + 1);
+    }
+    if (this.hasBossCharm('phylactery_locket')) {
+      this.player.mp = Math.min(this.player.maxMp, this.player.mp + 1);
+      const boltCount = this.hasCharmSynergy('plague_necromancy') ? 2 : 1;
+      for (let b = 0; b < boltCount; b++) {
+        const nearest = this.enemies.find((other) => !other.dead && other !== enemy && Math.hypot(other.x - hitX, other.y - hitY) < 420);
+        const angle = nearest ? Math.atan2(nearest.y - 32 - hitY, nearest.x - hitX) + (b - 0.5) * 0.22 : (this.player.facing > 0 ? 0 : Math.PI);
+        this.projectiles.push({
+          id: this.nextProjectileId++,
+          x: hitX,
+          y: hitY,
+          vx: Math.cos(angle) * 380,
+          vy: Math.sin(angle) * 380,
+          radius: 8,
+          fromEnemy: false,
+          damage: this.hasCharmSynergy('forge_of_souls') ? 4 : 3,
+          life: 1.5,
+          rotation: 0,
+          kind: 'orb',
+          color: this.hasCharmSynergy('forge_of_souls') ? '#f97316' : '#a855f7',
+        });
+      }
+    }
+    if (this.hasBossCharm('mycelial_crown')) {
+      // Spore cloud burst damages nearby enemies & trims active cooldowns by 18%
+      this.shockwaves.push({ x: hitX, y: hitY, radius: 10, maxRadius: 118, color: '#10b981', life: 0.28, maxLife: 0.28 });
+      this.player.weaponSkillCooldown *= 0.82;
+      for (const ab of Object.keys(this.player.abilityCooldowns) as AbilityId[]) {
+        this.player.abilityCooldowns[ab] *= 0.82;
+      }
+      for (const other of this.enemies) {
+        if (other.dead || other === enemy) continue;
+        if (Math.hypot(other.x - hitX, other.y - hitY) < 125) {
+          other.hp = Math.max(0, other.hp - 2);
+          other.flashTimer = 0.14;
+          this.spawnDamageNumber(other.x, other.y - 40, '2', '#34d399', 0.88, 'SPORE');
+          if (other.hp <= 0) this.handleEnemyKilled(other, other.x, other.y - 24);
+        }
+      }
+      if (wasAssassination && this.hasCharmSynergy('crimson_spores')) {
+        this.player.hp = Math.min(this.player.maxHp, this.player.hp + 1);
+        this.player.weaponSkillCooldown = 0;
+        this.spawnDamageNumber(this.player.x, this.player.y - this.player.baseH - 36, 'CRIMSON SPORES +1 HP', '#ec4899', 0.96);
+      }
+    }
+    if (wasAssassination && this.hasBossCharm('sunscarab_seal')) {
+      this.shockwaves.push({ x: hitX, y: hitY, radius: 12, maxRadius: 120, color: '#eab308', life: 0.24, maxLife: 0.24 });
+      for (const other of this.enemies) {
+        if (other.dead || other === enemy) continue;
+        if (Math.hypot(other.x - hitX, other.y - hitY) < 130) {
+          this.applyBurn(other, 3.5);
+          other.hurtStunTimer = Math.max(other.hurtStunTimer, 0.55);
+          this.spawnDamageNumber(other.x, other.y - 44, 'SCORCHED', '#facc15', 0.85);
+        }
+      }
+    }
+
+    // Shattered Mirror Phantoms burst into crystalline glass shards, restoring +1 MP & dropping +1 Relic Shard!
+    if (enemy.isMirrorPhantom) {
+      this.shockwaves.push({
+        x: hitX,
+        y: hitY,
+        radius: 10,
+        maxRadius: 96,
+        color: '#67e8f9',
+        life: 0.28,
+        maxLife: 0.28,
+      });
+      this.spawnSparkles(hitX, hitY, 22, '#e0f2fe', '#f472b6', 1.35);
+      this.shards += 1;
+      this.player.mp = Math.min(this.player.maxMp, this.player.mp + 1);
+      this.spawnDamageNumber(hitX, hitY - 26, '+1 SHARD · +1 MP', '#67e8f9', 0.92, 'MIRROR SHATTERED!');
+      sound.playCoin();
+    }
+
     // Non-boss foes occasionally drop Relic Shards for camp crafting (DOUBLED inside Cursed Chambers!)
     if (
       !enemy.isBoss &&
       !enemy.summoned &&
-      (enemy.type === 'knight' ||
-        enemy.type === 'goblin_brute' ||
-        enemy.type === 'obsidian_guard' ||
-        this.isCursedChamber ||
-        Math.random() < 0.45)
+      (isElite || this.isCursedChamber || Math.random() < 0.45)
     ) {
       const shardDrop = this.isCursedChamber ? 2 : 1;
       this.shards += shardDrop;
@@ -10850,6 +14975,45 @@ export class GameEngine {
               ? { kbX: 300, kbY: 110, bonusDamage: this.charTune('assassin').assassinComboBonus, stun: 0.3 }
               : { kbX: 85 }
           );
+        } else if (p.attackWeapon === 'cleaver_greatsword' || p.attackWeapon === 'joust_lance') {
+          const chargeBonus = Math.round(p.weaponChargeTimer * 4.5) + 1;
+          this.handlePlayerHitEnemy(enemy, tuning, 'weapon', 1 + p.weaponDamageBonus, {
+            bonusDamage: chargeBonus,
+            guardBreak: true,
+            kbX: 280 + p.weaponChargeTimer * 180,
+            stun: 0.25 + p.weaponChargeTimer * 0.28,
+          });
+        } else if (p.attackWeapon === 'meteor_flail') {
+          this.handlePlayerHitEnemy(enemy, tuning, 'weapon', 1 + p.weaponDamageBonus, {
+            bonusDamage: 2,
+            guardBreak: true,
+            kbX: 310,
+            kbY: 140,
+            stun: 0.42,
+          });
+        } else if (p.attackWeapon === 'kusarigama') {
+          this.handlePlayerHitEnemy(enemy, tuning, 'weapon', 1 + p.weaponDamageBonus, {
+            bonusDamage: 0,
+            kbX: 40,
+            stun: 0.3,
+          });
+          if (!enemy.dead && !enemy.isBoss) {
+            // Weighted chain yanks enemies straight into Monk melee range!
+            const pullDir = p.x >= enemy.x ? 1 : -1;
+            enemy.vx = pullDir * 330;
+            enemy.vy = -125;
+            enemy.onGround = false;
+            enemy.x += (p.x + p.facing * 42 - enemy.x) * 0.36;
+            this.spawnSparkles(enemy.x, enemy.y - 26, 8, '#e2e8f0', '#fb923c', 0.8);
+          }
+        } else if (p.attackWeapon === 'shield_mace') {
+          this.handlePlayerHitEnemy(enemy, tuning, 'weapon', 1 + p.weaponDamageBonus, {
+            bonusDamage: 1,
+            guardBreak: true,
+            kbX: 390,
+            kbY: 155,
+            stun: 0.4,
+          });
         } else {
           this.handlePlayerHitEnemy(enemy, tuning, 'weapon', 1 + p.weaponDamageBonus);
         }
@@ -10860,7 +15024,13 @@ export class GameEngine {
         this.handlePlayerHitEnemy(enemy, tuning, 'weapon', 2 + p.weaponDamageBonus);
       }
 
-      if (!enemy.dead && !(p.isHidden && !enemy.isBoss) && rectsOverlap(pRect, eRect)) {
+      const isPiercedByBounce = p.bounceActive && p.bounceHitIds.has(enemy.id);
+      if (
+        !enemy.dead &&
+        !isPiercedByBounce &&
+        !(p.isHidden && !enemy.isBoss) &&
+        rectsOverlap(pRect, eRect)
+      ) {
         this.damagePlayer(this.scaleEnemyDamage(1, enemy), enemy.x, enemy.isBoss, tuning);
         enemy.alerted = true;
       }
@@ -10890,13 +15060,13 @@ export class GameEngine {
     const weaponFlat = this.getWeaponFlatBonus(weaponLv);
     const spellFlat = this.getSpellFlatBonus(abilityPower);
 
-    const isBehindEnemy = (p.x - enemy.x) * enemy.facing < 0;
+    const isBehindEnemy = (p.x - enemy.x) * enemy.facing < 24;
     const isDropAssassination =
       !enemy.alerted &&
       !enemy.isBoss &&
       !p.onGround &&
-      p.y < enemy.y - 26 &&
-      Math.abs(p.x - enemy.x) < 120;
+      p.y < enemy.y - 22 &&
+      Math.abs(p.x - enemy.x) < 145;
     const canAssassinate = (source === 'weapon' || source === 'dash') && !opts?.noAssassinate;
     const isAssassination =
       (Boolean(opts?.forceAssassinate) && !enemy.isBoss) ||
@@ -10908,7 +15078,13 @@ export class GameEngine {
     const isHeavyHit =
       source === 'hammer_meteor' ||
       Boolean(opts?.guardBreak) ||
-      ((p.weapon === 'hammer' || p.weapon === 'greataxe') && source === 'weapon');
+      ((p.weapon === 'hammer' ||
+        p.weapon === 'greataxe' ||
+        p.weapon === 'cleaver_greatsword' ||
+        p.weapon === 'joust_lance' ||
+        p.weapon === 'meteor_flail' ||
+        p.weapon === 'shield_mace') &&
+        source === 'weapon');
 
     // Front-Shield Guard for armored Knights & Obsidian Guards!
     // Light frontal strikes clang off the shield; flank behind, use heavy Hammer/Greataxe, or cast Spells to shatter guard!
@@ -10947,19 +15123,27 @@ export class GameEngine {
     const fireCritBonus = fireBonusActive ? (p.fireWeaponLevel >= 5 ? 40 : 20) : 0;
     const crestCritBonus = this.hasArtifact('vampire_crest') ? 12 : 0;
     const rapierCritBonus =
-      (p.weapon === 'rapier' || p.weapon === 'silk_whip') && source === 'weapon' ? 15 : 0;
+      (p.weapon === 'rapier' || p.weapon === 'silk_whip' || p.weapon === 'estoc_spear') && source === 'weapon' ? 15 : 0;
     const comboCritBonus = this.comboCount >= 5 ? 10 : 0;
-    const assassinCritBonus = p.assassinTrainingLevel * 12;
+    const assassinCritBonus = p.assassinTrainingLevel * 6 + this.permAltarBonuses.agility * 4;
+    const weaponCritBonus = Math.max(0, weaponLv - 1);
     const elementCritBonus =
-      p.combinedElement === 'eclipse'
+      p.combinedElement === 'eclipse' || p.combinedElement === 'bloodmoon'
         ? 25
-        : p.combinedElement === 'phantom'
+        : p.combinedElement === 'phantom' || p.combinedElement === 'glacial_light'
           ? 22
-          : p.combinedElement === 'hellfire'
+          : p.combinedElement === 'hellfire' || p.combinedElement === 'crimson_storm'
             ? 20
-            : p.combinedElement === 'abyss' || p.combinedElement === 'obsidian' || this.hasElement('shadow')
+            : p.combinedElement === 'abyss' ||
+                p.combinedElement === 'obsidian' ||
+                this.hasElement('shadow') ||
+                this.hasElement('glacial') ||
+                this.hasElement('blood')
               ? 18
               : 0;
+    const charmCritBonus =
+      (this.hasBossCharm('crimson_chalice') ? 15 : 0) +
+      (this.hasBossCharm('velvet_signet') ? 18 : 0);
     const effectiveCritChance =
       source === 'gas'
         ? 0
@@ -10971,7 +15155,9 @@ export class GameEngine {
               rapierCritBonus +
               comboCritBonus +
               assassinCritBonus +
-              elementCritBonus
+              weaponCritBonus +
+              elementCritBonus +
+              charmCritBonus
           );
 
     const isCrit =
@@ -10979,29 +15165,56 @@ export class GameEngine {
       effectiveCritChance > 0 &&
       Math.random() * 100 < effectiveCritChance;
 
-    // Milestone-aware damage calculation
+    if (isCrit && this.hasBossCharm('velvet_signet')) {
+      p.mp = Math.min(p.maxMp, p.mp + 1);
+    }
+    if (this.hasBossCharm('abyssal_trident_pearl') || this.hasBossCharm('glacial_aegis_shard')) {
+      enemy.chillTimer = Math.max(enemy.chillTimer ?? 0, 2.6);
+    }
+
+    // Rebalanced slower power scaling: gentle % per level + flat milestone every 3 levels
     let baseDamage = 1;
+    const weaponPctMult =
+      (1 + Math.max(0, weaponLv - 1) * 0.05) *
+      (this.hasBossCharm('molten_anvil_heart') ? 1.2 : 1) *
+      (this.hasBossCharm('ironhorn_war_tusk') ? 1.25 : 1) *
+      (this.hasCharmSynergy('iron_glacier') ? 1.25 : 1) *
+      (this.hasCharmSynergy('gilded_furnace') ? 1.25 : 1) *
+      (this.hasCharmSynergy('forge_of_souls') ? 1.2 : 1);
+    const spellPctMult =
+      (1 + Math.max(0, abilityPower - 1) * 0.1) *
+      (this.hasBossCharm('phylactery_locket') ? 1.25 : 1) *
+      (this.hasCharmSynergy('forge_of_souls') ? 1.2 : 1);
     if (source === 'hammer_meteor') {
       const charBonus = this.cdef(p.characterId).bonusBaseDamage;
-      baseDamage = this.charTune().hammerMeteorDamage + charBonus + weaponFlat + (enemy.isBoss ? 2 : 0);
+      baseDamage = Math.round((this.charTune().hammerMeteorDamage + charBonus + weaponFlat + (enemy.isBoss ? 2 : 0)) * weaponPctMult);
     } else if (source === 'weapon') {
       const charBonus = this.cdef(p.characterId).bonusBaseDamage;
       const heavyBonus = p.weapon === 'hammer' || p.weapon === 'greataxe' ? 1 : 0;
       const megaBonus = p.katanaMegaSlashTimer > 0 ? this.charTune().katanaMegaBonus : 0;
       const bossBonus = enemy.isBoss ? 1 : 0;
-      baseDamage = 1 + charBonus + heavyBonus + megaBonus + weaponFlat + bossBonus;
+      baseDamage = Math.max(1, Math.round((1 + charBonus + heavyBonus + megaBonus + weaponFlat + bossBonus) * weaponPctMult));
     } else if (source === 'fireball') {
-      baseDamage = 2 + spellFlat + (enemy.isBoss ? 1 : 0);
+      baseDamage = Math.max(2, Math.round((2 + spellFlat + (enemy.isBoss ? 1 : 0)) * spellPctMult));
     } else if (source === 'dash') {
-      baseDamage = 3 + spellFlat + weaponFlat;
+      baseDamage = Math.max(2, Math.round((3 + spellFlat + weaponFlat) * spellPctMult));
     } else if (source === 'grapple') {
-      baseDamage = 2 + spellFlat;
+      baseDamage = Math.max(2, Math.round((2 + spellFlat) * spellPctMult));
     } else if (source === 'gas') {
-      baseDamage = 1 + spellFlat;
+      baseDamage = Math.max(1, Math.round((1 + spellFlat) * spellPctMult));
     }
 
     const fireBonus = fireBonusActive ? 1 + this.getSpellFlatBonus(p.fireWeaponLevel) : 0;
     let damage = baseDamage + fireBonus + Math.max(0, Math.round((opts?.bonusDamage ?? 0) + aMods.bonusDamage));
+
+    // Boss Charm Global & Aerial Damage Modifiers!
+    if (this.hasBossCharm('astral_eclipse_prism')) {
+      damage = Math.max(damage + 1, Math.round(damage * 1.18));
+    }
+    if (!p.onGround && this.hasBossCharm('jade_feather_pearl')) {
+      const airMult = this.hasCharmSynergy('skyforged_tempest') ? 1.75 : 1.45;
+      damage = Math.max(damage + 1, Math.round(damage * airMult));
+    }
 
     // Light / Solar / Prism / Eclipse Boss Damage bonus!
     if (enemy.isBoss && this.hasElement('light')) {
@@ -11013,16 +15226,111 @@ export class GameEngine {
       damage = tuning.playerDamageMult <= 0 ? 0 : Math.max(1, Math.round(damage * tuning.playerDamageMult));
     }
 
+    // HARDER FIGHTS WHEN DISCOVERED: Alerted non-boss foes bracing head-on resist 28% frontal non-crit/non-spell damage!
+    const isSpellSrcCheck = source === 'fireball' || source === 'dash' || source === 'grapple' || source === 'gas';
+    const hitFromFront = (p.x - enemy.x) * enemy.facing > 0;
+    if (!isAssassination && !isCrit && !isSpellSrcCheck && !enemy.isBoss && enemy.alerted && hitFromFront && damage > 1) {
+      damage = Math.max(1, Math.round(damage * 0.72));
+    }
+
     if (isAssassination) {
-      const assMult = (1 + p.assassinTrainingLevel * 0.25) * this.charTune().assassinDamageMult * tuning.playerDamageMult;
+      const assMult = (1 + p.assassinTrainingLevel * 0.12) * this.charTune().assassinDamageMult * tuning.playerDamageMult;
       const shadowAssBonus = this.hasElement('shadow') ? 2 : 0;
       damage = enemy.isBoss
         ? Math.round((8 + weaponFlat * 2 + shadowAssBonus) * assMult)
         : Math.max(enemy.hp, Math.round((6 + shadowAssBonus) * assMult));
       this.assassinations += 1;
+      if (this.hasCharmSynergy('eclipse_sovereign')) {
+        p.mp = Math.min(p.maxMp, p.mp + 1);
+        p.shadowChainTimer = Math.max(p.shadowChainTimer, 4.0);
+      }
     } else if (isCrit) {
-      damage = Math.max(2, Math.round(damage * tuning.critMultiplier));
+      const critMult =
+        tuning.critMultiplier *
+        (this.hasCharmSynergy('celestial_chalice') ? 1.25 : 1) *
+        (this.hasCharmSynergy('skyforged_tempest') && !p.onGround ? 1.3 : 1);
+      damage = Math.max(2, Math.round(damage * critMult));
       this.crits += 1;
+      if (this.hasCharmSynergy('eclipse_sovereign')) {
+        p.mp = Math.min(p.maxMp, p.mp + 1);
+        p.shadowChainTimer = Math.max(p.shadowChainTimer, 3.0);
+      }
+    }
+
+    // Blackpowder Idol (Explosive AoE blast on Crits & Assassinations) + Singularity Core (Gravity Pull on Spells & Crits)!
+    if ((isCrit || isAssassination) && this.hasBossCharm('blackpowder_idol')) {
+      const blastR = this.hasCharmSynergy('blood_and_powder') ? 155 : 112;
+      const blastDmg = Math.max(
+        2,
+        Math.round(damage * (this.hasCharmSynergy('void_alchemist') ? 0.55 : 0.35))
+      );
+      this.shockwaves.push({
+        x: hitX,
+        y: hitY,
+        radius: 12,
+        maxRadius: blastR,
+        color: this.hasCharmSynergy('void_alchemist') ? '#22d3ee' : '#f97316',
+        life: 0.25,
+        maxLife: 0.25,
+      });
+      for (const other of this.enemies) {
+        if (other.dead || other === enemy) continue;
+        if (Math.hypot(other.x - hitX, other.y - hitY) <= blastR) {
+          if (this.hasCharmSynergy('void_alchemist')) {
+            other.x += (hitX - other.x) * 0.35;
+          }
+          other.hp = Math.max(0, other.hp - blastDmg);
+          other.flashTimer = 0.14;
+          if (this.hasCharmSynergy('sunfire_ordnance')) this.applyBurn(other, 3.0);
+          this.spawnDamageNumber(other.x, other.y - 38, `${blastDmg}`, '#fb923c', 0.9, 'BLAST');
+          if (other.hp <= 0) this.handleEnemyKilled(other, other.x, other.y - 24);
+        }
+      }
+      if (this.hasCharmSynergy('blood_and_powder')) {
+        this.blastSiphonCounter += 1;
+        if (this.blastSiphonCounter % 4 === 0) {
+          p.hp = Math.min(p.maxHp, p.hp + 1);
+          this.spawnDamageNumber(p.x, p.y - p.baseH - 28, '+1 HP', '#fb7185', 0.9, 'BLOOD & POWDER');
+        }
+      }
+    }
+    if ((isSpellSrcCheck || isCrit) && this.hasBossCharm('singularity_core')) {
+      const pullR = 175;
+      this.shockwaves.push({ x: hitX, y: hitY, radius: 18, maxRadius: pullR, color: '#06b6d4', life: 0.22, maxLife: 0.22 });
+      for (const other of this.enemies) {
+        if (other.dead || other === enemy || other.isBoss) continue;
+        if (Math.hypot(other.x - hitX, other.y - hitY) <= pullR) {
+          other.x += (hitX - other.x) * 0.42;
+          if (this.hasCharmSynergy('solar_singularity')) {
+            this.applyBurn(other, 3.4);
+          }
+        }
+      }
+      damage = Math.round(damage * 1.25);
+    }
+    if ((isCrit || isHeavyHit) && this.hasBossCharm('deep_vein_heart')) {
+      damage = Math.round(damage * 1.25);
+      const shardR = this.hasCharmSynergy('crystal_singularity') ? 135 : 95;
+      this.shockwaves.push({
+        x: hitX,
+        y: hitY,
+        radius: 10,
+        maxRadius: shardR,
+        color: '#c084fc',
+        life: 0.24,
+        maxLife: 0.24,
+      });
+      this.spawnSparkles(hitX, hitY, 16, '#c084fc', '#fde68a', 1.15);
+      for (const other of this.enemies) {
+        if (other.dead || other === enemy) continue;
+        if (Math.hypot(other.x - hitX, other.y - hitY) <= shardR) {
+          const splash = Math.max(2, Math.round(damage * (this.hasCharmSynergy('crystal_singularity') ? 0.4 : 0.28)));
+          other.hp = Math.max(0, other.hp - splash);
+          other.flashTimer = 0.14;
+          this.spawnDamageNumber(other.x, other.y - 36, `${splash}`, '#e879f9', 0.9, 'CRYSTAL');
+          if (other.hp <= 0) this.handleEnemyKilled(other, other.x, other.y - 24);
+        }
+      }
     }
 
     // Assassin: Mark for Death makes a marked boss take extra damage from every hit.
@@ -11035,6 +15343,8 @@ export class GameEngine {
       this.spawnSparkles(hitX, hitY, 6, '#9f1239', '#fda4af', 0.7);
     }
 
+    const dealt = Math.min(enemy.hp, damage);
+    this.raidDamageDealt += Math.max(0, dealt);
     enemy.hp = Math.max(0, enemy.hp - damage);
     if (enemy.hp > 0 && !enemy.isBoss && source !== 'gas') sound.playEnemyHurt(enemy.type);
     enemy.flashTimer = 0.18;
@@ -11155,6 +15465,16 @@ export class GameEngine {
             counterKind = 'lava';
           } else if (enemy.type === 'boss_eclipse_overlord') {
             counterKind = distToPlayer < 210 ? 'eclipse' : 'blink';
+          } else if (enemy.type === 'boss_mushroom_sovereign') {
+            counterKind = distToPlayer < 220 ? 'slam' : 'spore_volley';
+          } else if (enemy.type === 'boss_sand_pharaoh') {
+            counterKind = distToPlayer < 220 ? 'khopesh_charge' : 'mirage_blink';
+          } else if (enemy.type === 'boss_alien_archon') {
+            counterKind = distToPlayer < 230 ? 'warp_ring' : 'plasma_fan';
+          } else if (enemy.type === 'boss_dragon_crane') {
+            counterKind = distToPlayer < 260 ? 'crane_dive' : 'gale_blades';
+          } else if (enemy.type === 'boss_dwarf_king') {
+            counterKind = distToPlayer < 230 ? 'slam' : 'charge';
           }
           enemy.pendingAttackKind = counterKind;
           enemy.chargeDuration = counterDur;
@@ -11206,19 +15526,29 @@ export class GameEngine {
         : { shakeMul: 1, hitstopAddMs: 0, extraShake: 0 };
 
     if (isAssassination) {
-      // MASSIVE ANIME EXECUTION FREEZE + HIGH-CONTRAST IMPACT FRAME + ZOOM PUNCH + +2 MP REWARD!
+      // MASSIVE ANIME EXECUTION FREEZE + SLOW-MO + TRIPLE CROSS-SLASH + DOUBLE SHOCKWAVE!
       sound.playAssassinate();
-      this.spawnSparkles(hitX, hitY, 34, '#ff334b', '#fff5d6', 1.8);
-      this.spawnSlashLine(hitX, hitY, pushDir > 0 ? -0.58 : Math.PI + 0.58, 260, 12, '#ff334b', '#ffffff', 0.34);
-      this.spawnSlashLine(hitX, hitY, pushDir > 0 ? 0.38 : Math.PI - 0.38, 195, 7, '#ffd166', '#ffffff', 0.28);
+      this.spawnSparkles(hitX, hitY, 44, '#ff334b', '#fff5d6', 2.0);
+      this.spawnSlashLine(hitX, hitY, pushDir > 0 ? -0.58 : Math.PI + 0.58, 300, 14, '#ff334b', '#ffffff', 0.38);
+      this.spawnSlashLine(hitX, hitY, pushDir > 0 ? 0.42 : Math.PI - 0.42, 235, 9, '#ffd166', '#ffffff', 0.32);
+      this.spawnSlashLine(hitX, hitY, pushDir > 0 ? 0.04 : Math.PI - 0.04, 210, 5, '#ffffff', '#ff334b', 0.28);
       this.shockwaves.push({
         x: hitX,
         y: hitY,
         radius: 14,
-        maxRadius: 155,
+        maxRadius: 175,
         color: '#ff334b',
-        life: 0.3,
-        maxLife: 0.3,
+        life: 0.34,
+        maxLife: 0.34,
+      });
+      this.shockwaves.push({
+        x: hitX,
+        y: hitY,
+        radius: 6,
+        maxRadius: 115,
+        color: '#fde047',
+        life: 0.26,
+        maxLife: 0.26,
       });
       // Shadow Chain Momentum: EVERY assassination triggers speed + stealth burst & rising chain chime!
       p.shadowChainCount += 1;
@@ -11365,20 +15695,32 @@ export class GameEngine {
     const procDmg = 1 + resBonus + (activeDef.isCombined ? 1 : 0);
     const id = activeDef.id;
 
-    // 1. Chill / Slow (Water & all Water Fusions)
-    if (this.hasElement('water') && enemy.hp > 0) {
-      enemy.chillTimer = Math.max(enemy.chillTimer ?? 0, id === 'frost' ? 3.8 : 2.6);
+    // 1. Chill / Slow (Water, Glacial & all Ice Fusions)
+    if ((this.hasElement('water') || this.hasElement('glacial')) && enemy.hp > 0) {
+      enemy.chillTimer = Math.max(
+        enemy.chillTimer ?? 0,
+        id === 'frost' || id === 'permafrost' || id === 'glacial' ? 4.0 : 2.6
+      );
     }
 
-    // 2. Burn (Fire & all Fire Fusions)
-    if (this.hasElement('fire') && enemy.hp > 0) {
-      this.applyBurn(enemy, id === 'hellfire' || id === 'magma' || id === 'solar' ? 4.4 : 3.4);
+    // 2. Burn / Venom DoT (Fire, Venom & all Burn/Plague Fusions)
+    if ((this.hasElement('fire') || this.hasElement('venom')) && enemy.hp > 0) {
+      this.applyBurn(
+        enemy,
+        id === 'hellfire' || id === 'magma' || id === 'solar' || id === 'plaguefire' || id === 'venom' ? 4.6 : 3.4
+      );
+    }
+
+    // 2b. Blood Siphon (Blood & Blood Fusions heal +1 HP every 6 strikes!)
+    if (this.hasElement('blood') && this.elementalHitCounter % 6 === 0 && p.hp < p.maxHp) {
+      p.hp = Math.min(p.maxHp, p.hp + 1);
+      this.spawnDamageNumber(p.x, p.y - p.baseH * tuning.playerScale - 18, '+1 HP', '#dc2626', 0.9, 'BLOOD SIPHON');
     }
 
     // 3. MP Flow (Water / Steam / Prism / Aether / Abyss crits)
     const mpInterval = id === 'steam' || id === 'prism' || id === 'aether' ? 3 : 4;
     if (
-      (this.hasElement('water') || id === 'aether') &&
+      (this.hasElement('water') || id === 'aether' || id === 'arcane_blood') &&
       this.elementalHitCounter % mpInterval === 0 &&
       p.mp < p.maxMp
     ) {
@@ -11406,8 +15748,8 @@ export class GameEngine {
         if (Math.hypot(other.x - hitX, oy - hitY) <= radius) {
           other.hp = Math.max(0, other.hp - dmg);
           other.flashTimer = 0.14;
-          if (this.hasElement('water')) other.chillTimer = Math.max(other.chillTimer ?? 0, 2.4);
-          if (this.hasElement('fire')) this.applyBurn(other, 3.0);
+          if (this.hasElement('water') || this.hasElement('glacial')) other.chillTimer = Math.max(other.chillTimer ?? 0, 2.8);
+          if (this.hasElement('fire') || this.hasElement('venom')) this.applyBurn(other, 3.2);
           if (pullTowardHit && !other.isBoss) {
             other.vx = (hitX >= other.x ? 1 : -1) * 195;
           }
@@ -11417,7 +15759,7 @@ export class GameEngine {
       }
     };
 
-    if (id === 'lightning') {
+    if (id === 'lightning' || id === 'storm' || id === 'tempest' || id === 'crimson_storm' || id === 'storm_earth') {
       // Jagged Chain Lightning jumping up to 3 nearby enemies!
       let prevX = hitX;
       let prevY = hitY;
@@ -11810,10 +16152,11 @@ export class GameEngine {
     const p = this.player;
     if (damage <= 0 || p.invulnTimer > 0 || this.status !== 'PLAYING') return;
 
-    // UNIVERSAL ZERO-EXTRA-BUTTON PERFECT PARRY / CLASH (Works for ALL 4 Heroes via [1] Attack or [3] Skill!)
-    if (p.parryWindowTimer > 0) {
+    // RARE TIGHT PERFECT PARRY (0.10s window, 12-second cooldown so combat stays challenging!)
+    if (p.parryWindowTimer > 0 && p.parryCooldownTimer <= 0) {
       p.parryWindowTimer = 0;
-      p.invulnTimer = 0.62;
+      p.parryCooldownTimer = 12.0;
+      p.invulnTimer = 0.55;
       p.mp = Math.min(p.maxMp, p.mp + 2);
       this.parries += 1;
       const py = p.y - p.baseH * tuning.playerScale * 0.55;
@@ -11832,7 +16175,7 @@ export class GameEngine {
         maxLife: 0.26,
       });
       this.spawnSparkles(p.x + p.facing * 18, py, 24, '#fde047', '#ffffff', 1.35);
-      this.spawnDamageNumber(p.x, p.y - p.baseH * tuning.playerScale - 20, 'PARRY! +2 MP', '#fde047', 1.25, 'GUARD BREAK');
+      this.spawnDamageNumber(p.x, p.y - p.baseH * tuning.playerScale - 20, 'PARRY! (12s CD)', '#fde047', 1.2, '+2 MP · GUARD BREAK');
 
       // Stagger & guard-break the attacking enemy!
       let closestAttacker: Enemy | null = null;
@@ -11856,14 +16199,56 @@ export class GameEngine {
       return;
     }
 
+    const isPitCheck = !isBossAttack && Math.abs(sourceX - p.x) < 1;
+
+    // Prism Striker ('bouncer') is INVULNERABLE while dashing/bouncing if hit from the FRONT!
+    if (p.characterId === 'bouncer' && (p.bounceActive || p.backdashTimer > 0) && !isPitCheck) {
+      const moveDir = Math.abs(p.vx) > 25 ? Math.sign(p.vx) : p.facing;
+      if ((sourceX - p.x) * moveDir >= -16) {
+        p.invulnTimer = Math.max(p.invulnTimer, 0.22);
+        p.flashTimer = 0.08;
+        sound.playArmorBlock();
+        this.triggerShake(4.2, 0.1);
+        this.hitstopTimer = Math.max(this.hitstopTimer, 0.04);
+        this.spawnSparkles(
+          p.x + moveDir * 22,
+          p.y - p.baseH * tuning.playerScale * 0.5,
+          18,
+          '#22d3ee',
+          '#f472b6',
+          1.15
+        );
+        this.spawnDamageNumber(
+          p.x,
+          p.y - p.baseH * tuning.playerScale - 14,
+          'PRISM GUARD!',
+          '#67e8f9',
+          1.02
+        );
+        return;
+      }
+    }
+
     // Vampire Hunter Whip Backdash Phantom Evade bonus (+1 MP & violet flash!)
-    if (p.backdashTimer > 0) {
+    if (p.backdashTimer > 0 && p.characterId !== 'bouncer') {
       p.invulnTimer = 0.45;
       p.mp = Math.min(p.maxMp, p.mp + 1);
       this.parries += 1;
       sound.playParry(true);
       this.spawnSparkles(p.x, p.y - p.baseH * tuning.playerScale * 0.5, 16, '#c084fc', '#ffffff', 1.1);
       this.spawnDamageNumber(p.x, p.y - p.baseH * tuning.playerScale - 16, 'PHANTOM EVADE +1 MP', '#c084fc', 1.05);
+      return;
+    }
+
+    // Iron Vanguard Tower Shield automatically blocks frontal hits while attacking or bashing!
+    if (p.shieldGuardActive && !isPitCheck && (sourceX - p.x) * p.facing >= -18) {
+      p.invulnTimer = 0.36;
+      p.flashTimer = 0.1;
+      sound.playArmorBlock();
+      this.triggerShake(4.8, 0.12);
+      this.hitstopTimer = Math.max(this.hitstopTimer, 0.045);
+      this.spawnSparkles(p.x + p.facing * 20, p.y - p.baseH * tuning.playerScale * 0.5, 16, '#60a5fa', '#ffffff', 1.05);
+      this.spawnDamageNumber(p.x, p.y - p.baseH * tuning.playerScale - 12, 'TOWER GUARD!', '#93c5fd', 1.0);
       return;
     }
 
@@ -11879,9 +16264,21 @@ export class GameEngine {
       return;
     }
 
-    let finalDamage = damage;
+    // Balanced combat hits: normal enemies deal 1 dmg throughout the game; bosses start at 1 on early stages and grow to 2!
+    const isPitFall = !isBossAttack && Math.abs(sourceX - p.x) < 1;
+    const baseCap = isPitFall ? 1 : isBossAttack ? this.getBossBaseDamage() : 1;
+    const tuneMult = isPitFall
+      ? 1
+      : isBossAttack
+        ? this.tuning.bossDamageMult
+        : this.tuning.enemyDamageMult;
+    let finalDamage = isPitFall
+      ? 1
+      : tuneMult <= 1
+        ? Math.min(baseCap, Math.max(1, damage))
+        : Math.max(1, damage);
     if (p.cursedGlassVulnerable) {
-      finalDamage = damage * 2;
+      finalDamage = finalDamage * 2;
       p.cursedGlassVulnerable = false;
     }
 
@@ -12253,11 +16650,31 @@ export class GameEngine {
       assassinations: this.assassinations,
       crits: this.crits,
       parries: this.parries,
+      parryCooldown: this.player.parryCooldownTimer,
       secretsFound: this.secretsFound,
       isCursedChamber: this.isCursedChamber,
       cursedDoorAvailable: this.interactables.some((it) => it.kind === 'cursed_door' && !it.used),
       tagPartner: this.player.tagPartner,
       tagPartnerCooldown: this.player.tagPartnerCooldown,
+      gold: this.gold,
+      raidGoldEarned: this.raidGoldEarned,
+      raidDamageDealt: this.raidDamageDealt,
+      raidElapsedSeconds: this.raidElapsedSeconds,
+      raidMapRelicsCollected: this.raidMapRelicsCollected,
+      raidScore: this.getRaidScoreAndRank().score,
+      raidRank: this.getRaidScoreAndRank().rank,
+      runHeroLocked: this.runHeroLocked,
+      testFreeHeroSwitch: this.testFreeHeroSwitch,
+      skin: this.player.skin,
+      unlockedSkins: [...this.characterUnlocks[this.player.characterId].skins],
+      unlockedSpecials: [...this.characterUnlocks[this.player.characterId].specials],
+      charPermanentWeapons: [...this.characterUnlocks[this.player.characterId].weapons],
+      charPermanentSpells: [...this.characterUnlocks[this.player.characterId].spells],
+      runRelicLevels: { ...this.player.runRelicLevels },
+      permAltarBonuses: { ...this.permAltarBonuses },
+      bossCharms: [...this.bossCharms],
+      activeCharmSynergies: this.getActiveCharmSynergies(),
+      lastBossCharmDrop: this.lastBossCharmDrop,
       progressPct,
       level: this.player.level,
       xp: this.player.xp,
@@ -12270,6 +16687,16 @@ export class GameEngine {
       shadowChainTimer: this.player.shadowChainTimer,
       shadowChainCount: this.player.shadowChainCount,
       minstrelSlowMo: this.player.minstrelZipActive,
+      grimoireElement: (['fire', 'glacial', 'storm', 'venom', 'shadow', 'light'] as const)[
+        this.player.grimoireElementIndex % 6
+      ],
+      grimoireOrbs: this.player.grimoireOrbs,
+      bouncesLeft: this.player.bounceActive
+        ? this.player.bouncesLeft
+        : 2 + Math.floor((1 + this.player.weaponDamageBonus) / 5),
+      maxBounces: 2 + Math.floor((1 + this.player.weaponDamageBonus) / 5),
+      collectedLoreIds: [...this.collectedLoreIds],
+      lastLoreToast: this.lastLoreToast ? { ...this.lastLoreToast } : null,
     };
   }
 }

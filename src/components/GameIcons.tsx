@@ -131,6 +131,64 @@ export function AbilityIcon({
           <circle cx="20" cy="21" r="1.4" fill="#e0e7ff" />
         </svg>
       );
+    case 'ricochet_snare':
+      return (
+        <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
+          <circle cx="6.5" cy="7.5" r="3" fill={color || '#10b981'} stroke="#a7f3d0" strokeWidth="1.4" />
+          <circle cx="17.5" cy="16.5" r="3" fill={color || '#10b981'} stroke="#a7f3d0" strokeWidth="1.4" />
+          <path d="M8.8 9.2C11.5 11.2 12.5 12.8 15.2 14.8" stroke="#6ee7b7" strokeWidth="2" strokeDasharray="2.5 2" />
+        </svg>
+      );
+    case 'aegis_slam':
+      return (
+        <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
+          <path d="M6 4H18V12C18 16.5 12 20 12 20C12 20 6 16.5 6 12V4Z" fill="#0284c7" fillOpacity="0.35" stroke={color || '#38bdf8'} strokeWidth="1.9" />
+          <path d="M3 19.5H21" stroke="#bae6fd" strokeWidth="2" strokeLinecap="round" />
+        </svg>
+      );
+    case 'solar_bloom':
+      return (
+        <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
+          <circle cx="12" cy="12" r="4.2" fill={color || '#fbbf24'} />
+          <path d="M12 2.5V6M12 18V21.5M2.5 12H6M18 12H21.5M5.2 5.2L7.7 7.7M16.3 16.3L18.8 18.8M18.8 5.2L16.3 7.7M7.7 16.3L5.2 18.8" stroke="#fde68a" strokeWidth="1.8" strokeLinecap="round" />
+        </svg>
+      );
+    case 'prism_beam':
+      return (
+        <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
+          <polygon points="3,17 9,7 15,17" fill="#164e63" stroke={color || '#22d3ee'} strokeWidth="1.6" />
+          <path d="M11 11L21.5 6M12 12.5L21.5 12.5M11 14L21.5 18.5" stroke="#67e8f9" strokeWidth="1.9" strokeLinecap="round" />
+        </svg>
+      );
+    case 'frost_nova':
+      return (
+        <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
+          <circle cx="12" cy="12" r="7.5" stroke={color || '#67e8f9'} strokeWidth="1.6" strokeDasharray="3 2" />
+          <path d="M12 4V20M4 12H20M6.3 6.3L17.7 17.7M17.7 6.3L6.3 17.7" stroke="#cffafe" strokeWidth="1.7" strokeLinecap="round" />
+        </svg>
+      );
+    case 'phantom_blades':
+      return (
+        <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
+          <path d="M4 17L13 5L11 14L4 17Z" fill={color || '#c084fc'} />
+          <path d="M10 19L19.5 7.5L17 16.5L10 19Z" fill="#e9d5ff" />
+        </svg>
+      );
+    case 'meteor_call':
+      return (
+        <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
+          <path d="M19 4L10 13" stroke="#fde047" strokeWidth="2.4" strokeLinecap="round" />
+          <path d="M15 4L8 11" stroke="#fb7185" strokeWidth="1.5" strokeLinecap="round" />
+          <circle cx="8.5" cy="15.5" r="4.5" fill={color || '#fb7185'} stroke="#fef08a" strokeWidth="1.5" />
+        </svg>
+      );
+    case 'blood_siphon':
+      return (
+        <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
+          <path d="M12 3C12 3 6.5 10.2 6.5 14.5C6.5 17.8 9 20.5 12 20.5C15 20.5 17.5 17.8 17.5 14.5C17.5 10.2 12 3 12 3Z" fill={color || '#dc2626'} stroke="#fca5a5" strokeWidth="1.4" />
+          <path d="M4 11C7 12.5 8 15 12 15C16 15 17 12.5 20 11" stroke="#f87171" strokeWidth="1.5" strokeLinecap="round" />
+        </svg>
+      );
   }
 }
 
@@ -319,6 +377,120 @@ export function WeaponIcon({
           <circle cx="17" cy="6.5" r="5" fill={color || '#60a5fa'} opacity="0.18" />
         </svg>
       );
+    case 'estoc_spear':
+      return (
+        <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
+          <path d="M4 20L19.5 4.5" stroke={color || '#38bdf8'} strokeWidth="2.1" strokeLinecap="square" />
+          <path d="M15.5 4.5H19.5V8.5" stroke="#e0f2fe" strokeWidth="1.8" strokeLinecap="square" />
+          <path d="M6.5 14.5L9.5 17.5" stroke="#cbd5e1" strokeWidth="2" />
+        </svg>
+      );
+    case 'short_blade':
+      return (
+        <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
+          <path d="M17.5 6.5L10.5 15.5L8.5 13.5L15.5 6.5H17.5Z" fill={color || '#cbd5e1'} />
+          <path d="M6.5 12.5L11.5 17.5M8 16L5.5 18.5" stroke="#94a3b8" strokeWidth="2.2" strokeLinecap="square" />
+        </svg>
+      );
+    case 'cleaver_greatsword':
+      return (
+        <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
+          <path d="M20 4L17 11L11 17L7 13L13 7L20 4Z" fill={color || '#fb923c'} stroke="#fef08a" strokeWidth="1" />
+          <path d="M5.5 12.5L11.5 18.5M7 17L4 20" stroke="#e2e8f0" strokeWidth="2.6" strokeLinecap="square" />
+        </svg>
+      );
+    case 'joust_lance':
+      return (
+        <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
+          <path d="M21 3L9 15L11 17L21 3Z" fill={color || '#facc15'} />
+          <path d="M7.5 12.5L11.5 16.5L9 19L5 15L7.5 12.5Z" fill="#78350f" stroke="#fde047" strokeWidth="1.2" />
+          <path d="M6.5 17.5L3.5 20.5" stroke="#e2e8f0" strokeWidth="2.2" />
+        </svg>
+      );
+    case 'arcane_wand':
+      return (
+        <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
+          <path d="M4.5 19.5L14.5 9.5" stroke="#a78bfa" strokeWidth="2.2" strokeLinecap="round" />
+          <path d="M16.5 4L17.5 6.8L20.3 7.8L17.5 8.8L16.5 11.6L15.5 8.8L12.7 7.8L15.5 6.8L16.5 4Z" fill={color || '#818cf8'} />
+        </svg>
+      );
+    case 'war_fans':
+      return (
+        <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
+          <path d="M12 19L4.5 9.5C7 6 17 6 19.5 9.5L12 19Z" fill={color || '#2dd4bf'} fillOpacity="0.35" stroke={color || '#2dd4bf'} strokeWidth="1.8" />
+          <path d="M12 19L8.5 7.5M12 19V6.5M12 19L15.5 7.5" stroke="#ccfbf1" strokeWidth="1.2" />
+        </svg>
+      );
+    case 'meteor_flail':
+      return (
+        <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
+          <path d="M4.5 19.5L9.5 14.5" stroke="#94a3b8" strokeWidth="2.4" strokeLinecap="square" />
+          <path d="M9.5 14.5C11 12 12 10.5 14.5 9.5" stroke="#cbd5e1" strokeWidth="1.6" strokeDasharray="2 2" />
+          <circle cx="16.5" cy="7.5" r="3.8" fill={color || '#ef4444'} stroke="#fef08a" strokeWidth="1.3" />
+        </svg>
+      );
+    case 'orbiting_grimoire':
+      return (
+        <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
+          <rect x="6" y="7" width="12" height="13" rx="1.5" fill="#312e81" stroke="#c084fc" strokeWidth="1.6" />
+          <circle cx="5" cy="7" r="2.2" fill="#f97316" />
+          <circle cx="19" cy="7" r="2.2" fill="#38bdf8" />
+          <circle cx="12" cy="3.5" r="2.2" fill="#fde047" />
+        </svg>
+      );
+    case 'burst_crossbow':
+      return (
+        <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
+          <path d="M4 17L19 7" stroke="#64748b" strokeWidth="2.4" strokeLinecap="square" />
+          <path d="M10 5C14 7.5 16.5 10.5 18 15" stroke={color || '#10b981'} strokeWidth="2" />
+          <path d="M15 6L21 5L18 10" stroke="#6ee7b7" strokeWidth="1.6" />
+        </svg>
+      );
+    case 'shield_mace':
+      return (
+        <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
+          <path d="M6 4H14V13C14 17 10 19.5 10 19.5C10 19.5 6 17 6 13V4Z" fill="#1e3a5f" stroke={color || '#38bdf8'} strokeWidth="1.8" />
+          <path d="M17.5 19V9" stroke="#cbd5e1" strokeWidth="2" />
+          <circle cx="17.5" cy="7.5" r="2.8" fill="#e2e8f0" stroke="#94a3b8" strokeWidth="1.2" />
+        </svg>
+      );
+    case 'kusarigama':
+      return (
+        <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
+          <path d="M5 19L10.5 10.5C12.5 7 16 5.5 19 6.5" stroke={color || '#f59e0b'} strokeWidth="2.2" strokeLinecap="round" />
+          <path d="M7.5 15.5C11 17 14.5 17 17 15" stroke="#cbd5e1" strokeWidth="1.5" strokeDasharray="2 2" />
+          <circle cx="18.5" cy="14.5" r="2.5" fill="#94a3b8" stroke="#fef08a" strokeWidth="1.1" />
+        </svg>
+      );
+    case 'twin_chakram':
+      return (
+        <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
+          <circle cx="10.5" cy="12" r="6.5" stroke={color || '#fbbf24'} strokeWidth="2.4" />
+          <circle cx="14.5" cy="12" r="5" stroke="#fb7185" strokeWidth="1.8" />
+        </svg>
+      );
+    case 'solar_glaive':
+      return (
+        <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
+          <path d="M5 19L19 5" stroke="#fbbf24" strokeWidth="2.2" strokeLinecap="round" />
+          <path d="M13 4C17.5 3.5 20.5 6.5 20 11C18.2 8.5 15.5 5.8 13 4Z" fill={color || '#f97316'} />
+          <path d="M11 20C6.5 20.5 3.5 17.5 4 13C5.8 15.5 8.5 18.2 11 20Z" fill="#fde047" />
+        </svg>
+      );
+    case 'prism_lance':
+      return (
+        <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
+          <path d="M4 20L19.5 4.5L13 17L4 20Z" fill={color || '#22d3ee'} stroke="#f472b6" strokeWidth="1.3" />
+          <path d="M7 17L17.5 6.5" stroke="#ffffff" strokeWidth="1.4" />
+        </svg>
+      );
+    case 'prism_gauntlets':
+      return (
+        <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
+          <polygon points="5,11 10,6 18,8 19,15 12,19 6,16" fill={color || '#e879f9'} fillOpacity="0.35" stroke="#22d3ee" strokeWidth="1.8" />
+          <path d="M8 12H16M12 8V16" stroke="#ffffff" strokeWidth="1.5" />
+        </svg>
+      );
   }
 }
 
@@ -484,13 +656,100 @@ export function WeaponSkillIcon({
         </svg>
       );
     case 'spire_staff':
-      // Repulsion Nova: rings pushing outward
+    case 'arcane_wand':
+      // Repulsion Nova / Arcane Fan: rings pushing outward
       return (
         <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
           <circle cx="12" cy="12" r="3" fill="#e0e7ff" />
           <circle cx="12" cy="12" r="6.2" stroke="#60a5fa" strokeWidth="1.8" />
           <circle cx="12" cy="12" r="9.5" stroke="#818cf8" strokeWidth="1.4" opacity="0.7" />
           <path d="M12 1.5V4M12 20V22.5M1.5 12H4M20 12H22.5" stroke="#e0e7ff" strokeWidth="1.5" />
+        </svg>
+      );
+    case 'estoc_spear':
+    case 'joust_lance':
+      return (
+        <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
+          <path d="M3 12H19.5" stroke={id === 'joust_lance' ? '#facc15' : '#38bdf8'} strokeWidth="2.4" strokeLinecap="square" />
+          <path d="M14.5 7L20.5 12L14.5 17" stroke="#f8fafc" strokeWidth="2" strokeLinecap="square" />
+        </svg>
+      );
+    case 'short_blade':
+    case 'cleaver_greatsword':
+      return (
+        <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
+          <path d="M4.5 18.5C6.5 10.5 12.5 5.5 20.5 4.5C17.5 10.5 14 14.8 8 19.5L4.5 18.5Z" fill={id === 'cleaver_greatsword' ? '#fb923c' : '#cbd5e1'} />
+        </svg>
+      );
+    case 'war_fans':
+      return (
+        <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
+          <path d="M5 10C7 5.5 12.5 4 17.5 6.5M19 14C17 18.5 11.5 20 6.5 17.5" stroke="#2dd4bf" strokeWidth="2.2" strokeLinecap="round" />
+          <circle cx="12" cy="12" r="2.2" fill="#ccfbf1" />
+        </svg>
+      );
+    case 'meteor_flail':
+      return (
+        <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
+          <circle cx="12" cy="13" r="4" fill="#ef4444" stroke="#fef08a" strokeWidth="1.6" />
+          <path d="M3 19L7 15.5L10 19H14L17 15.5L21 19" stroke="#f97316" strokeWidth="2" strokeLinecap="square" />
+        </svg>
+      );
+    case 'orbiting_grimoire':
+      return (
+        <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
+          <circle cx="12" cy="12" r="7" stroke="#c084fc" strokeWidth="1.6" strokeDasharray="4 3" />
+          <circle cx="12" cy="5" r="2.4" fill="#f97316" />
+          <circle cx="6" cy="15.5" r="2.4" fill="#38bdf8" />
+          <circle cx="18" cy="15.5" r="2.4" fill="#fde047" />
+        </svg>
+      );
+    case 'burst_crossbow':
+      return (
+        <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
+          <path d="M4 12H20M6 7L19 9.5M6 17L19 14.5" stroke="#34d399" strokeWidth="2" strokeLinecap="round" />
+        </svg>
+      );
+    case 'shield_mace':
+      return (
+        <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
+          <path d="M8 4H18V13.5C18 17.5 13 20 13 20C13 20 8 17.5 8 13.5V4Z" fill="#0284c7" stroke="#bae6fd" strokeWidth="1.8" />
+          <path d="M3 8H6M2 12H6M3 16H6" stroke="#7dd3fc" strokeWidth="1.8" />
+        </svg>
+      );
+    case 'kusarigama':
+      return (
+        <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
+          <circle cx="12" cy="12" r="7.5" stroke="#f59e0b" strokeWidth="2" strokeDasharray="3 3" />
+          <path d="M12 4.5L15 8M12 19.5L9 16" stroke="#fef08a" strokeWidth="2" />
+        </svg>
+      );
+    case 'twin_chakram':
+      return (
+        <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
+          <circle cx="12" cy="12" r="7.5" stroke="#fbbf24" strokeWidth="2.2" />
+          <path d="M12 3V7M12 17V21M3 12H7M17 12H21" stroke="#fb7185" strokeWidth="1.8" />
+        </svg>
+      );
+    case 'solar_glaive':
+      return (
+        <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
+          <circle cx="12" cy="12" r="7.5" stroke="#f97316" strokeWidth="2.2" strokeDasharray="6 3" />
+          <path d="M5 12H19M12 5L15 9M12 19L9 15" stroke="#fde047" strokeWidth="2" strokeLinecap="round" />
+        </svg>
+      );
+    case 'prism_lance':
+      return (
+        <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
+          <rect x="4" y="4" width="16" height="16" stroke="#22d3ee" strokeWidth="2" fill="rgba(34,211,238,0.18)" />
+          <path d="M6 16L13 8L18 14" stroke="#f472b6" strokeWidth="2" strokeLinecap="round" />
+        </svg>
+      );
+    case 'prism_gauntlets':
+      return (
+        <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
+          <path d="M4 4L20 20M20 4L4 20" stroke="#e879f9" strokeWidth="2.2" strokeLinecap="round" />
+          <circle cx="12" cy="12" r="4" fill="#22d3ee" stroke="#ffffff" strokeWidth="1.4" />
         </svg>
       );
   }
@@ -579,6 +838,22 @@ export function SpecialItemIcon({
           <path d="M18 4.5C20 6.5 20.5 9.5 19.5 12.5" stroke="#fde047" strokeWidth="1.8" strokeLinecap="round" />
           <path d="M12.5 11.5L15 13" stroke="#e5a93c" strokeWidth="1.8" strokeLinecap="round" />
           <circle cx="7.5" cy="16.5" r="1.3" fill="#bae6fd" />
+        </svg>
+      );
+    case 'smoke_vial':
+      return (
+        <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
+          <circle cx="12" cy="14" r="6" fill="#334155" stroke="#94a3b8" strokeWidth="1.6" />
+          <path d="M10 4.5H14V8H10V4.5Z" fill="#64748b" />
+          <path d="M7 11C8.5 9.5 10.5 9.5 12 10.5C13.5 9.5 15.5 9.5 17 11" stroke="#e2e8f0" strokeWidth="1.5" strokeLinecap="round" />
+        </svg>
+      );
+    case 'fire_bomb':
+      return (
+        <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
+          <circle cx="11.5" cy="14" r="6" fill="#7c2d12" stroke="#f97316" strokeWidth="1.7" />
+          <path d="M14.5 9L17 6.5" stroke="#cbd5e1" strokeWidth="1.8" strokeLinecap="round" />
+          <path d="M17.5 3.5L19 5.5L21 5L19.5 7L20.5 9L18 8L16 9.5L17 7L15.5 5.5L17.5 3.5Z" fill="#fde047" />
         </svg>
       );
   }

@@ -1764,6 +1764,671 @@ export function drawDetailedEnemySprite(
       ctx.restore();
       break;
     }
+
+    // =========================================================================
+    // 4 NEW RAID BIG BOSSES — BESPOKE ELABORATE SILHOUETTES
+    // =========================================================================
+    case 'boss_mushroom_sovereign': {
+      // Mycelior · The Spore Sovereign (Colossal Bioluminescent Toadstool Monarch!)
+      const sway = Math.sin(t * 2.5) * 4 * scale;
+      const glow = enemy.enraged ? '#f472b6' : '#34d399';
+      const capCol = pick('#6d28d9');
+      const stalkCol = pick('#e2e8f0');
+
+      // Rooted Fungal Tendrils & Spore Cape
+      drawFlowingCape(ctx, -w * 0.08, -h * 0.65 + bob, w * 1.15, h * 0.65, t, '#3b0764', glow);
+      drawBipedLegs(ctx, -h * 0.25, w * 0.9, stridePhase * 0.7, isMoving, isAirborne, '#cbd5e1', '#475569', 10 * scale);
+
+      // Thick Mycelial Stalk Torso with glowing cyan gills
+      roundedPoly(ctx, [[-w * 0.34, -h * 0.72 + bob], [w * 0.34, -h * 0.72 + bob], [w * 0.42, -h * 0.18], [-w * 0.42, -h * 0.18]], stalkCol, glow, 2);
+      ctx.fillStyle = glow;
+      ctx.globalAlpha = 0.65;
+      ctx.fillRect(-w * 0.22, -h * 0.56 + bob, w * 0.44, h * 0.16);
+      ctx.globalAlpha = 1;
+
+      // Giant Royal Bioluminescent Mushroom Dome Crown!
+      ctx.fillStyle = capCol;
+      ctx.strokeStyle = glow;
+      ctx.lineWidth = 3 * scale;
+      ctx.beginPath();
+      ctx.ellipse(sway, -h * 0.84 + bob, w * 0.78, h * 0.32, 0, Math.PI, 0);
+      ctx.lineTo(w * 0.78 + sway, -h * 0.72 + bob);
+      ctx.quadraticCurveTo(sway, -h * 0.64 + bob, -w * 0.78 + sway, -h * 0.72 + bob);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      // Glowing Spore Spots across the Toadstool Crown
+      for (const [sx, sy, sr] of [[-0.44, -0.94, 7], [-0.14, -1.04, 8.5], [0.22, -0.98, 7.5], [0.48, -0.88, 6]]) {
+        drawEyeGlow(ctx, sx * w + sway, sy * h + bob, sr * scale, glow);
+      }
+      // Three luminous eyes beneath the cap gill shadow
+      drawEyeGlow(ctx, -w * 0.12, -h * 0.68 + bob, 4.5 * scale, '#fde047');
+      drawEyeGlow(ctx, w * 0.14, -h * 0.68 + bob, 5.2 * scale, '#fde047');
+      drawEyeGlow(ctx, 0, -h * 0.63 + bob, 3.5 * scale, glow);
+
+      // Fungal Spore-Lantern Staff
+      ctx.save();
+      ctx.translate(w * 0.46, -h * 0.5 + bob + windupLift * 0.75);
+      ctx.rotate(isCharging ? -0.58 : isSwinging ? 0.85 : 0.12);
+      limb(ctx, 0, h * 0.38, 0, -h * 0.54, 6.5 * scale, '#78350f');
+      drawEyeGlow(ctx, 0, -h * 0.58, 11 * scale, glow);
+      ctx.restore();
+      break;
+    }
+
+    case 'boss_sand_pharaoh': {
+      // Khafra-Ra · The Sun-Scarab Pharaoh (Gilded Desert Colossus!)
+      const hover = Math.sin(t * 2.2) * 3.5 * scale;
+      const gold = '#fbbf24';
+      const lapis = pick('#1d4ed8');
+      const obs = pick('#1c1917');
+
+      // Levitating Radiant Solar Scarab Halo behind head!
+      ctx.save();
+      ctx.translate(0, -h * 0.94 + hover);
+      ctx.rotate(t * 0.75);
+      ctx.strokeStyle = enemy.enraged ? '#fef08a' : gold;
+      ctx.lineWidth = 4 * scale;
+      ctx.beginPath();
+      ctx.arc(0, 0, w * 0.58, 0, Math.PI * 2);
+      ctx.stroke();
+      for (let i = 0; i < 6; i++) {
+        const a = (i * Math.PI) / 3;
+        ctx.fillStyle = '#fef08a';
+        ctx.beginPath();
+        ctx.moveTo(Math.cos(a) * w * 0.74, Math.sin(a) * w * 0.74);
+        ctx.lineTo(Math.cos(a + 0.14) * w * 0.56, Math.sin(a + 0.14) * w * 0.56);
+        ctx.lineTo(Math.cos(a - 0.14) * w * 0.56, Math.sin(a - 0.14) * w * 0.56);
+        ctx.closePath();
+        ctx.fill();
+      }
+      ctx.restore();
+
+      drawFlowingCape(ctx, -w * 0.08, -h * 0.8 + hover, w * 1.2, h * 0.8, t, '#78350f', gold);
+      drawBipedLegs(ctx, -h * 0.28, w, stridePhase * 0.7, isMoving, isAirborne, obs, gold, 10 * scale);
+
+      // Sarcophagus Plate & Golden Pectoral Collar
+      roundedPoly(ctx, [[-w * 0.44, -h * 0.8 + hover], [w * 0.44, -h * 0.8 + hover], [w * 0.34, -h * 0.22], [-w * 0.34, -h * 0.22]], obs, gold, 2.5);
+      ctx.fillStyle = lapis;
+      ctx.fillRect(-w * 0.34, -h * 0.74 + hover, w * 0.68, h * 0.12);
+      drawEyeGlow(ctx, 0, -h * 0.62 + hover, 7 * scale, '#f59e0b');
+
+      // Striped Gold & Lapis Nemes Pharaoh Headdress + Jackal Crown
+      roundedPoly(ctx, [[-w * 0.46, -h * 0.8 + hover], [-w * 0.34, -h * 1.1 + hover], [w * 0.34, -h * 1.1 + hover], [w * 0.46, -h * 0.8 + hover]], gold, lapis, 2.5);
+      roundedPoly(ctx, [[-w * 0.22, -h * 1.04 + hover], [w * 0.22, -h * 1.04 + hover], [w * 0.2, -h * 0.82 + hover], [-w * 0.2, -h * 0.82 + hover]], obs);
+      // Tall Jackal Ears
+      roundedPoly(ctx, [[-w * 0.22, -h * 1.08 + hover], [-w * 0.16, -h * 1.32 + hover], [-w * 0.06, -h * 1.08 + hover]], gold);
+      roundedPoly(ctx, [[w * 0.06, -h * 1.08 + hover], [w * 0.16, -h * 1.32 + hover], [w * 0.22, -h * 1.08 + hover]], gold);
+      drawEyeGlow(ctx, w * 0.1, -h * 0.93 + hover, 5 * scale, '#38bdf8');
+
+      // Curved Golden Sun-Khopesh Greatsword
+      ctx.save();
+      ctx.translate(w * 0.44, -h * 0.56 + hover + windupLift * 0.75);
+      ctx.rotate(isCharging ? -0.64 : isSwinging ? 0.92 : 0.16);
+      ctx.strokeStyle = gold;
+      ctx.lineWidth = 8 * scale;
+      ctx.beginPath();
+      ctx.moveTo(0, 14 * scale);
+      ctx.lineTo(0, -h * 0.28);
+      ctx.quadraticCurveTo(w * 0.28, -h * 0.48, -w * 0.06, -h * 0.72);
+      ctx.stroke();
+      ctx.restore();
+      break;
+    }
+
+    case 'boss_alien_archon': {
+      // Xylar-9 · The Void Archon (Floating Cosmic Biomechanical Dreadnought!)
+      const hover = Math.sin(t * 3.4) * 8 * scale;
+      const cyan = enemy.enraged ? '#e879f9' : '#22d3ee';
+      const hull = pick('#0f172a');
+
+      // 4 Orbiting Plasma Pylon Pods!
+      for (let i = 0; i < 4; i++) {
+        const a = t * 1.8 + (i * Math.PI) / 2;
+        const px = Math.cos(a) * w * 0.78;
+        const py = -h * 0.62 + hover + Math.sin(a) * h * 0.22;
+        ctx.fillStyle = '#1e293b';
+        ctx.strokeStyle = cyan;
+        ctx.lineWidth = 2 * scale;
+        ctx.beginPath();
+        ctx.arc(px, py, 8 * scale, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        drawEyeGlow(ctx, px, py, 4.5 * scale, cyan);
+      }
+
+      // Levitating Energy Tentacles beneath carapace
+      ctx.strokeStyle = cyan;
+      ctx.lineWidth = 4 * scale;
+      for (let i = -2; i <= 2; i++) {
+        const tx = i * w * 0.14;
+        const wave = Math.sin(t * 5 + i * 1.4) * 14 * scale;
+        ctx.beginPath();
+        ctx.moveTo(tx, -h * 0.34 + hover);
+        ctx.quadraticCurveTo(tx + wave, -h * 0.14 + hover, tx - wave * 0.6, 6 + hover);
+        ctx.stroke();
+      }
+
+      // Sleek Biomechanical Exo-Torso + Singularity Core
+      roundedPoly(ctx, [[-w * 0.42, -h * 0.82 + hover], [w * 0.42, -h * 0.82 + hover], [w * 0.24, -h * 0.3 + hover], [-w * 0.24, -h * 0.3 + hover]], hull, cyan, 2.4);
+      drawEyeGlow(ctx, 0, -h * 0.58 + hover, 11 * scale, cyan);
+
+      // Elongated Crystalline Alien Dome Cranium
+      ctx.fillStyle = '#1e1b4b';
+      ctx.strokeStyle = cyan;
+      ctx.lineWidth = 2.5 * scale;
+      ctx.beginPath();
+      ctx.ellipse(0, -h * 0.98 + hover, w * 0.32, h * 0.24, -0.14, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      // Glowing Visor Slit
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(-w * 0.12, -h * 0.96 + hover, w * 0.34, 5 * scale);
+      drawEyeGlow(ctx, w * 0.12, -h * 0.94 + hover, 6 * scale, cyan);
+
+      // Twin Plasma Energy Blades
+      ctx.save();
+      ctx.translate(w * 0.42, -h * 0.62 + hover + windupLift * 0.6);
+      ctx.rotate(isCharging ? -0.52 : isSwinging ? 0.88 : 0.2);
+      roundedPoly(ctx, [[-4 * scale, 10 * scale], [4 * scale, 10 * scale], [10 * scale, -h * 0.58], [0, -h * 0.72], [-6 * scale, -h * 0.54]], cyan, '#ffffff', 1.8);
+      ctx.restore();
+      break;
+    }
+
+    case 'boss_dragon_crane': {
+      // Shen-Luan · The Jade Dragon-Crane (Celestial Winged Sovereign!)
+      const hover = Math.sin(t * 3.0) * 9 * scale;
+      const flap = Math.sin(t * 7.2) * 20 * scale;
+      const jade = enemy.enraged ? '#fde047' : '#10b981';
+      const cream = pick('#f8fafc');
+      const gold = '#fbbf24';
+
+      // Celestial Jade Cloud Halo Ring
+      ctx.save();
+      ctx.translate(0, -h * 0.78 + hover);
+      ctx.rotate(-t * 0.9);
+      ctx.strokeStyle = gold;
+      ctx.lineWidth = 3.5 * scale;
+      ctx.setLineDash([12, 8]);
+      ctx.beginPath();
+      ctx.arc(0, 0, w * 0.7, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.restore();
+
+      // Enormous Feathered Dragon-Crane Wings
+      drawBatWing(ctx, -w * 0.14, -h * 0.68 + hover, -1, w * 1.38, h * 0.72, flap, cream, jade);
+      drawBatWing(ctx, w * 0.14, -h * 0.68 + hover, 1, w * 1.38, h * 0.72, flap, cream, jade);
+
+      // Sweeping Ribbon Tail Feathers
+      drawFlowingCape(ctx, -w * 0.08, -h * 0.5 + hover, w * 1.1, h * 0.72, t * 1.4, jade, gold);
+
+      // Regal Jade-Scaled Crane Body
+      roundedPoly(ctx, [[-w * 0.34, -h * 0.76 + hover], [w * 0.34, -h * 0.76 + hover], [w * 0.26, -h * 0.24 + hover], [-w * 0.26, -h * 0.24 + hover]], cream, gold, 2.2);
+      drawEyeGlow(ctx, 0, -h * 0.56 + hover, 8.5 * scale, jade);
+
+      // Sinuous Dragon-Crane Neck, Crimson Crest, Antler Horns & Golden Beak
+      ctx.strokeStyle = cream;
+      ctx.lineWidth = 11 * scale;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(0, -h * 0.74 + hover);
+      ctx.quadraticCurveTo(-w * 0.12, -h * 0.96 + hover, w * 0.1, -h * 1.12 + hover);
+      ctx.stroke();
+      // Golden Dragon Antlers + Crimson Crane Crown
+      roundedPoly(ctx, [[0, -h * 1.16 + hover], [-w * 0.16, -h * 1.34 + hover], [-w * 0.04, -h * 1.16 + hover]], gold);
+      roundedPoly(ctx, [[w * 0.06, -h * 1.16 + hover], [w * 0.2, -h * 1.32 + hover], [w * 0.14, -h * 1.14 + hover]], '#ef4444');
+      // Sharp Golden Beak
+      roundedPoly(ctx, [[w * 0.14, -h * 1.16 + hover], [w * 0.44, -h * 1.1 + hover], [w * 0.14, -h * 1.04 + hover]], gold);
+      drawEyeGlow(ctx, w * 0.14, -h * 1.12 + hover, 4.5 * scale, '#ef4444');
+
+      // Orbiting Jade Pearl Orb!
+      const orbX = w * 0.52 + Math.cos(t * 4) * 10 * scale;
+      const orbY = -h * 0.82 + hover + Math.sin(t * 4) * 10 * scale;
+      drawEyeGlow(ctx, orbX, orbY, 10 * scale, jade);
+      break;
+    }
+
+    // ===== MUSHROOM KINGDOM BESPOKE ENEMIES =====
+    case 'spore_hopper': {
+      const squash = enemy.onGround ? Math.sin(t * 9) * 0.08 : -0.14;
+      const cap = pick('#ec4899');
+      const stem = pick('#fef3c7');
+      // Bouncy stem body
+      ctx.fillStyle = stem;
+      ctx.fillRect(-w * 0.24, -h * (0.55 - squash), w * 0.48, h * (0.55 - squash));
+      // Spotted magenta mushroom cap
+      ctx.fillStyle = cap;
+      ctx.beginPath();
+      ctx.ellipse(0, -h * (0.58 - squash), w * 0.56, h * 0.36, 0, Math.PI, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#fdf2f8';
+      ctx.beginPath();
+      ctx.arc(-w * 0.22, -h * 0.72, 3.8 * scale, 0, Math.PI * 2);
+      ctx.arc(w * 0.16, -h * 0.76, 4.4 * scale, 0, Math.PI * 2);
+      ctx.fill();
+      drawEyeGlow(ctx, w * 0.1, -h * 0.36, 3.2 * scale, '#a3e635');
+      break;
+    }
+
+    case 'mycelium_spitter': {
+      const cap = pick('#84cc16');
+      const stalk = pick('#3f6212');
+      // Rooted fungal stalk
+      roundedPoly(ctx, [[-w * 0.32, 0], [-w * 0.2, -h * 0.68], [w * 0.2, -h * 0.68], [w * 0.32, 0]], stalk);
+      // Glowing toxic funnel cap
+      ctx.fillStyle = cap;
+      ctx.beginPath();
+      ctx.ellipse(0, -h * 0.72, w * 0.52, h * 0.26, 0, 0, Math.PI * 2);
+      ctx.fill();
+      drawEyeGlow(ctx, w * 0.14, -h * 0.72, 4.5 * scale, '#fef08a');
+      break;
+    }
+
+    case 'cap_brute': {
+      const cap = pick('#7e22ce');
+      const body = pick('#e2e8f0');
+      // Hulking fungal brute legs & torso
+      ctx.fillStyle = body;
+      ctx.fillRect(-w * 0.34, -h * 0.68, w * 0.68, h * 0.68);
+      // Massive Armored Toadstool Shield-Cap!
+      ctx.fillStyle = cap;
+      ctx.beginPath();
+      ctx.ellipse(0, -h * 0.72, w * 0.64, h * 0.34, 0, Math.PI, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#c084fc';
+      ctx.lineWidth = 2.5 * scale;
+      ctx.stroke();
+      drawEyeGlow(ctx, w * 0.16, -h * 0.48, 4.2 * scale, '#f43f5e');
+      break;
+    }
+
+    // ===== SAND FORTRESS BESPOKE ENEMIES =====
+    case 'dune_stalker': {
+      const cloth = pick('#d97706');
+      const wrap = pick('#fef3c7');
+      // Nimble desert nomad robes + flowing scarf
+      drawFlowingCape(ctx, -w * 0.14, -h * 0.76, w * 0.62, h * 0.48, t * 2, cloth, '#fbbf24');
+      roundedPoly(ctx, [[-w * 0.26, 0], [-w * 0.22, -h * 0.76], [w * 0.22, -h * 0.76], [w * 0.28, 0]], '#78350f');
+      // Turban hood
+      ctx.fillStyle = wrap;
+      ctx.beginPath();
+      ctx.arc(0, -h * 0.84, w * 0.3, 0, Math.PI * 2);
+      ctx.fill();
+      drawEyeGlow(ctx, w * 0.12, -h * 0.84, 3 * scale, '#fbbf24');
+      // Curved golden scimitar
+      ctx.strokeStyle = '#fde68a';
+      ctx.lineWidth = 3.2 * scale;
+      ctx.beginPath();
+      ctx.arc(w * 0.28, -h * 0.56, w * 0.36, -Math.PI * 0.4, Math.PI * 0.35);
+      ctx.stroke();
+      break;
+    }
+
+    case 'scarab_swarmer': {
+      const shell = pick('#eab308');
+      const dark = '#451a03';
+      const skitter = Math.sin(t * 22) * 3 * scale;
+      // Low armored golden beetle carapace
+      ctx.fillStyle = dark;
+      ctx.fillRect(-w * 0.42, -h * 0.26 + skitter * 0.3, w * 0.84, h * 0.24);
+      ctx.fillStyle = shell;
+      ctx.beginPath();
+      ctx.ellipse(0, -h * 0.44, w * 0.48, h * 0.42, 0, Math.PI, Math.PI * 2);
+      ctx.fill();
+      // Mandibles & glowing ruby eyes
+      drawEyeGlow(ctx, w * 0.34, -h * 0.34, 3 * scale, '#ef4444');
+      break;
+    }
+
+    case 'sun_acolyte': {
+      const hover = Math.sin(t * 3.5) * 6 * scale;
+      const robe = pick('#b45309');
+      const gold = '#fde047';
+      // Floating solar disk behind head
+      ctx.strokeStyle = gold;
+      ctx.lineWidth = 2.4 * scale;
+      ctx.beginPath();
+      ctx.arc(0, -h * 0.82 + hover, w * 0.38, 0, Math.PI * 2);
+      ctx.stroke();
+      // Levitating golden robes
+      roundedPoly(ctx, [[0, -h * 0.92 + hover], [w * 0.34, -h * 0.14 + hover], [-w * 0.34, -h * 0.14 + hover]], robe, gold, 1.5);
+      drawEyeGlow(ctx, w * 0.1, -h * 0.74 + hover, 3.6 * scale, '#fef08a');
+      break;
+    }
+
+    // ===== ALIEN SHIP BESPOKE ENEMIES =====
+    case 'plasma_drone': {
+      const hover = Math.sin(t * 5) * 5 * scale;
+      const hull = pick('#0f172a');
+      const cyan = '#38bdf8';
+      // Sleek octagonal hovering plasma drone
+      roundedPoly(ctx, [[-w * 0.46, -h * 0.5 + hover], [0, -h * 0.92 + hover], [w * 0.46, -h * 0.5 + hover], [0, -h * 0.12 + hover]], hull, cyan, 2.2);
+      drawEyeGlow(ctx, w * 0.16, -h * 0.52 + hover, 5 * scale, '#38bdf8');
+      break;
+    }
+
+    case 'void_stalker': {
+      const shell = pick('#3b0764');
+      const neon = '#c084fc';
+      // Tall hunched xeno-stalker with glowing plasma claws
+      roundedPoly(ctx, [[-w * 0.24, 0], [-w * 0.3, -h * 0.72], [w * 0.24, -h * 0.88], [w * 0.34, -h * 0.48], [w * 0.18, 0]], shell, neon, 1.8);
+      drawEyeGlow(ctx, w * 0.22, -h * 0.76, 3.6 * scale, '#38bdf8');
+      // Energy wrist blades
+      ctx.strokeStyle = '#e879f9';
+      ctx.lineWidth = 3 * scale;
+      ctx.beginPath();
+      ctx.moveTo(w * 0.14, -h * 0.5);
+      ctx.lineTo(w * 0.62, -h * 0.44);
+      ctx.stroke();
+      break;
+    }
+
+    case 'mech_turret': {
+      const armor = pick('#334155');
+      const trim = '#f43f5e';
+      // Heavy tripod base + armored rail cannon housing
+      roundedPoly(ctx, [[-w * 0.44, 0], [-w * 0.32, -h * 0.38], [w * 0.32, -h * 0.38], [w * 0.44, 0]], '#1e293b');
+      roundedPoly(ctx, [[-w * 0.36, -h * 0.84], [w * 0.36, -h * 0.84], [w * 0.36, -h * 0.36], [-w * 0.36, -h * 0.36]], armor, trim, 2);
+      // Twin laser rail barrel
+      ctx.fillStyle = '#0f172a';
+      ctx.fillRect(w * 0.24, -h * 0.68, w * 0.42, 8 * scale);
+      drawEyeGlow(ctx, w * 0.18, -h * 0.64, 4.5 * scale, trim);
+      break;
+    }
+
+    // ===== DRAGON CRANE BESPOKE ENEMIES =====
+    case 'crane_disciple': {
+      const robe = pick('#f8fafc');
+      const jade = '#10b981';
+      // Flowing martial sash & conical bamboo hat
+      drawFlowingCape(ctx, -w * 0.12, -h * 0.7, w * 0.56, h * 0.45, t * 2.4, jade, '#fde047');
+      roundedPoly(ctx, [[-w * 0.24, 0], [-w * 0.2, -h * 0.78], [w * 0.2, -h * 0.78], [w * 0.24, 0]], robe, jade, 1.6);
+      // Bamboo conical hat
+      roundedPoly(ctx, [[-w * 0.48, -h * 0.82], [0, -h * 1.06], [w * 0.48, -h * 0.82]], '#d97706', '#fde68a', 1.4);
+      drawEyeGlow(ctx, w * 0.12, -h * 0.78, 2.8 * scale, '#34d399');
+      break;
+    }
+
+    case 'jade_sentinel': {
+      const hover = Math.sin(t * 3.8) * 6 * scale;
+      const jade = pick('#059669');
+      const gold = '#fbbf24';
+      // Floating carved emerald lantern spirit
+      roundedPoly(ctx, [[0, -h * 0.96 + hover], [w * 0.38, -h * 0.54 + hover], [0, -h * 0.12 + hover], [-w * 0.38, -h * 0.54 + hover]], jade, gold, 2);
+      drawEyeGlow(ctx, 0, -h * 0.54 + hover, 5.5 * scale, '#a7f3d0');
+      break;
+    }
+
+    case 'cloud_wyrmling': {
+      const wave = Math.sin(t * 5.2) * 7 * scale;
+      const teal = pick('#14b8a6');
+      const gold = '#fbbf24';
+      // Sinuous winged sky-drake silhouette
+      drawBatWing(ctx, -w * 0.08, -h * 0.58 + wave, -1, w * 0.72, h * 0.45, Math.sin(t * 10) * 10 * scale, '#f0fdfa', teal);
+      drawBatWing(ctx, w * 0.08, -h * 0.58 + wave, 1, w * 0.72, h * 0.45, Math.sin(t * 10) * 10 * scale, '#f0fdfa', teal);
+      ctx.strokeStyle = teal;
+      ctx.lineWidth = 7 * scale;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(-w * 0.48, -h * 0.4 + wave);
+      ctx.quadraticCurveTo(0, -h * 0.74 + wave, w * 0.42, -h * 0.58 + wave);
+      ctx.stroke();
+      drawEyeGlow(ctx, w * 0.36, -h * 0.62 + wave, 3.6 * scale, gold);
+      break;
+    }
+
+    case 'dwarf_miner': {
+      const stride = Math.sin(t * 7.5) * 4.5 * scale;
+      const iron = pick('#475569');
+      const amethyst = '#a855f7';
+      const beard = '#d6c7a9';
+      // Stocky dwarven boots
+      ctx.fillStyle = '#1e293b';
+      ctx.fillRect(-w * 0.28 + stride * 0.5, -h * 0.22, w * 0.22, h * 0.22);
+      ctx.fillRect(w * 0.06 - stride * 0.5, -h * 0.22, w * 0.22, h * 0.22);
+      // Heavy iron mining vest + shoulder pad with amethyst crystal growth
+      ctx.fillStyle = iron;
+      ctx.fillRect(-w * 0.36, -h * 0.68, w * 0.72, h * 0.48);
+      ctx.fillStyle = '#92400e';
+      ctx.fillRect(-w * 0.36, -h * 0.44, w * 0.72, h * 0.08);
+      // Braided beard
+      ctx.fillStyle = beard;
+      ctx.beginPath();
+      ctx.moveTo(-w * 0.22, -h * 0.64);
+      ctx.lineTo(w * 0.22, -h * 0.64);
+      ctx.lineTo(w * 0.14, -h * 0.34);
+      ctx.lineTo(-w * 0.14, -h * 0.34);
+      ctx.closePath();
+      ctx.fill();
+      // Iron miner helm with glowing corrupted crystal lamp
+      ctx.fillStyle = '#334155';
+      ctx.beginPath();
+      ctx.arc(0, -h * 0.74, w * 0.34, Math.PI, 0);
+      ctx.fill();
+      ctx.fillRect(-w * 0.38, -h * 0.75, w * 0.76, h * 0.08);
+      // Glowing amethyst crystal erupting from helm & shoulder
+      ctx.fillStyle = amethyst;
+      ctx.beginPath();
+      ctx.moveTo(w * 0.12, -h * 0.88);
+      ctx.lineTo(w * 0.3, -h * 0.98);
+      ctx.lineTo(w * 0.28, -h * 0.76);
+      ctx.closePath();
+      ctx.fill();
+      drawEyeGlow(ctx, w * 0.14, -h * 0.69, 3.2 * scale, '#e879f9');
+      // Heavy crystal-tipped pickaxe
+      ctx.save();
+      ctx.translate(w * 0.24, -h * 0.5);
+      ctx.rotate(isCharging ? -1.1 : 0.2 + Math.sin(t * 5) * 0.12);
+      ctx.strokeStyle = '#78350f';
+      ctx.lineWidth = 4 * scale;
+      ctx.beginPath();
+      ctx.moveTo(0, 8 * scale);
+      ctx.lineTo(0, -24 * scale);
+      ctx.stroke();
+      ctx.strokeStyle = '#c084fc';
+      ctx.lineWidth = 4.5 * scale;
+      ctx.beginPath();
+      ctx.moveTo(-14 * scale, -18 * scale);
+      ctx.quadraticCurveTo(0, -28 * scale, 15 * scale, -16 * scale);
+      ctx.stroke();
+      ctx.restore();
+      break;
+    }
+
+    case 'dwarf_sapper': {
+      const bob = Math.abs(Math.sin(t * 8)) * 3 * scale;
+      const coat = pick('#581c87');
+      // Sturdy boots & heavy leather apron
+      ctx.fillStyle = '#1f2937';
+      ctx.fillRect(-w * 0.26, -h * 0.22, w * 0.2, h * 0.22);
+      ctx.fillRect(w * 0.08, -h * 0.22, w * 0.2, h * 0.22);
+      ctx.fillStyle = coat;
+      ctx.fillRect(-w * 0.34, -h * 0.66 - bob, w * 0.68, h * 0.46);
+      // Explosive crystal powder keg strapped on back
+      ctx.fillStyle = '#7c2d12';
+      ctx.fillRect(-w * 0.46, -h * 0.74 - bob, w * 0.3, h * 0.4);
+      ctx.fillStyle = '#f59e0b';
+      ctx.fillRect(-w * 0.46, -h * 0.66 - bob, w * 0.3, h * 0.06);
+      ctx.fillRect(-w * 0.46, -h * 0.48 - bob, w * 0.3, h * 0.06);
+      // Sparking fuse above keg
+      drawEyeGlow(ctx, -w * 0.32, -h * 0.82 - bob, 3.6 * scale, '#facc15');
+      // Brass goggles & hood
+      ctx.fillStyle = '#312e81';
+      ctx.beginPath();
+      ctx.arc(0, -h * 0.74 - bob, w * 0.3, Math.PI, 0);
+      ctx.fill();
+      ctx.fillStyle = '#f59e0b';
+      ctx.fillRect(w * 0.02, -h * 0.73 - bob, w * 0.26, h * 0.11);
+      drawEyeGlow(ctx, w * 0.15, -h * 0.68 - bob, 3 * scale, '#fef08a');
+      // Glowing crystal satchel bomb held forward
+      ctx.fillStyle = '#a855f7';
+      ctx.beginPath();
+      ctx.arc(w * 0.36, -h * 0.48 - bob, 7 * scale, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#f5d0fe';
+      ctx.lineWidth = 1.6;
+      ctx.stroke();
+      break;
+    }
+
+    case 'runed_golem': {
+      const stomp = Math.sin(t * 4.2) * 2.5 * scale;
+      const slate = pick('#334155');
+      const rune = '#c084fc';
+      // Massive stone legs
+      ctx.fillStyle = '#1e293b';
+      ctx.fillRect(-w * 0.34, -h * 0.32 + stomp, w * 0.26, h * 0.32);
+      ctx.fillRect(w * 0.08, -h * 0.32 - stomp, w * 0.26, h * 0.32);
+      // Angular dwarven masonry torso with gilded trim
+      ctx.fillStyle = slate;
+      ctx.beginPath();
+      ctx.moveTo(-w * 0.48, -h * 0.84);
+      ctx.lineTo(w * 0.48, -h * 0.84);
+      ctx.lineTo(w * 0.36, -h * 0.28);
+      ctx.lineTo(-w * 0.36, -h * 0.28);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = '#d97706';
+      ctx.lineWidth = 2.2;
+      ctx.stroke();
+      // Glowing amethyst chest rune diamond
+      ctx.fillStyle = rune;
+      ctx.beginPath();
+      ctx.moveTo(0, -h * 0.72);
+      ctx.lineTo(w * 0.16, -h * 0.58);
+      ctx.lineTo(0, -h * 0.44);
+      ctx.lineTo(-w * 0.16, -h * 0.58);
+      ctx.closePath();
+      ctx.fill();
+      // Massive crystal-studded gauntlets
+      ctx.fillStyle = '#475569';
+      ctx.fillRect(w * 0.32, -h * 0.64, w * 0.24, h * 0.36);
+      ctx.fillRect(-w * 0.56, -h * 0.64, w * 0.24, h * 0.36);
+      ctx.fillStyle = '#a855f7';
+      ctx.fillRect(w * 0.38, -h * 0.36, w * 0.14, h * 0.12);
+      // Recessed gilded dwarven helm visor
+      ctx.fillStyle = '#1e1b4b';
+      ctx.fillRect(-w * 0.24, -h * 0.96, w * 0.48, h * 0.18);
+      ctx.strokeStyle = '#fbbf24';
+      ctx.strokeRect(-w * 0.24, -h * 0.96, w * 0.48, h * 0.18);
+      drawEyeGlow(ctx, w * 0.08, -h * 0.87, 4.2 * scale, '#e879f9');
+      break;
+    }
+
+    case 'boss_dwarf_king': {
+      // THANE BORIN · THE GILDED HOLLOW — Towering Runed Dwarven Monarch with Amethyst Great-Maul!
+      const sway = Math.sin(t * 3.4) * 3.5 * scale;
+      const armor = pick(enemy.enraged ? '#581c87' : '#2e2442');
+      const gold = '#f59e0b';
+      const crystal = enemy.enraged ? '#f0abfc' : '#a855f7';
+
+      // Royal tattered violet-gold cloak
+      ctx.fillStyle = '#3b0764';
+      ctx.beginPath();
+      ctx.moveTo(-w * 0.44, -h * 0.8);
+      ctx.lineTo(w * 0.32, -h * 0.8);
+      ctx.lineTo(-w * 0.56, -h * 0.04);
+      ctx.lineTo(-w * 0.12, -h * 0.06);
+      ctx.closePath();
+      ctx.fill();
+
+      // Massive gilded greaves
+      ctx.fillStyle = '#1e1b2e';
+      ctx.fillRect(-w * 0.32, -h * 0.3, w * 0.24, h * 0.3);
+      ctx.fillRect(w * 0.08, -h * 0.3, w * 0.24, h * 0.3);
+      ctx.fillStyle = gold;
+      ctx.fillRect(-w * 0.34, -h * 0.3, w * 0.28, h * 0.06);
+      ctx.fillRect(w * 0.06, -h * 0.3, w * 0.28, h * 0.06);
+
+      // Broad runed dwarven cuirass with glowing Heart of the Deep Vein core!
+      ctx.fillStyle = armor;
+      ctx.beginPath();
+      ctx.moveTo(-w * 0.48, -h * 0.82 + sway);
+      ctx.lineTo(w * 0.48, -h * 0.82 + sway);
+      ctx.lineTo(w * 0.38, -h * 0.26 + sway);
+      ctx.lineTo(-w * 0.38, -h * 0.26 + sway);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = gold;
+      ctx.lineWidth = 3;
+      ctx.stroke();
+
+      // Glowing Heart of the Deep Vein embedded in chest
+      const heartPulse = 1 + Math.sin(t * 7) * 0.15;
+      ctx.fillStyle = crystal;
+      ctx.beginPath();
+      ctx.moveTo(0, -h * 0.72 + sway);
+      ctx.lineTo(w * 0.16 * heartPulse, -h * 0.56 + sway);
+      ctx.lineTo(0, -h * 0.4 + sway);
+      ctx.lineTo(-w * 0.16 * heartPulse, -h * 0.56 + sway);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(0, -h * 0.56 + sway, 4.5 * scale, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Giant jagged amethyst crystal pauldrons erupting off both shoulders
+      ctx.fillStyle = crystal;
+      ctx.beginPath();
+      ctx.moveTo(-w * 0.42, -h * 0.78 + sway);
+      ctx.lineTo(-w * 0.64, -h * 0.96 + sway);
+      ctx.lineTo(-w * 0.32, -h * 0.92 + sway);
+      ctx.closePath();
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(w * 0.42, -h * 0.78 + sway);
+      ctx.lineTo(w * 0.62, -h * 0.95 + sway);
+      ctx.lineTo(w * 0.3, -h * 0.9 + sway);
+      ctx.closePath();
+      ctx.fill();
+
+      // Armored golden beard plate + spiked Runic Crown
+      ctx.fillStyle = '#d97706';
+      ctx.beginPath();
+      ctx.moveTo(-w * 0.24, -h * 0.78 + sway);
+      ctx.lineTo(w * 0.24, -h * 0.78 + sway);
+      ctx.lineTo(w * 0.16, -h * 0.56 + sway);
+      ctx.lineTo(-w * 0.16, -h * 0.56 + sway);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = '#1e1b4b';
+      ctx.fillRect(-w * 0.24, -h * 0.96 + sway, w * 0.48, h * 0.18);
+      ctx.fillStyle = gold;
+      ctx.beginPath();
+      ctx.moveTo(-w * 0.28, -h * 0.94 + sway);
+      ctx.lineTo(-w * 0.2, -h * 1.1 + sway);
+      ctx.lineTo(-w * 0.08, -h * 0.98 + sway);
+      ctx.lineTo(0, -h * 1.14 + sway);
+      ctx.lineTo(w * 0.08, -h * 0.98 + sway);
+      ctx.lineTo(w * 0.2, -h * 1.1 + sway);
+      ctx.lineTo(w * 0.28, -h * 0.94 + sway);
+      ctx.closePath();
+      ctx.fill();
+      drawEyeGlow(ctx, w * 0.1, -h * 0.87 + sway, 5 * scale, '#f0abfc');
+
+      // Colossal Runed Amethyst Great-Maul!
+      ctx.save();
+      ctx.translate(w * 0.36, -h * 0.55 + sway);
+      ctx.rotate(isCharging ? -1.05 : 0.25 + Math.sin(t * 4) * 0.1);
+      ctx.strokeStyle = '#92400e';
+      ctx.lineWidth = 6 * scale;
+      ctx.beginPath();
+      ctx.moveTo(0, 22 * scale);
+      ctx.lineTo(0, -44 * scale);
+      ctx.stroke();
+      ctx.fillStyle = '#334155';
+      ctx.fillRect(-20 * scale, -56 * scale, 40 * scale, 22 * scale);
+      ctx.strokeStyle = gold;
+      ctx.lineWidth = 2.4;
+      ctx.strokeRect(-20 * scale, -56 * scale, 40 * scale, 22 * scale);
+      ctx.fillStyle = crystal;
+      ctx.fillRect(-14 * scale, -51 * scale, 28 * scale, 12 * scale);
+      ctx.restore();
+      break;
+    }
   }
 
   ctx.restore();

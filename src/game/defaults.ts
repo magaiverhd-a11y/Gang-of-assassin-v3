@@ -4,9 +4,13 @@ import {
   ArtifactDef,
   ArtifactId,
   BaseElementId,
+  BossCharmDef,
+  BossCharmId,
   BossTuning,
   CharacterDef,
   CharacterTuning,
+  CharmSynergyDef,
+  CharmSynergyId,
   EnemyTuning,
   EnemyType,
   KillFreezeTuning,
@@ -18,10 +22,15 @@ import {
   CraftRecipe,
   ElementDef,
   ElementId,
+  GoldPrepRecipe,
+  HeroSkinDef,
+  HeroSkinId,
   ItemDef,
   ItemId,
   RaidDef,
   RaidId,
+  SacrificeAltarDef,
+  SacrificeAltarStat,
   SpecialItemDef,
   SpecialItemId,
   TuningConfig,
@@ -29,12 +38,35 @@ import {
   WeaponId,
 } from './types';
 import { ENEMY_SPECS } from './level';
+export {
+  BASE_ELEMENT_ORDER,
+  BASE_ELEMENTS,
+  COMBINED_ELEMENTS,
+  getCombinedElementId,
+  getActiveElementDef,
+  CURSED_RELIC_ORDER,
+  CURSED_RELICS,
+} from './elementFusions';
+
+export const MAX_POWER_LEVEL = 25;
 
 export const STANDARD_RAID_ORDER: RaidId[] = [
   'nocturne_castle',
   'goblin_camp',
   'weeping_necropolis',
   'brimstone_sanctum',
+  'mushroom_kingdom',
+  'sand_fortress',
+  'alien_ship',
+  'dragon_crane',
+  'dwarven_mines',
+  'cyberpunk_city',
+  'pirate_armada',
+  'ghost_paradox',
+  'noble_mansion',
+  'underwater_city',
+  'frost_wardens',
+  'barbaric_nation',
 ];
 
 export const RAIDS_REQUIRED_FOR_END_RAID = 3;
@@ -44,6 +76,18 @@ export const RAID_ORDER: RaidId[] = [
   'goblin_camp',
   'weeping_necropolis',
   'brimstone_sanctum',
+  'mushroom_kingdom',
+  'sand_fortress',
+  'alien_ship',
+  'dragon_crane',
+  'dwarven_mines',
+  'cyberpunk_city',
+  'pirate_armada',
+  'ghost_paradox',
+  'noble_mansion',
+  'underwater_city',
+  'frost_wardens',
+  'barbaric_nation',
   'eclipse_gauntlet',
 ];
 
@@ -53,7 +97,9 @@ export const RAIDS: Record<RaidId, RaidDef> = {
     name: 'Nocturne Castle',
     subtitle: '4 Chambers + Crimson Sovereign',
     description:
-      'Haunted gothic halls guarded by Baron Bloodfang, Clockwork Colossus, Hollow Inquisitor, Obsidian Gargoyle, and towering Lord Valerius.',
+      'Haunted gothic halls & subterranean crypt passages guarded by Baron Bloodfang, Clockwork Colossus, Hollow Inquisitor, Obsidian Gargoyle, and towering Lord Valerius.',
+    gimmick: 'Gothic Halls & Secret Crypts',
+    enemySummary: 'Ghouls · Skeletons · Night Bats · Halberd Knights',
     finalBossName: 'Lord Valerius · Crimson Sovereign',
     accent: '#c82333',
   },
@@ -62,7 +108,9 @@ export const RAIDS: Record<RaidId, RaidDef> = {
     name: 'Goblin War-Camp',
     subtitle: '4 Encampments + Goblin King',
     description:
-      'Moonlit stockades and powder pits ruled by Skritch, Bombo the Sapper, Hex-Lord Zog, Grimjaw the Siege-Hulk, and colossal Warchief Kragmash.',
+      'Moonlit stockades and sapper tunnels ruled by Skritch, Bombo the Sapper, Hex-Lord Zog, Grimjaw the Siege-Hulk, and colossal Warchief Kragmash.',
+    gimmick: 'Timber Watchtowers & Sapper Tunnels',
+    enemySummary: 'Raiders · Archers · Sappers · Shamans · Brutes',
     finalBossName: 'Warchief Kragmash · Goblin King',
     accent: '#22c55e',
   },
@@ -71,7 +119,9 @@ export const RAIDS: Record<RaidId, RaidDef> = {
     name: 'Weeping Necropolis',
     subtitle: '4 Crypts + Arch-Necromancer',
     description:
-      'Cursed graveyards and sunken ossuaries haunted by Wraiths, Gargoyles, Acolytes, the Gravedigger, Banshee, Executioner, Bone Reaver, and Vespera.',
+      'Cursed graveyards and sunken ossuary tunnels haunted by Wraiths, Gargoyles, Acolytes, the Gravedigger, Banshee, Executioner, Bone Reaver, and Vespera.',
+    gimmick: 'Misty Mausoleums & Sunken Ossuaries',
+    enemySummary: 'Crypt Hounds · Wraiths · Gargoyles · Acolytes',
     finalBossName: 'Vespera · Arch-Necromancer',
     accent: '#a855f7',
   },
@@ -80,9 +130,143 @@ export const RAIDS: Record<RaidId, RaidDef> = {
     name: 'Brimstone Sanctum',
     subtitle: '4 Forges + Infernal Forge-Lord',
     description:
-      'Volcanic lava foundries patrolled by Magma Imps and Obsidian Sentinels beneath the Cinder Warden, Pyre Matriarch, Slag Colossus, and Ignis.',
+      'Volcanic lava foundries and magma under-ducts patrolled by Magma Imps and Obsidian Sentinels beneath the Cinder Warden, Pyre Matriarch, Slag Colossus, and Ignis.',
+    gimmick: 'Molten Catwalks & Magma Ducts',
+    enemySummary: 'Magma Imps · Obsidian Sentinels · Slag Titans',
     finalBossName: 'Ignis · Infernal Forge-Lord',
     accent: '#f97316',
+  },
+  mushroom_kingdom: {
+    id: 'mushroom_kingdom',
+    name: 'The Mushroom Kingdom',
+    subtitle: '4 Fungal Realms + Mycelium Sovereign',
+    description:
+      'Bioluminescent toadstool canopies, bouncy spring-caps, and glowing mycelium root-tunnels ruled by the towering Mycelium Sovereign.',
+    gimmick: 'Bouncy Toadstool Caps & Root Tunnels',
+    enemySummary: 'Spore Hoppers · Mycelium Spitters · Cap Brutes',
+    finalBossName: 'Sporelord Amanita · Mycelium Sovereign',
+    accent: '#10b981',
+  },
+  sand_fortress: {
+    id: 'sand_fortress',
+    name: 'Sand Fortress',
+    subtitle: '4 Sun Bastions + Pharaoh-Khan Sethra',
+    description:
+      'Sun-scorched sandstone citadels alternating blazing desert noon and starlit desert nights, with crumbling sand-bridges over buried catacombs.',
+    gimmick: 'Blazing Noon & Desert Nights · Crumble Bridges',
+    enemySummary: 'Dune Stalkers · Sun-Scarabs · Solar Priests',
+    finalBossName: 'Pharaoh-Khan Sethra · Dune Sovereign',
+    accent: '#eab308',
+  },
+  alien_ship: {
+    id: 'alien_ship',
+    name: 'Alien Ship',
+    subtitle: '4 Mothership Decks + Void Archon',
+    description:
+      'Orbital dreadnought corridors, low-gravity reactor shafts, and neon plasma maintenance vents commanded by Void Archon Xel\'Vora.',
+    gimmick: 'Zero-G Reactor Shafts & Plasma Conduits',
+    enemySummary: 'Plasma Drones · Xeno Leapers · Exo-Rail Walkers',
+    finalBossName: 'Void Archon Xel\'Vora · Star Harvester',
+    accent: '#06b6d4',
+  },
+  dragon_crane: {
+    id: 'dragon_crane',
+    name: 'Dragon Crane',
+    subtitle: '4 Cloud Sanctuaries + Celestial Crane-Wyrm',
+    description:
+      'Mist-veiled jade mountain peaks, emerald wind-updraft pads, hanging cloud pagodas, and subterranean dragon-vein grottos watched over by Longhe.',
+    gimmick: 'Emerald Wind Updrafts & Cloud Pagodas',
+    enemySummary: 'Sky-Acrobats · Jade Lantern-Golems · Cloud Wyrmlings',
+    finalBossName: 'Longhe · Celestial Crane-Wyrm',
+    accent: '#34d399',
+  },
+  dwarven_mines: {
+    id: 'dwarven_mines',
+    name: 'Corrupted Dwarven Mines',
+    subtitle: '4 Crystal Shafts + Thane Borin',
+    description:
+      'Deep subterranean halls veined with corrupted amethyst, iron minecart trestles, explosive sapper drifts, and runic treasury vaults ruled by Thane Borin.',
+    gimmick: 'Amethyst Crystal Veins & Rail-Shaft Tunnels',
+    enemySummary: 'Corrupted Miners · Keg Sappers · Runed Golems',
+    finalBossName: 'Thane Borin · The Gilded Hollow',
+    accent: '#a855f7',
+  },
+  cyberpunk_city: {
+    id: 'cyberpunk_city',
+    name: 'Neon Spire 2099',
+    subtitle: '4 Cyber-Districts + Synth-Shogun Zero',
+    description:
+      'Rain-slicked midnight skyscrapers, holographic skyline highways, chrome catwalks, and high-voltage under-grids patrolled by security drones and cyber-stalkers.',
+    gimmick: 'Neon Rain Skyline & Chrome Catwalks',
+    enemySummary: 'Cyber Drones · Holo-Stalkers · Rail Turrets · Bomb-Techs',
+    finalBossName: 'Synth-Shogun Zero · Chrome Overlord',
+    accent: '#ec4899',
+  },
+  pirate_armada: {
+    id: 'pirate_armada',
+    name: 'Skulltide Cove & Armada',
+    subtitle: '4 Isles & Galleons + Captain Dreadtide',
+    description:
+      'Sun-scorched treasure beaches and buried smuggler grottos giving way to towering cursed pirate galleon decks, swaying rigging, and blackpowder broadsides.',
+    gimmick: 'Treasure Beaches & Pirate Ship Decks',
+    enemySummary: 'Corsair Raiders · Deck Gunners · Powder Bombers · Cutlass Mates',
+    finalBossName: 'Captain Dreadtide · Corsair Admiral',
+    accent: '#f59e0b',
+  },
+  ghost_paradox: {
+    id: 'ghost_paradox',
+    name: 'The Ghost Paradox',
+    subtitle: '4 Fractured Realms + The Paradox Phantom',
+    description:
+      'A haunted dimensional anomaly with zero connection between chambers—leap from a ghost pirate ship straight into a cursed mansion, neon alley, sunken ruin, and astral rift!',
+    gimmick: 'Unconnected Shifting Realms Every Room',
+    enemySummary: 'Rift Wraiths · Spectral Corsairs · Glitched Drones · Stone Horrors',
+    finalBossName: 'The Paradox Phantom · Fractured Echo',
+    accent: '#818cf8',
+  },
+  noble_mansion: {
+    id: 'noble_mansion',
+    name: 'Velvet Blood Chateau',
+    subtitle: '4 Gilded Wings + Duke Aurelius Vane',
+    description:
+      'Opulent aristocratic ballrooms, crystal chandeliers, marble staircases, velvet banquet galleries, and hidden wine vaults ruled by an immortal gilded bloodline.',
+    gimmick: 'Crystal Chandeliers & Marble Galleries',
+    enemySummary: 'House Duelists · Gilded Knights · Velvet Bats · Blood Priests',
+    finalBossName: 'Duke Aurelius Vane · Gilded Sovereign',
+    accent: '#e11d48',
+  },
+  underwater_city: {
+    id: 'underwater_city',
+    name: 'Sunken Pelagia',
+    subtitle: '4 Coral Domes + Archon Nereus',
+    description:
+      'A drowned bioluminescent marble metropolis beneath the abyss—traverse glowing glass sea-tunnels, swaying kelp spires, and pearl-dome sanctums guarded by tide-born beasts.',
+    gimmick: 'Bioluminescent Coral & Sea-Glass Tunnels',
+    enemySummary: 'Abyssal Wyrms · Coral Sentinels · Tide Hoppers · Deep Wraiths',
+    finalBossName: 'Archon Nereus · Abyssal Leviathan',
+    accent: '#0ea5e9',
+  },
+  frost_wardens: {
+    id: 'frost_wardens',
+    name: 'Frostwarden Citadel',
+    subtitle: '4 Glacial Keeps + High Warden Borealis',
+    description:
+      'Sub-zero ice battlements and translucent crystal towers swept by northern aurora blizzards, defended by unyielding glacier knights and frost-rune sentinels.',
+    gimmick: 'Northern Aurora & Glacial Ice Keeps',
+    enemySummary: 'Frost Halberdiers · Ice Gargoyles · Glacier Golems · Cryo-Acolytes',
+    finalBossName: 'High Warden Borealis · Glacier Sentinel',
+    accent: '#38bdf8',
+  },
+  barbaric_nation: {
+    id: 'barbaric_nation',
+    name: 'Ironhorn Bloodlands',
+    subtitle: '4 War-Strongholds + Warchief Kragg',
+    description:
+      'Savage red-earth steppes, mammoth-tusk war-gates, roaring bonfire arenas, and spiked timber palisades ruled by the undefeated Ironhorn Bloodclans.',
+    gimmick: 'Mammoth-Tusk Gates & Bonfire Palisades',
+    enemySummary: 'Clan Berserkers · War-Hulks · Bone Shamans · Ironhorn Raiders',
+    finalBossName: 'Warchief Kragg Ironhorn · Blood-Titan',
+    accent: '#dc2626',
   },
   eclipse_gauntlet: {
     id: 'eclipse_gauntlet',
@@ -90,11 +274,385 @@ export const RAIDS: Record<RaidId, RaidDef> = {
     subtitle: 'END RAID · 4 Duo-Boss Chambers + Eclipse Overlord',
     description:
       'The climactic Boss Gauntlet! Battle pairs of returning lords in every chamber before facing the colossal Big Bad End Boss, Draculor.',
+    gimmick: '4 Duo-Boss Chambers + Final Overlord',
+    enemySummary: 'Returning Raid Lords · Draculor Overlord',
     finalBossName: 'Draculor · Eclipse Overlord',
     accent: '#ff2e63',
     isEndRaid: true,
   },
 };
+
+export const BOSS_CHARM_ORDER: BossCharmId[] = [
+  'crimson_chalice',
+  'blackpowder_idol',
+  'phylactery_locket',
+  'molten_anvil_heart',
+  'mycelial_crown',
+  'sunscarab_seal',
+  'singularity_core',
+  'jade_feather_pearl',
+  'deep_vein_heart',
+  'neon_overclock_chip',
+  'cursed_compass',
+  'paradox_hourglass',
+  'velvet_signet',
+  'abyssal_trident_pearl',
+  'glacial_aegis_shard',
+  'ironhorn_war_tusk',
+  'astral_eclipse_prism',
+];
+
+export const RAID_BOSS_CHARM: Record<RaidId, BossCharmId> = {
+  nocturne_castle: 'crimson_chalice',
+  goblin_camp: 'blackpowder_idol',
+  weeping_necropolis: 'phylactery_locket',
+  brimstone_sanctum: 'molten_anvil_heart',
+  mushroom_kingdom: 'mycelial_crown',
+  sand_fortress: 'sunscarab_seal',
+  alien_ship: 'singularity_core',
+  dragon_crane: 'jade_feather_pearl',
+  dwarven_mines: 'deep_vein_heart',
+  cyberpunk_city: 'neon_overclock_chip',
+  pirate_armada: 'cursed_compass',
+  ghost_paradox: 'paradox_hourglass',
+  noble_mansion: 'velvet_signet',
+  underwater_city: 'abyssal_trident_pearl',
+  frost_wardens: 'glacial_aegis_shard',
+  barbaric_nation: 'ironhorn_war_tusk',
+  eclipse_gauntlet: 'astral_eclipse_prism',
+};
+
+export const BOSS_CHARMS: Record<BossCharmId, BossCharmDef> = {
+  crimson_chalice: {
+    id: 'crimson_chalice',
+    raidId: 'nocturne_castle',
+    name: 'Crimson Chalice',
+    bossName: 'Lord Valerius',
+    pursuitLore: 'The First Vampire\'s blood-grail sought to eclipse the moon forever.',
+    effectSummary: '+15% Crit Chance · Every 5th kill siphons +1 HP & +2 MP.',
+    color: '#ef4444',
+    glow: 'rgba(239,68,68,0.55)',
+    sigil: '🍷',
+  },
+  blackpowder_idol: {
+    id: 'blackpowder_idol',
+    raidId: 'goblin_camp',
+    name: 'Blackpowder Idol',
+    bossName: 'Warchief Kragmash',
+    pursuitLore: 'A volatile goblin war-totem packed with alchemical siege powder.',
+    effectSummary: 'Crits & Assassinations detonate a fiery blast wave (+35% AoE splash).',
+    color: '#22c55e',
+    glow: 'rgba(34,197,94,0.55)',
+    sigil: '💣',
+  },
+  phylactery_locket: {
+    id: 'phylactery_locket',
+    raidId: 'weeping_necropolis',
+    name: 'Phylactery Locket',
+    bossName: 'Vespera',
+    pursuitLore: 'Vespera\'s bound soul-vessel overflowing with restless spectral essence.',
+    effectSummary: '+25% Spell Damage · Kills unleash a homing soul bolt & restore +1 MP.',
+    color: '#a855f7',
+    glow: 'rgba(168,85,247,0.55)',
+    sigil: '🔮',
+  },
+  molten_anvil_heart: {
+    id: 'molten_anvil_heart',
+    raidId: 'brimstone_sanctum',
+    name: 'Molten Anvil Heart',
+    bossName: 'Ignis',
+    pursuitLore: 'The living furnace-core forged to quench the fires of the deep earth.',
+    effectSummary: 'Start every room with +1 Armor · +20% Weapon Damage & Guard Break.',
+    color: '#f97316',
+    glow: 'rgba(249,115,22,0.55)',
+    sigil: '🔥',
+  },
+  mycelial_crown: {
+    id: 'mycelial_crown',
+    raidId: 'mushroom_kingdom',
+    name: 'Mycelial Crown',
+    bossName: 'Sporelord Amanita',
+    pursuitLore: 'A crown of luminous royal mycelium that commands the deep forest hive.',
+    effectSummary: 'Kills & Assassinations burst healing/toxic spore clouds & cut cooldowns by 18%.',
+    color: '#10b981',
+    glow: 'rgba(16,185,129,0.55)',
+    sigil: '🍄',
+  },
+  sunscarab_seal: {
+    id: 'sunscarab_seal',
+    raidId: 'sand_fortress',
+    name: 'Sunscarab Seal',
+    bossName: 'Pharaoh-Khan Sethra',
+    pursuitLore: 'The golden royal scarab that bends desert mirages and solar storms.',
+    effectSummary: '+14% Move Speed · Assassinations & dodges scorch nearby foes in golden sand.',
+    color: '#eab308',
+    glow: 'rgba(234,179,8,0.55)',
+    sigil: '🪲',
+  },
+  singularity_core: {
+    id: 'singularity_core',
+    raidId: 'alien_ship',
+    name: 'Singularity Core',
+    bossName: 'Void Archon Xel\'Vora',
+    pursuitLore: 'A stabilized pocket black-hole harvested to power an alien mothership.',
+    effectSummary: 'Spells & Crits pull foes inward with a plasma pulse (+25% bonus Void dmg).',
+    color: '#06b6d4',
+    glow: 'rgba(6,182,212,0.55)',
+    sigil: '⚛️',
+  },
+  jade_feather_pearl: {
+    id: 'jade_feather_pearl',
+    raidId: 'dragon_crane',
+    name: 'Jade Feather Pearl',
+    bossName: 'Longhe',
+    pursuitLore: 'The sky-pearl coveted by mountain dragons for effortless flight and gale-blades.',
+    effectSummary: '+12% Jump Power · Airborne & Drop-Assassination strikes deal +45% dmg & launch gale arcs.',
+    color: '#34d399',
+    glow: 'rgba(52,211,153,0.55)',
+    sigil: '🪶',
+  },
+  deep_vein_heart: {
+    id: 'deep_vein_heart',
+    raidId: 'dwarven_mines',
+    name: 'Heart of the Deep Vein',
+    bossName: 'Thane Borin',
+    pursuitLore: 'A royal dwarven amethyst-gold core pulsing with corrupt subterranean ore-light.',
+    effectSummary: '+30% Gold from all sources · Crits & heavy strikes shatter violet crystal shards (+25% dmg).',
+    color: '#c084fc',
+    glow: 'rgba(192,132,252,0.58)',
+    sigil: '💎',
+  },
+  neon_overclock_chip: {
+    id: 'neon_overclock_chip',
+    raidId: 'cyberpunk_city',
+    name: 'Overclock Neural Chip',
+    bossName: 'Synth-Shogun Zero',
+    pursuitLore: 'Illegal chrome wetware humming with magenta lightning from Spire 2099.',
+    effectSummary: '+16% Move & Attack Tempo · Crits discharge neon cyber-sparks (+20% bonus dmg).',
+    color: '#ec4899',
+    glow: 'rgba(236,72,153,0.58)',
+    sigil: '⚡',
+  },
+  cursed_compass: {
+    id: 'cursed_compass',
+    raidId: 'pirate_armada',
+    name: 'Corsair Gold Compass',
+    bossName: 'Captain Dreadtide',
+    pursuitLore: 'A salt-crusted brass compass whose needle always points toward forbidden plunder.',
+    effectSummary: '+40% Gold from all kills & bosses · Assassinations burst bonus golden shrapnel.',
+    color: '#f59e0b',
+    glow: 'rgba(245,158,11,0.58)',
+    sigil: '🧭',
+  },
+  paradox_hourglass: {
+    id: 'paradox_hourglass',
+    raidId: 'ghost_paradox',
+    name: 'Paradox Fractured Glass',
+    bossName: 'The Paradox Phantom',
+    pursuitLore: 'Sands of five shattered timelines falling upward inside a spectral frame.',
+    effectSummary: '-22% All Spell & Skill Cooldowns · Kills restore +1 MP across fractured space.',
+    color: '#818cf8',
+    glow: 'rgba(129,140,248,0.58)',
+    sigil: '⏳',
+  },
+  velvet_signet: {
+    id: 'velvet_signet',
+    raidId: 'noble_mansion',
+    name: 'Gilded Velvet Signet',
+    bossName: 'Duke Aurelius Vane',
+    pursuitLore: 'The ruby wax-seal of House Vane, worn by generations of crimson aristocrats.',
+    effectSummary: '+18% Crit Chance & +25% Gold · Every Crit siphons +1 MP immediately.',
+    color: '#e11d48',
+    glow: 'rgba(225,29,72,0.58)',
+    sigil: '💍',
+  },
+  abyssal_trident_pearl: {
+    id: 'abyssal_trident_pearl',
+    raidId: 'underwater_city',
+    name: 'Abyssal Tide Pearl',
+    bossName: 'Archon Nereus',
+    pursuitLore: 'A luminescent sea-orb from the sunken heart of Pelagia that commands ocean pressure.',
+    effectSummary: '+14% Jump Power · Attacks splash chilling tide ripples that slow foes.',
+    color: '#0ea5e9',
+    glow: 'rgba(14,165,233,0.58)',
+    sigil: '🐚',
+  },
+  glacial_aegis_shard: {
+    id: 'glacial_aegis_shard',
+    raidId: 'frost_wardens',
+    name: 'Glacial Warden Shard',
+    bossName: 'High Warden Borealis',
+    pursuitLore: 'An unmelting diamond of northern aurora frost carved from the Citadel spire.',
+    effectSummary: 'Start every room with +1 Armor · Heavy & Spell hits freeze-chill foes (-35% speed).',
+    color: '#38bdf8',
+    glow: 'rgba(56,189,248,0.58)',
+    sigil: '❄️',
+  },
+  ironhorn_war_tusk: {
+    id: 'ironhorn_war_tusk',
+    raidId: 'barbaric_nation',
+    name: 'Ironhorn War-Tusk',
+    bossName: 'Warchief Kragg Ironhorn',
+    pursuitLore: 'A notched mammoth ivory trophy bound in blood-forged iron chains.',
+    effectSummary: '+25% Weapon Damage · Brutal melee hits stagger and shatter enemy guards.',
+    color: '#dc2626',
+    glow: 'rgba(220,38,38,0.58)',
+    sigil: '🪓',
+  },
+  astral_eclipse_prism: {
+    id: 'astral_eclipse_prism',
+    raidId: 'eclipse_gauntlet',
+    name: 'Astral Eclipse Prism',
+    bossName: 'Draculor',
+    pursuitLore: 'The supreme shard of the eternal eclipse that binds every realm together.',
+    effectSummary: '+18% All Damage · Extended Parry/Evade windows & +25% Boss Gold/Score.',
+    color: '#f43f5e',
+    glow: 'rgba(244,63,94,0.6)',
+    sigil: '🌒',
+  },
+};
+
+export const CHARM_SYNERGIES: CharmSynergyDef[] = [
+  {
+    id: 'blood_and_powder',
+    name: 'Blood & Powder',
+    charms: ['crimson_chalice', 'blackpowder_idol'],
+    summary: 'Explosive blast waves siphon +1 HP every 4 detonations & gain +40% blast radius.',
+    color: '#fb7185',
+  },
+  {
+    id: 'plague_necromancy',
+    name: 'Plague Necromancy',
+    charms: ['phylactery_locket', 'mycelial_crown'],
+    summary: 'Spore bursts summon twin homing soul-spores & cut spell MP costs by 1 (min 1).',
+    color: '#c084fc',
+  },
+  {
+    id: 'solar_singularity',
+    name: 'Solar Singularity',
+    charms: ['sunscarab_seal', 'singularity_core'],
+    summary: 'Gravity pulls ignite enemies in solar plasma for +35% burn damage & +10% speed.',
+    color: '#38bdf8',
+  },
+  {
+    id: 'skyforged_tempest',
+    name: 'Skyforged Tempest',
+    charms: ['molten_anvil_heart', 'jade_feather_pearl'],
+    summary: 'Airborne strikes hammer foes with molten gale waves (+30% crit damage & +1 extra Armor/room).',
+    color: '#fbbf24',
+  },
+  {
+    id: 'eclipse_sovereign',
+    name: 'Eclipse Sovereign',
+    charms: ['crimson_chalice', 'astral_eclipse_prism'],
+    summary: 'Every Crit & Assassination restores +1 MP & extends Shadow Chain Momentum by +1.5s.',
+    color: '#f43f5e',
+  },
+  {
+    id: 'mycelial_mirage',
+    name: 'Mycelial Mirage',
+    charms: ['mycelial_crown', 'sunscarab_seal'],
+    summary: 'Crouch-stealth & Shadow Chain turn you near-invisible (-35% foe vision) with toxic trail bursts.',
+    color: '#34d399',
+  },
+  {
+    id: 'astral_crane',
+    name: 'Astral Crane',
+    charms: ['singularity_core', 'jade_feather_pearl'],
+    summary: 'Aerial attacks pull enemies into mid-air combos and launch piercing starlight feathers.',
+    color: '#2dd4bf',
+  },
+  {
+    id: 'forge_of_souls',
+    name: 'Forge of Souls',
+    charms: ['phylactery_locket', 'molten_anvil_heart'],
+    summary: 'Melee hits charge spell power (+20% weapon & spell dmg) and ignite soul bolts.',
+    color: '#f97316',
+  },
+  {
+    id: 'crimson_spores',
+    name: 'Crimson Spores',
+    charms: ['crimson_chalice', 'mycelial_crown'],
+    summary: 'Assassinations erupt crimson bloom clouds that heal +1 HP and refresh weapon skill CD.',
+    color: '#ec4899',
+  },
+  {
+    id: 'sunfire_ordnance',
+    name: 'Sunfire Ordnance',
+    charms: ['blackpowder_idol', 'sunscarab_seal'],
+    summary: 'Blast waves leave scorching desert embers & grant +25% bonus gold from kills.',
+    color: '#f59e0b',
+  },
+  {
+    id: 'void_alchemist',
+    name: 'Void Alchemist',
+    charms: ['blackpowder_idol', 'singularity_core'],
+    summary: 'Explosions implode enemies first, then detonate for +45% Void-Blast shockwave damage.',
+    color: '#22d3ee',
+  },
+  {
+    id: 'celestial_chalice',
+    name: 'Celestial Chalice',
+    charms: ['jade_feather_pearl', 'astral_eclipse_prism'],
+    summary: 'Double aerial/drop-assassination loot & +25% overall crit multiplier across all weapons.',
+    color: '#a7f3d0',
+  },
+  {
+    id: 'gilded_furnace',
+    name: 'Gilded Furnace',
+    charms: ['deep_vein_heart', 'molten_anvil_heart'],
+    summary: 'Crystal shatters ignite molten armor sparks (+1 extra Armor/room & +25% weapon damage).',
+    color: '#f59e0b',
+  },
+  {
+    id: 'crystal_singularity',
+    name: 'Crystal Singularity',
+    charms: ['deep_vein_heart', 'singularity_core'],
+    summary: 'Void pulls fracture amethyst shards outward (+30% crit splash & +20% bonus gold).',
+    color: '#e879f9',
+  },
+  {
+    id: 'neon_paradox',
+    name: 'Glitched Overclock',
+    charms: ['neon_overclock_chip', 'paradox_hourglass'],
+    summary: 'Time-warped reflexes grant +12% speed and cut all cooldowns by another 15%.',
+    color: '#f472b6',
+  },
+  {
+    id: 'gilded_corsair',
+    name: 'Aristocrat Plunder',
+    charms: ['cursed_compass', 'velvet_signet'],
+    summary: 'Doubles treasure luck (+50% Gold total) and crits burst golden blood-sparks.',
+    color: '#fbbf24',
+  },
+  {
+    id: 'frozen_abyss',
+    name: 'Permafrost Trench',
+    charms: ['abyssal_trident_pearl', 'glacial_aegis_shard'],
+    summary: 'Chilled foes take +30% shatter damage & every room begins with +1 extra Armor.',
+    color: '#38bdf8',
+  },
+  {
+    id: 'iron_glacier',
+    name: 'Berserker Frostguard',
+    charms: ['ironhorn_war_tusk', 'glacial_aegis_shard'],
+    summary: 'Heavy strikes erupt jagged frost shockwaves (+25% weapon dmg & guard break).',
+    color: '#fb7185',
+  },
+  {
+    id: 'cyber_corsair',
+    name: 'Chrome Buccaneer',
+    charms: ['neon_overclock_chip', 'cursed_compass'],
+    summary: 'Assassinations chain neon lightning & shower bonus gold across the deck.',
+    color: '#22d3ee',
+  },
+];
+
+export function computeActiveCharmSynergies(owned: BossCharmId[]): CharmSynergyDef[] {
+  if (owned.length < 2) return [];
+  const set = new Set<BossCharmId>(owned);
+  return CHARM_SYNERGIES.filter((s) => set.has(s.charms[0]) && set.has(s.charms[1]));
+}
 
 export function getRaidOrderScaling(tier: number): {
   tier: number;
@@ -107,36 +665,48 @@ export function getRaidOrderScaling(tier: number): {
   if (tier <= 1) {
     return {
       tier: 1,
-      hpMult: 1.0,
+      hpMult: 0.75,
       flatHpBonus: 0,
-      chargeSpeedMult: 1.0,
-      label: '1st Raid · Normal',
-      detail: 'Standard enemy health and attack charge speed.',
+      chargeSpeedMult: 1.03,
+      label: '1st Raid · Measured',
+      detail: '25% lighter enemy HP and calmer 1.03x attack windups for early raids.',
     };
   }
   if (tier === 2) {
     return {
       tier: 2,
-      hpMult: 1.25,
+      hpMult: 0.94,
       flatHpBonus: 1,
-      chargeSpeedMult: 1.26,
+      chargeSpeedMult: 1.21,
       label: '2nd Raid · Hardened',
-      detail: 'Enemies have +25% HP and charge their attacks faster.',
+      detail: 'Enemies step up to 94% base HP and 1.21x attack charge speed.',
     };
   }
-  const hpMult = Number((1 + (tier - 1) * 0.25).toFixed(2));
-  const chargeSpeedMult = Number((1 + (tier - 1) * 0.24).toFixed(2));
+  const hpMult = Number((0.75 + (tier - 1) * 0.19).toFixed(2));
+  const chargeSpeedMult = Number((1.03 + (tier - 1) * 0.18).toFixed(2));
   return {
     tier,
     hpMult,
-    flatHpBonus: tier - 1,
+    flatHpBonus: Math.max(0, tier - 1),
     chargeSpeedMult,
     label: `Raid #${tier} · Escalated`,
-    detail: `Enemies have +${Math.round((hpMult - 1) * 100)}% HP and ${chargeSpeedMult}x faster attack charge.`,
+    detail: `Enemies scale to ${Math.round(hpMult * 100)}% HP and ${chargeSpeedMult}x attack charge speed.`,
   };
 }
 
-export const CHARACTER_ORDER: CharacterId[] = ['hunter', 'brute', 'ronin', 'minstrel', 'monk', 'wizard', 'assassin'];
+export const CHARACTER_ORDER: CharacterId[] = [
+  'hunter',
+  'brute',
+  'ronin',
+  'minstrel',
+  'monk',
+  'wizard',
+  'assassin',
+  'ranger',
+  'vanguard',
+  'dancer',
+  'bouncer',
+];
 
 export const CHARACTERS: Record<CharacterId, CharacterDef> = {
   hunter: {
@@ -293,21 +863,124 @@ export const CHARACTERS: Record<CharacterId, CharacterDef> = {
     bonusWeaponDamage: 0,
     accent: '#9f1239',
   },
+  ranger: {
+    id: 'ranger',
+    name: 'Dusk Ranger',
+    title: 'Repeater Crossbow Marksman',
+    description:
+      'Nimble ranged marksman armed with a Burst Crossbow that fires rapid 3-bolt spread volleys. [3] Vault Volley backflips out of danger while loosing a 5-bolt piercing fan! Starts with Bola Snare.',
+    traitSummary: 'Ranged 3-Bolt Burst · Double Jump · Starts w/ Bola Snare',
+    defaultWeapon: 'burst_crossbow',
+    defaultAbility: 'ricochet_snare',
+    baseHp: 9,
+    baseMp: 11,
+    baseW: 26,
+    baseH: 52,
+    crouchBaseH: 31,
+    speedMult: 1.12,
+    jumpMult: 1.03,
+    airJumps: 1,
+    canWallCling: false,
+    bonusBaseDamage: 0,
+    bonusWeaponDamage: 0,
+    accent: '#10b981',
+  },
+  vanguard: {
+    id: 'vanguard',
+    name: 'Iron Vanguard',
+    title: 'Tower-Shield Bastion Tank',
+    description:
+      'Heavily armored frontline tank (+5 Max HP & +2 free Armor Shield every room!). Swinging the Tower Shield & Mace automatically blocks frontal strikes and projectiles while knocking foes off ledges. Starts with Bastion Shockwave.',
+    traitSummary: 'High HP & Armor · Auto-Guard · Starts w/ Bastion Shockwave',
+    defaultWeapon: 'shield_mace',
+    defaultAbility: 'aegis_slam',
+    baseHp: 15,
+    baseMp: 8,
+    baseW: 36,
+    baseH: 58,
+    crouchBaseH: 36,
+    speedMult: 0.88,
+    jumpMult: 1.04,
+    airJumps: 0,
+    canWallCling: false,
+    bonusBaseDamage: 1,
+    bonusWeaponDamage: 0,
+    accent: '#38bdf8',
+  },
+  dancer: {
+    id: 'dancer',
+    name: 'Sun Blade-Dancer',
+    title: 'Looping Chakram Acrobat',
+    description:
+      'Graceful mid-range skirmisher who hurls Twin Chakrams that pierce enemies going out and loop back to slice their backs as you move! [3] Chakram Warp teleports to your blade. Starts with Solar Lotus Ring.',
+    traitSummary: 'Looping Chakrams · Double Jump · Starts w/ Solar Lotus Ring',
+    defaultWeapon: 'twin_chakram',
+    defaultAbility: 'solar_bloom',
+    baseHp: 9,
+    baseMp: 11,
+    baseW: 26,
+    baseH: 50,
+    crouchBaseH: 30,
+    speedMult: 1.14,
+    jumpMult: 1.06,
+    airJumps: 1,
+    canWallCling: false,
+    bonusBaseDamage: 0,
+    bonusWeaponDamage: 0,
+    accent: '#fbbf24',
+  },
+  bouncer: {
+    id: 'bouncer',
+    name: 'Prism Striker',
+    title: 'Ricochet Physics Bouncer',
+    description:
+      'High-velocity kinetic lancer whose attacks penetrate straight through foes and ricochet off surfaces & walls! Every 5 weapon levels adds +1 bounce and evolves [3] Glass Walls into a full 4-wall Box! Starts with Refracted Prism Ray.',
+    traitSummary: 'Penetrating Bounce · Glass Box [3] · Starts w/ Prism Ray',
+    defaultWeapon: 'prism_lance',
+    defaultAbility: 'prism_beam',
+    baseHp: 10,
+    baseMp: 10,
+    baseW: 26,
+    baseH: 50,
+    crouchBaseH: 30,
+    speedMult: 1.12,
+    jumpMult: 1.08,
+    airJumps: 1,
+    canWallCling: true,
+    bonusBaseDamage: 0,
+    bonusWeaponDamage: 0,
+    accent: '#22d3ee',
+  },
 };
 
 export const WEAPON_ORDER: WeaponId[] = [
   'whip',
   'rapier',
+  'sword',
   'hammer',
   'greataxe',
+  'meteor_flail',
   'katana',
   'naginata',
+  'cleaver_greatsword',
   'ribbon_whip',
   'silk_whip',
+  'war_fans',
   'ash_wraps',
+  'kusarigama',
   'spire_staff',
+  'orbiting_grimoire',
+  'arcane_wand',
   'shadow_daggers',
-  'sword',
+  'short_blade',
+  'burst_crossbow',
+  'estoc_spear',
+  'shield_mace',
+  'joust_lance',
+  'twin_chakram',
+  'solar_glaive',
+  'prism_lance',
+  'prism_gauntlets',
 ];
 
 export const WEAPONS: Record<WeaponId, WeaponDef> = {
@@ -459,485 +1132,405 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     id: 'sword',
     name: 'Silver Broadsword',
     shortName: 'Sword',
-    description: 'Any Hero. Fast wide crescent slash hitting enemies in front, above, and below.',
+    description: 'Hunter exclusive. Fast wide crescent slash hitting enemies in front, above, and below.',
     skillName: 'Blade Wave',
     skillDescription:
       'Launches a piercing silver crescent wave. Tier 3 unleashes Twin Cross-Waves!',
     skillCooldown: 1.05,
     accent: '#93c5fd',
+    ownerChar: 'hunter',
+  },
+  estoc_spear: {
+    id: 'estoc_spear',
+    name: 'Needle Estoc',
+    shortName: 'Quick Thrust',
+    description: 'Ranger exclusive. Lightning-fast narrow forward pierce with crisp crit precision for close quarters.',
+    skillName: 'Triple Thrust Flurry',
+    skillDescription: 'Dashes forward with a rapid triple-piercing lunge that shreds guard.',
+    skillCooldown: 1.15,
+    accent: '#38bdf8',
+    ownerChar: 'ranger',
+  },
+  short_blade: {
+    id: 'short_blade',
+    name: 'Swift Dirk',
+    shortName: 'Quick Slash',
+    description: 'Assassin exclusive. Ultra-rapid compact crescent cuts with almost zero recovery.',
+    skillName: 'Flicker Cut',
+    skillDescription: 'Instant razor-wave snap slash at close range with high crit chance.',
+    skillCooldown: 0.9,
+    accent: '#f472b6',
+    ownerChar: 'assassin',
+  },
+  cleaver_greatsword: {
+    id: 'cleaver_greatsword',
+    name: 'Cleaver Greatsword',
+    shortName: 'Charge Cleave',
+    description: 'Ronin exclusive. Slow wide charging slash: single click [1] winds up and unleashes a towering cleave!',
+    skillName: 'Titan Crescent',
+    skillDescription: 'Unleashes a massive wide shock-arc that cleaves entire rows of enemies.',
+    skillCooldown: 1.65,
+    accent: '#f59e0b',
+    ownerChar: 'ronin',
+  },
+  joust_lance: {
+    id: 'joust_lance',
+    name: 'Imperial War-Lance',
+    shortName: 'Charge Thrust',
+    description: 'Vanguard exclusive. Slow long charging thrust: single click [1] charges an ultra-long armor-piercing skewer!',
+    skillName: 'Comet Skewer',
+    skillDescription: 'Surges forward with a blazing ultra-long piercing lance thrust.',
+    skillCooldown: 1.6,
+    accent: '#fbbf24',
+    ownerChar: 'vanguard',
+  },
+  arcane_wand: {
+    id: 'arcane_wand',
+    name: 'Arcane Bolt Wand',
+    shortName: 'Ranged Wand',
+    description: 'Wizard exclusive. Rapid ranged wand that fires crisp elemental arcane bolts across the room.',
+    skillName: 'Starburst Volley',
+    skillDescription: 'Fires a 3-way fan of piercing arcane bolts tuned to your Affinity.',
+    skillCooldown: 1.35,
+    accent: '#818cf8',
+    ownerChar: 'wizard',
+  },
+  war_fans: {
+    id: 'war_fans',
+    name: 'Crescent War Fans',
+    shortName: 'Wide Short',
+    description: 'Minstrel exclusive. Super wide, very short quick weapon: lightning-fast 220° arc hitting front, above & behind!',
+    skillName: 'Cyclone Petal Spin',
+    skillDescription: 'Whirls steel fans 360° around the hero, deflecting bolts & shredding close foes.',
+    skillCooldown: 1.25,
+    accent: '#2dd4bf',
+    ownerChar: 'minstrel',
+  },
+  meteor_flail: {
+    id: 'meteor_flail',
+    name: 'Seismic Impact Flail',
+    shortName: 'Impact AoE',
+    description: 'Brute exclusive. Heavy slam that detonates a huge shockwave damaging ALL foes around the impact point!',
+    skillName: 'Crater Detonation',
+    skillDescription: 'Slams the ground to trigger twin expanding seismic rings with heavy stagger.',
+    skillCooldown: 1.85,
+    accent: '#ef4444',
+    ownerChar: 'brute',
+  },
+  orbiting_grimoire: {
+    id: 'orbiting_grimoire',
+    name: 'Orbiting Grimoire',
+    shortName: 'Grimoire Orbs',
+    description:
+      'Wizard exclusive. 3 elemental orbs orbit around you. [1] launches an orb forward that explodes in an elemental AoE blast on contact! [3] cycles the active element (Fire, Glacial, Storm, Venom, Shadow, Light).',
+    skillName: 'Shift Element',
+    skillDescription:
+      'Instantly cycles your Orbiting Grimoire element (Fire · Glacial · Storm · Venom · Shadow · Light) and refills an orb with an elemental pulse!',
+    skillCooldown: 0.45,
+    accent: '#c084fc',
+    ownerChar: 'wizard',
+  },
+  burst_crossbow: {
+    id: 'burst_crossbow',
+    name: 'Dusk Burst Crossbow',
+    shortName: 'Burst X-Bow',
+    description:
+      'Ranger exclusive. Fires a crisp 3-bolt fan volley with snappy reload rhythm and deadly crit precision.',
+    skillName: 'Vault Volley',
+    skillDescription:
+      'Backflips gracefully out of danger with i-frames while loosing a 5-bolt piercing spread!',
+    skillCooldown: 1.3,
+    accent: '#10b981',
+    ownerChar: 'ranger',
+    isMainWeapon: true,
+  },
+  shield_mace: {
+    id: 'shield_mace',
+    name: 'Tower Shield & Mace',
+    shortName: 'Shield & Mace',
+    description:
+      'Vanguard exclusive. Heavy blunt mace strikes that automatically raise your Tower Shield to block frontal hits & projectiles while slamming foes off ledges!',
+    skillName: 'Bulwark Bash',
+    skillDescription:
+      'Charges forward behind your armored Tower Shield, breaking guards, stunning foes, and hurling them flying!',
+    skillCooldown: 1.45,
+    accent: '#38bdf8',
+    ownerChar: 'vanguard',
+    isMainWeapon: true,
+  },
+  kusarigama: {
+    id: 'kusarigama',
+    name: 'Chain-Sickle (Kusarigama)',
+    shortName: 'Chain-Sickle',
+    description:
+      'Monk exclusive. Fast close-range sickle slashes fused with a weighted mid-range chain that yanks distant archers & casters straight into melee range!',
+    skillName: 'Chain Tempest',
+    skillDescription:
+      'Whirls the weighted chain 360° around the Monk, dragging all nearby enemies inward and shredding them in a flurry!',
+    skillCooldown: 1.35,
+    accent: '#f59e0b',
+    ownerChar: 'monk',
+  },
+  twin_chakram: {
+    id: 'twin_chakram',
+    name: 'Solar Twin Chakrams',
+    shortName: 'Chakrams',
+    description:
+      'Blade-Dancer exclusive. Mid-range thrown blades that slice through enemies going out and loop back toward your live position for double back-hits!',
+    skillName: 'Chakram Warp / Vortex',
+    skillDescription:
+      'If a Chakram is mid-flight, blink-warp directly to it in an invulnerable slashing cyclone! Otherwise deploy a hovering Razor Vortex trap.',
+    skillCooldown: 1.4,
+    accent: '#fbbf24',
+    ownerChar: 'dancer',
+    isMainWeapon: true,
+  },
+  solar_glaive: {
+    id: 'solar_glaive',
+    name: 'Solar Crescent Glaive',
+    shortName: 'Sun Glaive',
+    description:
+      'Blade-Dancer exclusive. Sweeping twin-ended sun poleblade with wide graceful arcs and scorching crit edges.',
+    skillName: 'Sunburst Spin-Dash',
+    skillDescription:
+      'Invulnerable 360° spinning golden dash-slash that cleaves foes, leaves a burning sun ring, and resets your air jump!',
+    skillCooldown: 1.35,
+    accent: '#f97316',
+    ownerChar: 'dancer',
+  },
+  prism_lance: {
+    id: 'prism_lance',
+    name: 'Prism Ricochet Lance',
+    shortName: 'Prism Lance',
+    description:
+      'Prism Striker exclusive. Penetrates straight through enemies into physics ricochet flight! Starts with 2 bounces (+1 every 5 weapon levels); final surface impact explodes!',
+    skillName: 'Prism Glass Wall',
+    skillDescription:
+      'Summons a crystalline Glass Wall behind the nearest foe so you ricochet right back through them! Evolves into a full 4-wall Glass Box Machine!',
+    skillCooldown: 1.5,
+    accent: '#22d3ee',
+    ownerChar: 'bouncer',
+    isMainWeapon: true,
+  },
+  prism_gauntlets: {
+    id: 'prism_gauntlets',
+    name: 'Prism Pinball Gauntlets',
+    shortName: 'Prism Fists',
+    description:
+      'Prism Striker exclusive. Rapid kinetic crystal fists that trigger agile short-burst ricochets and heavy knockback!',
+    skillName: 'Ricochet Nova Slam',
+    skillDescription:
+      'Launches 4 bouncing crystal shards in an X-cross while vaulting upward into an explosive prism shockwave!',
+    skillCooldown: 1.45,
+    accent: '#e879f9',
+    ownerChar: 'bouncer',
   },
 };
 
+export const BASE_ARCHETYPE_WEAPONS: WeaponId[] = [];
+
 export function canCharacterUseWeapon(charId: CharacterId, weaponId: WeaponId): boolean {
-  const owner = WEAPONS[weaponId].ownerChar;
-  return !owner || owner === charId;
+  return WEAPONS[weaponId].ownerChar === charId;
 }
 
 export function getEvolutionTierName(tier: number): string {
   if (tier <= 0) return 'Base';
   if (tier === 1) return 'Awakened';
   if (tier === 2) return 'Mythic';
-  return 'Transcendent';
+  if (tier === 3) return 'Transcendent';
+  if (tier === 4) return 'Sovereign';
+  return 'Apex';
 }
 
-// Weapon Upgrade Progression — dramatic Visual, Audio & Key [3] Skill Evolution every 5 upgrades!
-// Note: nextLevel = player.weaponDamageBonus + 2 (so 5 upgrades = nextLevel 6, 10 upgrades = nextLevel 11, 15 upgrades = nextLevel 16)
+// Route 1: Basic Attack Weapon Upgrade Progression (Max Lv 25 — Ascends every 5 levels!)
+// Lightest raw damage route (free MP, no cooldown), upgrades Damage + Swing Speed + Arc/Reach!
 export function getWeaponMilestoneInfo(nextLevel: number): {
   tag: string;
   title: string;
   description: string;
 } {
-  const nextUpgrades = Math.max(1, nextLevel - 1);
-  if (nextUpgrades % 5 === 0) {
-    const evoTier = nextUpgrades / 5;
+  const clamped = Math.min(MAX_POWER_LEVEL, Math.max(2, nextLevel));
+  if (clamped % 5 === 0) {
+    const evoTier = clamped / 5;
     const tierName = getEvolutionTierName(evoTier);
-    if (evoTier === 1) {
-      return {
-        tag: '★ AWAKENED EVO',
-        title: `Weapon Evolution I · ${tierName} (+${nextUpgrades})`,
-        description:
-          '5-UPGRADE EVOLUTION! New glowing energy trails, resonant forge audio, +1 dmg & evolved Key [3] Skills (extra wave, double seismic ring, arc lightning & wider flurry)!',
-      };
-    }
-    if (evoTier === 2) {
-      return {
-        tag: '★★ MYTHIC EVO',
-        title: `Weapon Evolution II · ${tierName} (+${nextUpgrades})`,
-        description:
-          '10-UPGRADE EVOLUTION! Blazing dual-aura weapon arcs, thunderous cathedral audio, +1 dmg & Mythic Key [3] Skills (triple wave, twin quakes, storm nova)!',
-      };
-    }
+    const stars = '★'.repeat(Math.min(5, evoTier));
     return {
-      tag: '★★★ TRANSCENDENT',
-      title: `Weapon Evolution ${evoTier} · ${tierName} (+${nextUpgrades})`,
+      tag: `${stars} ${tierName.toUpperCase()} ASCENSION`,
+      title: `Weapon Basic Lv ${clamped}/25 · ${tierName}`,
       description:
-        '15+ UPGRADE EVOLUTION! Astral storm trails, celestial resonance audio, +1 dmg & massive screen-shaking Key [3] devastation!',
+        evoTier === 1
+          ? 'ASCENSION I (Lv 5)! Glowing trails, +1 flat dmg, faster swing speed & wider arc reach!'
+          : evoTier === 2
+            ? 'ASCENSION II (Lv 10)! Dual-aura arcs, +1 flat dmg & basic swings unleash bonus energy waves!'
+            : evoTier === 3
+              ? 'ASCENSION III (Lv 15)! Extra echo strike pulse on swings, huge arc reach & rapid attack tempo!'
+              : evoTier === 4
+                ? 'ASCENSION IV (Lv 20)! Sovereign storm-trails, +1 flat dmg, colossal sweep arc & blazing speed!'
+                : 'APEX ASCENSION V (Lv 25 MAX)! Supreme weapon mastery: twin waves, maximum speed & sweeping reach!',
     };
   }
 
-  const nextEvoTier = Math.floor(nextUpgrades / 5) + 1;
-  const progressInTier = nextUpgrades % 5;
+  const nextEvoTier = Math.floor(clamped / 5) + 1;
+  const progressInTier = clamped % 5;
   const nextTierName = getEvolutionTierName(nextEvoTier);
+  const grantsFlat = clamped % 4 === 0;
   return {
-    tag: `+1 DMG (${progressInTier}/5)`,
-    title: `Weapon Mastery +${nextUpgrades}`,
-    description: `+1 weapon & Key [3] skill damage (${progressInTier}/5 upgrades toward ${nextTierName} Visual & Audio Evolution).`,
+    tag: grantsFlat ? `+1 DMG · SPD · ARC (${progressInTier}/5)` : `+4% DMG · SPD · ARC (${progressInTier}/5)`,
+    title: `Basic Weapon Lv ${clamped}/25`,
+    description: grantsFlat
+      ? `+1 flat attack dmg, +1.5% speed & +1.5% wider weapon arc (${progressInTier}/5 toward ${nextTierName} Ascension).`
+      : `+4% basic dmg, +1.5% attack speed & +1.5% wider arc (${progressInTier}/5 toward ${nextTierName} Ascension).`,
+  };
+}
+
+// Route 2: Weapon Power [3] Special Upgrade Progression (Max Lv 25 — Middle Power Tier!)
+// Free MP, medium cooldown — stronger damage & cooldown scaling than Basic Attacks!
+export function getWeaponPowerMilestoneInfo(nextLevel: number): {
+  tag: string;
+  title: string;
+  description: string;
+} {
+  const clamped = Math.min(MAX_POWER_LEVEL, Math.max(2, nextLevel));
+  if (clamped % 5 === 0) {
+    const evoTier = clamped / 5;
+    const tierName = getEvolutionTierName(evoTier);
+    const stars = '★'.repeat(Math.min(5, evoTier));
+    return {
+      tag: `${stars} ${tierName.toUpperCase()} [3] ASCENSION`,
+      title: `Weapon Power [3] Lv ${clamped}/25 · ${tierName}`,
+      description:
+        evoTier === 1
+          ? 'ASCENSION I (Lv 5)! Extra special waves/arrows/walls, wider blast radius, +1 flat dmg & snappier cooldown!'
+          : evoTier === 2
+            ? 'ASCENSION II (Lv 10)! Triple waves, 3-wall prism cages, massive shockwaves & resonant [3] power!'
+            : evoTier === 3
+              ? 'ASCENSION III (Lv 15)! Full 4-wall prism box, colossal elemental volleys, +1 flat dmg & huge stun!'
+              : evoTier === 4
+                ? 'ASCENSION IV (Lv 20)! Sovereign [3] overdrive: blazing multi-wave blasts & rapid recharge!'
+                : 'APEX ASCENSION V (Lv 25 MAX)! Ultimate Weapon Power mastery — devastating zero-mana special devastation!',
+    };
+  }
+
+  const nextEvoTier = Math.floor(clamped / 5) + 1;
+  const progressInTier = clamped % 5;
+  const nextTierName = getEvolutionTierName(nextEvoTier);
+  const grantsFlat = clamped % 3 === 0;
+  return {
+    tag: grantsFlat ? `+1 FLAT · -2.5% CD (${progressInTier}/5)` : `+10% PWR · -2.5% CD (${progressInTier}/5)`,
+    title: `Weapon Power [3] Lv ${clamped}/25`,
+    description: grantsFlat
+      ? `+1 flat [3] special dmg, +10% power & -2.5% cooldown (${progressInTier}/5 toward ${nextTierName} Ascension).`
+      : `+10% [3] special damage & -2.5% cooldown (${progressInTier}/5 toward ${nextTierName} Ascension).`,
   };
 }
 
 export function getWeaponCurrentTag(level: number): string {
-  const upgrades = Math.max(0, level - 1);
-  const tier = Math.floor(upgrades / 5);
-  const rem = upgrades % 5;
-  if (tier === 0) return upgrades === 0 ? 'Base' : `${rem}/5 → Awakened`;
+  const tier = Math.floor(Math.max(0, level) / 5);
+  const rem = level % 5;
+  if (level >= MAX_POWER_LEVEL) return 'Apex MAX (25)';
+  if (tier === 0) return `Lv ${level}/25 (${rem}/5 → Awakened)`;
   return `${getEvolutionTierName(tier)} (${rem}/5)`;
 }
 
-// Spell Slot Upgrade Progression — dramatic Visual, Audio & Effect Evolution every 5 upgrades!
-// Note: nextLevel = slotLevel + 1 (so 5 upgrades = nextLevel 6, 10 upgrades = nextLevel 11, 15 upgrades = nextLevel 16)
+// Route 3: Spell Slot Upgrade Progression (Max Lv 25 — STRONGEST Route, Costs Mana!)
 export function getSpellMilestoneInfo(
   abilityId: AbilityId,
   nextLevel: number
 ): { tag: string; summary: string } {
-  const nextUpgrades = Math.max(1, nextLevel - 1);
-  if (nextUpgrades % 5 === 0) {
-    const evoTier = nextUpgrades / 5;
+  const clamped = Math.min(MAX_POWER_LEVEL, Math.max(2, nextLevel));
+  if (clamped % 5 === 0) {
+    const evoTier = clamped / 5;
     const tierName = getEvolutionTierName(evoTier);
+    const stars = '★'.repeat(Math.min(5, evoTier));
     switch (abilityId) {
       case 'fireball':
         return {
-          tag: `★ ${tierName.toUpperCase()} EVO`,
+          tag: `${stars} ${tierName.toUpperCase()} SPELL`,
           summary:
             evoTier === 1
-              ? '5-UPGRADE EVOLUTION! Twin blazing firebolts, roaring blast shockwave, burning trail & resonant cast audio!'
-              : 'MYTHIC EVOLUTION! Triple inferno volley with massive shockwaves & thunderous flame acoustics!',
+              ? 'ASCENSION I (Lv 5)! Twin blazing firebolts, roaring blast shockwave & heavy burning trail!'
+              : `ASCENSION ${evoTier} (Lv ${clamped})! Multi-bolt inferno volley with colossal blast waves & massive Spell DMG!`,
         };
       case 'dash_attack':
         return {
-          tag: `★ ${tierName.toUpperCase()} EVO`,
+          tag: `${stars} ${tierName.toUpperCase()} SPELL`,
           summary:
             evoTier === 1
-              ? '5-UPGRADE EVOLUTION! Extended phantom dash with crimson blast wake, burn & sonic boom audio!'
-              : 'MYTHIC EVOLUTION! Double shockwave phantom blitz with blazing afterimages & +1 dmg!',
+              ? 'ASCENSION I (Lv 5)! Extended phantom dash with crimson blast wake, burn & sonic boom!'
+              : `ASCENSION ${evoTier} (Lv ${clamped})! Multi-shockwave phantom blitz with huge piercing damage!`,
         };
       case 'grapple':
         return {
-          tag: `★ ${tierName.toUpperCase()} EVO`,
+          tag: `${stars} ${tierName.toUpperCase()} SPELL`,
           summary:
             evoTier === 1
-              ? '5-UPGRADE EVOLUTION! Scorched Chain Slam releases an AoE shockwave, burns & siphons +1 MP!'
-              : 'MYTHIC EVOLUTION! Twin chain detonation with massive shockwave & +1 MP siphon!',
+              ? 'ASCENSION I (Lv 5)! Scorched Chain Slam releases an AoE shockwave, burns & siphons +1 MP!'
+              : `ASCENSION ${evoTier} (Lv ${clamped})! Massive chain detonation shockwave with bonus MP siphon!`,
         };
       case 'gas_bomb':
         return {
-          tag: `★ ${tierName.toUpperCase()} EVO`,
+          tag: `${stars} ${tierName.toUpperCase()} SPELL`,
           summary:
             evoTier === 1
-              ? '5-UPGRADE EVOLUTION! Launches twin volatile flasks that shatter into huge igniting clouds!'
-              : 'MYTHIC EVOLUTION! Triple plague barrage with colossal blast rings & lingering toxic inferno!',
+              ? 'ASCENSION I (Lv 5)! Launches twin volatile flasks that shatter into huge igniting clouds!'
+              : `ASCENSION ${evoTier} (Lv ${clamped})! Colossal plague barrage with toxic inferno blast rings!`,
         };
       case 'fire_weapon':
         return {
-          tag: `★ ${tierName.toUpperCase()} EVO`,
+          tag: `${stars} ${tierName.toUpperCase()} SPELL`,
           summary:
             evoTier === 1
-              ? '5-UPGRADE EVOLUTION! Solar Overdrive: fiery impact shockwaves, burn DoT & +35% crit chance!'
-              : 'MYTHIC EVOLUTION! Supernova Blade: massive flame nova bursts on strike & +50% crit!',
+              ? 'ASCENSION I (Lv 5)! Solar Overdrive: fiery impact shockwaves, heavy Burn & +35% crit!'
+              : `ASCENSION ${evoTier} (Lv ${clamped})! Supernova Blade: massive flame nova bursts on strike & huge crit!`,
+        };
+      default:
+        return {
+          tag: `${stars} ${tierName.toUpperCase()} SPELL`,
+          summary:
+            evoTier === 1
+              ? 'ASCENSION I (Lv 5)! Expanded area, extra projectiles/targets, stronger status effects & huge Spell DMG!'
+              : `ASCENSION ${evoTier} (Lv ${clamped})! Colossal arcane scaling, extra multi-hits & supreme spell potency!`,
         };
     }
   }
 
-  const nextEvoTier = Math.floor(nextUpgrades / 5) + 1;
-  const progressInTier = nextUpgrades % 5;
+  const nextEvoTier = Math.floor(clamped / 5) + 1;
+  const progressInTier = clamped % 5;
   const nextTierName = getEvolutionTierName(nextEvoTier);
+  const grantsFlat = clamped % 2 === 0;
   return {
-    tag: `+1 PWR (${progressInTier}/5)`,
-    summary: `+1 spell power & faster cast (${progressInTier}/5 toward ${nextTierName} Spell Evolution).`,
+    tag: grantsFlat ? `+1 FLAT · +14% PWR (${progressInTier}/5)` : `+14% PWR · -3% CD (${progressInTier}/5)`,
+    summary: grantsFlat
+      ? `Strongest route! +1 flat spell dmg, +14% spell power & -3% cooldown (${progressInTier}/5 toward ${nextTierName}).`
+      : `Strongest route! +14% spell power & -3% cooldown; +1 flat dmg every 2 levels (${progressInTier}/5 toward ${nextTierName}).`,
   };
 }
 
 export function getSpellCurrentTag(level: number): string {
-  const upgrades = Math.max(0, level - 1);
-  const tier = Math.floor(upgrades / 5);
-  const rem = upgrades % 5;
-  if (tier === 0) return upgrades === 0 ? 'Base' : `${rem}/5 → Awakened`;
+  const tier = Math.floor(Math.max(0, level) / 5);
+  const rem = level % 5;
+  if (level >= MAX_POWER_LEVEL) return 'Apex MAX (25)';
+  if (tier === 0) return `Lv ${level}/25 (${rem}/5 → Awakened)`;
   return `${getEvolutionTierName(tier)} (${rem}/5)`;
-}
-
-// ============================================================================
-// ELEMENTAL AFFINITY SYSTEM (Every 5 Levels: 6 Base Elements → 15 Combinations)
-// ============================================================================
-export const BASE_ELEMENT_ORDER: BaseElementId[] = [
-  'water',
-  'fire',
-  'air',
-  'earth',
-  'light',
-  'shadow',
-];
-
-export const BASE_ELEMENTS: Record<BaseElementId, ElementDef> = {
-  water: {
-    id: 'water',
-    name: 'Water',
-    title: 'Tidal Current',
-    shortDesc: 'Chills foes (-40% speed) & restores +1 MP every 4 hits.',
-    description:
-      'Infuses your strikes with freezing tidewater: slows enemies for 2.6s, splashes nearby foes, and restores +1 MP every 4th hit.',
-    primaryColor: '#38bdf8',
-    secondaryColor: '#0ea5e9',
-    glowColor: '#bae6fd',
-    isCombined: false,
-  },
-  fire: {
-    id: 'fire',
-    name: 'Fire',
-    title: 'Cinder Flame',
-    shortDesc: 'Ignites enemies for blazing Burn DoT & fiery ember bursts.',
-    description:
-      'Wreathes your weapon in roaring embers: scorches struck foes with 3.5s Burn DoT and detonates fiery sparks on crits.',
-    primaryColor: '#f97316',
-    secondaryColor: '#ef4444',
-    glowColor: '#fed7aa',
-    isCombined: false,
-  },
-  air: {
-    id: 'air',
-    name: 'Air',
-    title: 'Gale Zephyr',
-    shortDesc: '+16% Move Speed & sweeping Wind Blades hit distant foes.',
-    description:
-      'Channel the howling gale: +16% movement speed, faster jump flow, and every 2nd strike launches a slicing Wind Crescent.',
-    primaryColor: '#5eead4',
-    secondaryColor: '#a7f3d0',
-    glowColor: '#ccfbf1',
-    isCombined: false,
-  },
-  earth: {
-    id: 'earth',
-    name: 'Earth',
-    title: 'Stone Bastion',
-    shortDesc: '+1 Armor Shield per room & erupts jagged Stone Spikes.',
-    description:
-      'Grants +1 free Armor Shield entering every chamber and erupts heavy Stone Spikes beneath struck foes for bonus stagger & AoE.',
-    primaryColor: '#d97706',
-    secondaryColor: '#a16207',
-    glowColor: '#fde68a',
-    isCombined: false,
-  },
-  light: {
-    id: 'light',
-    name: 'Light',
-    title: 'Radiant Dawn',
-    shortDesc: 'Calls down Radiant Sky Beams & +25% Boss/Undead damage.',
-    description:
-      'Smites enemies with golden beams from above for +1 radiant AoE damage, +25% boss damage, and chance to heal +1 HP on kills.',
-    primaryColor: '#fde047',
-    secondaryColor: '#f59e0b',
-    glowColor: '#fef9c3',
-    isCombined: false,
-  },
-  shadow: {
-    id: 'shadow',
-    name: 'Shadow',
-    title: 'Umbral Veil',
-    shortDesc: '+18% Crit Chance, stronger Assassinations & Void Drain.',
-    description:
-      'Envelops your blade in nocturnal mist: +18% crit chance, +2 assassination damage, and shadowy tendrils slash nearby enemies.',
-    primaryColor: '#a855f7',
-    secondaryColor: '#6d28d9',
-    glowColor: '#e9d5ff',
-    isCombined: false,
-  },
-};
-
-export const COMBINED_ELEMENTS: Record<CombinedElementId, ElementDef> = {
-  steam: {
-    id: 'steam',
-    name: 'Steam',
-    title: 'Water + Fire',
-    shortDesc: 'Scalding Vapor Explosions burn, slow & restore MP.',
-    description:
-      'Fuses Water & Fire into pressurized Steam: every strike bursts in a scalding mist ring that slows, burns, and restores MP every 3 hits.',
-    primaryColor: '#fb923c',
-    secondaryColor: '#38bdf8',
-    glowColor: '#ffedd5',
-    isCombined: true,
-    parents: ['water', 'fire'],
-  },
-  frost: {
-    id: 'frost',
-    name: 'Frost',
-    title: 'Water + Air',
-    shortDesc: 'Glacial Shatter freezes foes & fires piercing Ice Shards.',
-    description:
-      'Fuses Water & Air into Glacial Frost: +14% speed, deep freeze slow, and strikes shatter icy gale shards into surrounding foes.',
-    primaryColor: '#67e8f9',
-    secondaryColor: '#93c5fd',
-    glowColor: '#ecfeff',
-    isCombined: true,
-    parents: ['water', 'air'],
-  },
-  nature: {
-    id: 'nature',
-    name: 'Nature',
-    title: 'Water + Earth',
-    shortDesc: 'Verdant Thorns erupt +1 Armor Shield & heal on kills.',
-    description:
-      'Fuses Water & Earth into Living Nature: +1 Armor Shield per room, erupting Briar Spikes, and every 5th kill restores +1 HP & +1 MP.',
-    primaryColor: '#4ade80',
-    secondaryColor: '#22c55e',
-    glowColor: '#dcfce7',
-    isCombined: true,
-    parents: ['water', 'earth'],
-  },
-  prism: {
-    id: 'prism',
-    name: 'Prism',
-    title: 'Water + Light',
-    shortDesc: 'Refracted Rainbow Beams split across multiple enemies!',
-    description:
-      'Fuses Water & Light into Radiant Prism: calls down splitting rainbow beams that chill, restore MP, and deal heavy boss damage.',
-    primaryColor: '#f472b6',
-    secondaryColor: '#38bdf8',
-    glowColor: '#fef08a',
-    isCombined: true,
-    parents: ['water', 'light'],
-  },
-  abyss: {
-    id: 'abyss',
-    name: 'Abyss',
-    title: 'Water + Shadow',
-    shortDesc: 'Crushing Deep Tide pulls foes, slows & boosts crits (+18%).',
-    description:
-      'Fuses Water & Shadow into the Crushing Abyss: dark tidal vortices pull & chill enemies, +18% crit, and siphon MP on crits.',
-    primaryColor: '#6366f1',
-    secondaryColor: '#0284c7',
-    glowColor: '#c7d2fe',
-    isCombined: true,
-    parents: ['water', 'shadow'],
-  },
-  lightning: {
-    id: 'lightning',
-    name: 'Lightning',
-    title: 'Fire + Air',
-    shortDesc: 'Jagged Chain Lightning arcs across 3 foes +18% Speed!',
-    description:
-      'Fuses Fire & Air into Storm Lightning: +18% move speed and strikes unleash crackling Chain Lightning bolts jumping between nearby foes!',
-    primaryColor: '#60a5fa',
-    secondaryColor: '#facc15',
-    glowColor: '#fef08a',
-    isCombined: true,
-    parents: ['fire', 'air'],
-  },
-  magma: {
-    id: 'magma',
-    name: 'Magma',
-    title: 'Fire + Earth',
-    shortDesc: 'Volcanic Eruptions shatter armor, burn & grant +1 Shield.',
-    description:
-      'Fuses Fire & Earth into Molten Magma: +1 Armor Shield per room and heavy strikes erupt volcanic lava pillars with massive AoE burn!',
-    primaryColor: '#ef4444',
-    secondaryColor: '#f59e0b',
-    glowColor: '#fecaca',
-    isCombined: true,
-    parents: ['fire', 'earth'],
-  },
-  solar: {
-    id: 'solar',
-    name: 'Solar',
-    title: 'Fire + Light',
-    shortDesc: 'Blinding Solar Flares rain down +30% Boss Damage & Burn!',
-    description:
-      'Fuses Fire & Light into Solar Radiance: scorching sky-beams incinerate targets in huge bursts with +30% damage against bosses.',
-    primaryColor: '#facc15',
-    secondaryColor: '#f97316',
-    glowColor: '#fef9c3',
-    isCombined: true,
-    parents: ['fire', 'light'],
-  },
-  hellfire: {
-    id: 'hellfire',
-    name: 'Hellfire',
-    title: 'Fire + Shadow',
-    shortDesc: 'Cursed Black-Violet Flames inflict lethal Burn & +20% Crit!',
-    description:
-      'Fuses Fire & Shadow into Abyssal Hellfire: +20% crit chance, violent crimson-violet flame eruptions, and devastating assassination bursts.',
-    primaryColor: '#e11d48',
-    secondaryColor: '#9333ea',
-    glowColor: '#fbcfe8',
-    isCombined: true,
-    parents: ['fire', 'shadow'],
-  },
-  sandstorm: {
-    id: 'sandstorm',
-    name: 'Sandstorm',
-    title: 'Air + Earth',
-    shortDesc: 'Whirling Desert Gales shred crowds +14% Speed & +1 Shield.',
-    description:
-      'Fuses Air & Earth into Raging Sandstorm: +14% move speed, +1 Armor Shield per room, and howling abrasive wind waves cleave wide rooms.',
-    primaryColor: '#fbbf24',
-    secondaryColor: '#b45309',
-    glowColor: '#fef3c7',
-    isCombined: true,
-    parents: ['air', 'earth'],
-  },
-  aether: {
-    id: 'aether',
-    name: 'Aether',
-    title: 'Air + Light',
-    shortDesc: 'Celestial Tempest +20% Speed, sky arcs & rapid MP flow!',
-    description:
-      'Fuses Air & Light into Pure Aether: +20% speed, luminous astral wind beams pierce across the screen and replenish MP rapidly.',
-    primaryColor: '#e0f2fe',
-    secondaryColor: '#fde047',
-    glowColor: '#ffffff',
-    isCombined: true,
-    parents: ['air', 'light'],
-  },
-  phantom: {
-    id: 'phantom',
-    name: 'Phantom',
-    title: 'Air + Shadow',
-    shortDesc: 'Spectral Slash echoes every strike +20% Speed & +22% Crit!',
-    description:
-      'Fuses Air & Shadow into Phantom Wraith: +20% speed, +22% crit, ghostly wind blades echo your attacks, and assassinations explode with shadow mist.',
-    primaryColor: '#c084fc',
-    secondaryColor: '#2dd4bf',
-    glowColor: '#f3e8ff',
-    isCombined: true,
-    parents: ['air', 'shadow'],
-  },
-  crystal: {
-    id: 'crystal',
-    name: 'Crystal',
-    title: 'Earth + Light',
-    shortDesc: '+2 Armor Shields per room & shattering Radiant Crystals!',
-    description:
-      'Fuses Earth & Light into Prismatic Crystal: +2 Armor Shields every chamber and strikes erupt shimmering crystal spires that burst into shards.',
-    primaryColor: '#f0abfc',
-    secondaryColor: '#fcd34d',
-    glowColor: '#fae8ff',
-    isCombined: true,
-    parents: ['earth', 'light'],
-  },
-  obsidian: {
-    id: 'obsidian',
-    name: 'Obsidian',
-    title: 'Earth + Shadow',
-    shortDesc: 'Razor Black-Glass Spikes deal brutal Crit AoE & +1 Shield.',
-    description:
-      'Fuses Earth & Shadow into Volcanic Obsidian: +1 Armor Shield per room, +18% crit, and jagged black-glass spikes impale nearby foes.',
-    primaryColor: '#7c3aed',
-    secondaryColor: '#475569',
-    glowColor: '#ddd6fe',
-    isCombined: true,
-    parents: ['earth', 'shadow'],
-  },
-  eclipse: {
-    id: 'eclipse',
-    name: 'Eclipse',
-    title: 'Light + Shadow',
-    shortDesc: 'Twin Sun-Moon Collapse: +25% Crit, +30% Boss Dmg & Nova!',
-    description:
-      'Fuses Light & Shadow into the Forbidden Eclipse: +25% crit, +30% boss damage, and strikes trigger golden-violet Eclipse Novas!',
-    primaryColor: '#fbbf24',
-    secondaryColor: '#9333ea',
-    glowColor: '#fef08a',
-    isCombined: true,
-    parents: ['light', 'shadow'],
-  },
-};
-
-const COMBINED_PAIR_LOOKUP: Record<string, CombinedElementId> = {
-  'fire+water': 'steam',
-  'air+water': 'frost',
-  'earth+water': 'nature',
-  'light+water': 'prism',
-  'shadow+water': 'abyss',
-  'air+fire': 'lightning',
-  'earth+fire': 'magma',
-  'fire+light': 'solar',
-  'fire+shadow': 'hellfire',
-  'air+earth': 'sandstorm',
-  'air+light': 'aether',
-  'air+shadow': 'phantom',
-  'earth+light': 'crystal',
-  'earth+shadow': 'obsidian',
-  'light+shadow': 'eclipse',
-};
-
-export function getCombinedElementId(
-  a: BaseElementId,
-  b: BaseElementId
-): CombinedElementId | null {
-  if (a === b) return null;
-  const key = a < b ? `${a}+${b}` : `${b}+${a}`;
-  return COMBINED_PAIR_LOOKUP[key] ?? null;
-}
-
-export function getActiveElementDef(
-  baseElements: BaseElementId[],
-  combinedElement: CombinedElementId | null
-): ElementDef | null {
-  if (combinedElement && COMBINED_ELEMENTS[combinedElement]) {
-    return COMBINED_ELEMENTS[combinedElement];
-  }
-  if (baseElements.length > 0) {
-    return BASE_ELEMENTS[baseElements[0]] ?? null;
-  }
-  return null;
 }
 
 export const ABILITY_ORDER: AbilityId[] = [
   'fireball',
-  'dash_attack',
-  'grapple',
-  'gas_bomb',
   'fire_weapon',
+  'dash_attack',
+  'gas_bomb',
   'cinder_palm',
   'chain_storm',
   'venom_needles',
+  'ricochet_snare',
+  'aegis_slam',
+  'solar_bloom',
+  'prism_beam',
+  'grapple',
+  'frost_nova',
+  'phantom_blades',
+  'meteor_call',
+  'blood_siphon',
 ];
 
 export const ABILITIES: Record<AbilityId, AbilityDef> = {
@@ -946,18 +1539,20 @@ export const ABILITIES: Record<AbilityId, AbilityDef> = {
     name: 'Fireball',
     shortName: 'Fireball',
     manaCost: 1,
-    cooldown: 0.6,
-    description: 'Hurls an explosive firebolt. Evolves with Burn (Lv3), Inferno Blast (Lv4), and Twin Bolts (Lv5).',
+    cooldown: 0.58,
+    description: 'Hurls an explosive firebolt (1 MP). Ascends every 5 levels up to Lv 25 with Twin/Triple Inferno volleys!',
     accent: '#f97316',
+    starterChar: 'hunter',
   },
   dash_attack: {
     id: 'dash_attack',
     name: 'Forward Dash Attack',
     shortName: 'Dash Slash',
-    manaCost: 2,
-    cooldown: 1.35,
-    description: 'Surges rapidly forward, piercing foes. Evolves with Searing Burn (Lv3) & Shockwave Wake (Lv4).',
+    manaCost: 1,
+    cooldown: 1.25,
+    description: 'Surges rapidly forward, piercing foes (1 MP). Ascends every 5 levels with blazing shockwave wakes!',
     accent: '#ef4444',
+    starterChar: 'ronin',
   },
   grapple: {
     id: 'grapple',
@@ -965,53 +1560,139 @@ export const ABILITIES: Record<AbilityId, AbilityDef> = {
     shortName: 'Grapple',
     manaCost: 1,
     cooldown: 0.85,
-    description: 'Fires a chain hook upward (hold W for straight up) to latch rafters or strike foes.',
+    description: 'Forge Spell · Fires a chain hook upward (1 MP) to latch rafters or slam foes.',
     accent: '#94a3b8',
+    forgeOnly: true,
   },
   gas_bomb: {
     id: 'gas_bomb',
     name: 'Gas Bomb',
     shortName: 'Gas Bomb',
-    manaCost: 2,
-    cooldown: 2.1,
-    description: 'Shatters an alchemical flask into a toxic cloud. Evolves with Volatile Burn (Lv3) & Impact Blast (Lv4).',
+    manaCost: 1,
+    cooldown: 1.9,
+    description: 'Shatters an alchemical flask into a toxic cloud (1 MP). Ascends every 5 levels with multi-flask barrages!',
     accent: '#22c55e',
+    starterChar: 'minstrel',
   },
   fire_weapon: {
     id: 'fire_weapon',
     name: 'Fire Weapon',
     shortName: 'Fire Buff',
-    manaCost: 2,
-    cooldown: 4.0,
-    description: 'Ignites your weapon for fire damage & +20% crit. Evolves with Cinder Burn (Lv3) & Flame Surge (Lv4).',
+    manaCost: 1,
+    cooldown: 3.6,
+    description: 'Ignites your weapon for fiery burst damage & +25% crit (1 MP). Ascends into Supernova Blade!',
     accent: '#f59e0b',
+    starterChar: 'brute',
   },
   cinder_palm: {
     id: 'cinder_palm',
     name: 'Cinder Palm',
     shortName: 'Cinder Palm',
-    manaCost: 2,
-    cooldown: 1.6,
-    description: 'A thrust of the open palm releases a cone of ash and embers: heavy damage, stun and a huge shove. Evolves with Burn (Lv3) and a wider cone (every 5 levels).',
+    manaCost: 1,
+    cooldown: 1.45,
+    description: 'Open-palm blast releasing a cone of embers: heavy damage, stun & shove (1 MP). Ascends every 5 levels.',
     accent: '#a8a29e',
+    starterChar: 'monk',
   },
   chain_storm: {
     id: 'chain_storm',
     name: 'Chain of Storms',
     shortName: 'Chain Storm',
-    manaCost: 3,
-    cooldown: 2.2,
-    description: 'Calls lightning that leaps between up to 3 nearby foes (more every 5 levels), stunning them. Takes your Affinity colour.',
+    manaCost: 2,
+    cooldown: 2.1,
+    description: 'Calls devastating lightning that leaps between foes, stunning them (2 MP). Takes your Affinity colour.',
     accent: '#60a5fa',
+    starterChar: 'wizard',
   },
   venom_needles: {
     id: 'venom_needles',
     name: 'Venom Needles',
     shortName: 'Venom',
-    manaCost: 2,
-    cooldown: 1.5,
-    description: 'Flicks a fan of poisoned needles (3, more every 5 levels). Each hit poisons: slow damage over time (poison ticks). Takes your Affinity as a dark tint.',
+    manaCost: 1,
+    cooldown: 1.35,
+    description: 'Flicks a fan of poisoned needles (1 MP, more every 5 levels) inflicting lethal toxic damage.',
     accent: '#4d7c0f',
+    starterChar: 'assassin',
+  },
+  ricochet_snare: {
+    id: 'ricochet_snare',
+    name: 'Bola Snare',
+    shortName: 'Bola Snare',
+    manaCost: 1,
+    cooldown: 1.5,
+    description: 'Ranger starter · Weighted hunter bola (1 MP) that pierces, binds, stuns & bursts with shrapnel!',
+    accent: '#10b981',
+    starterChar: 'ranger',
+  },
+  aegis_slam: {
+    id: 'aegis_slam',
+    name: 'Bastion Shockwave',
+    shortName: 'Aegis Slam',
+    manaCost: 1,
+    cooldown: 2.2,
+    description: 'Vanguard starter · Grants +1 Armor Shield and slams twin iron shockwaves across the floor (1 MP)!',
+    accent: '#38bdf8',
+    starterChar: 'vanguard',
+  },
+  solar_bloom: {
+    id: 'solar_bloom',
+    name: 'Solar Lotus Ring',
+    shortName: 'Solar Ring',
+    manaCost: 1,
+    cooldown: 1.65,
+    description: 'Blade-Dancer starter · Expanding ring of radiant sun-petals that slice & burn nearby foes (1 MP)!',
+    accent: '#fbbf24',
+    starterChar: 'dancer',
+  },
+  prism_beam: {
+    id: 'prism_beam',
+    name: 'Refracted Prism Ray',
+    shortName: 'Prism Ray',
+    manaCost: 1,
+    cooldown: 1.6,
+    description: 'Prism Striker starter · Blinding crystalline ray piercing enemies in a line & bursting prism shards (1 MP)!',
+    accent: '#22d3ee',
+    starterChar: 'bouncer',
+  },
+  frost_nova: {
+    id: 'frost_nova',
+    name: 'Glacial Ring',
+    shortName: 'Frost Nova',
+    manaCost: 1,
+    cooldown: 2.0,
+    description: 'Forge New Spell · Freezing crystalline nova chilling & staggering all nearby foes (1 MP)!',
+    accent: '#67e8f9',
+    forgeOnly: true,
+  },
+  phantom_blades: {
+    id: 'phantom_blades',
+    name: 'Spectral Knives',
+    shortName: 'Ghost Blades',
+    manaCost: 1,
+    cooldown: 1.55,
+    description: 'Forge New Spell · Summons 5 homing spirit knives that seek out nearby enemies and pierce shields (1 MP)!',
+    accent: '#c084fc',
+    forgeOnly: true,
+  },
+  meteor_call: {
+    id: 'meteor_call',
+    name: 'Cataclysm Meteor',
+    shortName: 'Meteor Call',
+    manaCost: 2,
+    cooldown: 2.6,
+    description: 'Forge New Spell · Calls down a blazing sky meteor onto the nearest foe with a massive crater & Burn (2 MP)!',
+    accent: '#fb7185',
+    forgeOnly: true,
+  },
+  blood_siphon: {
+    id: 'blood_siphon',
+    name: 'Crimson Siphon',
+    shortName: 'Blood Siphon',
+    manaCost: 2,
+    cooldown: 3.0,
+    description: 'Forge New Spell · Unleashes crimson tendrils draining all nearby foes and restoring +1 HP on hit (2 MP)!',
+    accent: '#dc2626',
+    forgeOnly: true,
   },
 };
 
@@ -1045,7 +1726,12 @@ export const ITEMS: Record<ItemId, ItemDef> = {
   },
 };
 
-export const SPECIAL_ITEM_ORDER: SpecialItemId[] = ['eclipse_hourglass', 'hero_tag_horn'];
+export const SPECIAL_ITEM_ORDER: SpecialItemId[] = [
+  'eclipse_hourglass',
+  'hero_tag_horn',
+  'smoke_vial',
+  'fire_bomb',
+];
 
 export const SPECIAL_ITEMS: Record<SpecialItemId, SpecialItemDef> = {
   eclipse_hourglass: {
@@ -1053,7 +1739,7 @@ export const SPECIAL_ITEMS: Record<SpecialItemId, SpecialItemDef> = {
     name: 'Eclipse Hourglass',
     shortName: 'Hourglass',
     description:
-      'Rare limited relic [6]: Shatters time for 4.2s, slowing all enemies to a crawl, dealing 8 Cataclysm DMG + Burn to every foe on screen, and restoring +2 MP.',
+      'Rare relic [6]: Shatters time for 4.2s, slowing all enemies to a crawl, dealing 8 Cataclysm DMG + Burn to every foe on screen, and restoring +2 MP.',
     cooldown: 10,
     maxCharges: 3,
     accent: '#c084fc',
@@ -1063,9 +1749,207 @@ export const SPECIAL_ITEMS: Record<SpecialItemId, SpecialItemDef> = {
     name: 'Phantom Tag Horn',
     shortName: 'Tag Horn',
     description:
-      'Rare limited relic [6]: Summons TWO phantom companion heroes beside you for a synchronized team-up strike — slamming, slashing, and healing +1 HP & +2 MP!',
+      'Rare relic [6]: Summons TWO phantom companion heroes beside you for a synchronized team-up strike — slamming, slashing, and healing +1 HP & +2 MP!',
     cooldown: 7,
     maxCharges: 3,
+    accent: '#38bdf8',
+  },
+  smoke_vial: {
+    id: 'smoke_vial',
+    name: 'Shadow Smoke Vial',
+    shortName: 'Smoke Vial',
+    description:
+      'Simple tactical item [6]: Shatters an obscuring smoke bomb that blinds & stuns nearby foes and grants 3.5s Shadow Ambush stealth for instant backstabs!',
+    cooldown: 6,
+    maxCharges: 3,
+    accent: '#94a3b8',
+    isSimple: true,
+  },
+  fire_bomb: {
+    id: 'fire_bomb',
+    name: 'Alchemist Fire Bomb',
+    shortName: 'Fire Bomb',
+    description:
+      'Simple tactical item [6]: Detonates a blazing alchemical flask around you for crisp AoE fire damage, guard-break stagger, and 4s Burn!',
+    cooldown: 5,
+    maxCharges: 3,
+    accent: '#fb923c',
+    isSimple: true,
+  },
+};
+
+export const HERO_SKIN_ORDER: HeroSkinId[] = [
+  'default',
+  'crimson_moon',
+  'gilded_saint',
+  'abyssal_knight',
+  'phantom_ivory',
+];
+
+export const HERO_SKINS: Record<HeroSkinId, HeroSkinDef> = {
+  default: {
+    id: 'default',
+    name: 'Classic Oath',
+    description: 'Signature castle vestments of this hero.',
+    coreCost: 0,
+    accent: '#cbd5e1',
+    filter: 'none',
+    auraColor: 'transparent',
+  },
+  crimson_moon: {
+    id: 'crimson_moon',
+    name: 'Crimson Bloodmoon',
+    description: 'Scarlet-drenched moonlight attire with a deep ruby aura.',
+    coreCost: 1,
+    accent: '#f43f5e',
+    filter: 'hue-rotate(-24deg) saturate(1.45) contrast(1.08)',
+    auraColor: 'rgba(244, 63, 94, 0.36)',
+  },
+  gilded_saint: {
+    id: 'gilded_saint',
+    name: 'Gilded Cathedral',
+    description: 'Burnished gold-and-ivory regalia blessed with radiant shimmer.',
+    coreCost: 2,
+    accent: '#fbbf24',
+    filter: 'sepia(0.45) saturate(1.65) brightness(1.12)',
+    auraColor: 'rgba(251, 191, 36, 0.36)',
+  },
+  abyssal_knight: {
+    id: 'abyssal_knight',
+    name: 'Abyssal Eclipse',
+    description: 'Midnight violet shadow-plate forged in cursed chambers.',
+    coreCost: 2,
+    accent: '#a855f7',
+    filter: 'hue-rotate(215deg) saturate(1.35) brightness(0.95)',
+    auraColor: 'rgba(168, 85, 247, 0.4)',
+  },
+  phantom_ivory: {
+    id: 'phantom_ivory',
+    name: 'Spectral Ivory',
+    description: 'Ghostly silver-cyan frostweave shimmering with moonlit mist.',
+    coreCost: 3,
+    accent: '#67e8f9',
+    filter: 'hue-rotate(145deg) saturate(0.85) brightness(1.18)',
+    auraColor: 'rgba(103, 232, 249, 0.38)',
+  },
+};
+
+export const GOLD_PREP_RECIPES: GoldPrepRecipe[] = [
+  {
+    id: 'gold_hp_potion',
+    name: 'Health Potion',
+    description: 'Restores +2 HP immediately when used [5].',
+    goldCost: 15,
+    category: 'potion',
+    itemId: 'health_potion',
+    accent: '#dc2626',
+  },
+  {
+    id: 'gold_mp_potion',
+    name: 'Mana Potion',
+    description: 'Restores +2 MP immediately when used [5].',
+    goldCost: 15,
+    category: 'potion',
+    itemId: 'mana_potion',
+    accent: '#3b82f6',
+  },
+  {
+    id: 'gold_armor_potion',
+    name: 'Armor Potion',
+    description: 'Grants 2 iron shield charges for 14s that block incoming hits [5].',
+    goldCost: 20,
+    category: 'potion',
+    itemId: 'armor_potion',
+    accent: '#cbd5e1',
+  },
+  {
+    id: 'gold_smoke_vial',
+    name: 'Shadow Smoke Vial (+1 Charge)',
+    description: 'Simple special item [6]: Blinds foes & grants 3.5s instant Ambush stealth (max 3).',
+    goldCost: 25,
+    category: 'special_item',
+    specialItemId: 'smoke_vial',
+    accent: '#94a3b8',
+  },
+  {
+    id: 'gold_fire_bomb',
+    name: 'Alchemist Fire Bomb (+1 Charge)',
+    description: 'Simple special item [6]: Blazing AoE fire burst with guard-break & 4s Burn (max 3).',
+    goldCost: 25,
+    category: 'special_item',
+    specialItemId: 'fire_bomb',
+    accent: '#fb923c',
+  },
+];
+
+export const SACRIFICE_ALTAR_ORDER: SacrificeAltarStat[] = [
+  'hp',
+  'mp',
+  'weapon',
+  'spell',
+  'regen',
+  'agility',
+];
+
+export const SACRIFICE_ALTAR_OFFERINGS: Record<SacrificeAltarStat, SacrificeAltarDef> = {
+  hp: {
+    stat: 'hp',
+    name: 'Blood Vessel Offering',
+    relicLabel: 'HP Relic Levels',
+    bonusLabel: '+1 Permanent Starting Max HP (All Heroes)',
+    description: 'Sacrifice 10 HP Relic levels from this run + 2 Boss Cores to grant +1 permanent Max HP to every hero forever.',
+    coreCost: 2,
+    levelsRequired: 10,
+    accent: '#ef4444',
+  },
+  mp: {
+    stat: 'mp',
+    name: 'Astral Chalice Offering',
+    relicLabel: 'MP Relic Levels',
+    bonusLabel: '+1 Permanent Starting Max MP (All Heroes)',
+    description: 'Sacrifice 10 MP Relic levels from this run + 2 Boss Cores to grant +1 permanent Max MP to every hero forever.',
+    coreCost: 2,
+    levelsRequired: 10,
+    accent: '#60a5fa',
+  },
+  weapon: {
+    stat: 'weapon',
+    name: 'Forged Steel Offering',
+    relicLabel: 'Weapon Relic Levels',
+    bonusLabel: '+1 Permanent Starting Weapon Lv (All Heroes)',
+    description: 'Sacrifice 10 Weapon Relic levels from this run + 2 Boss Cores to start every future run with +1 Weapon Lv on all heroes.',
+    coreCost: 2,
+    levelsRequired: 10,
+    accent: '#f59e0b',
+  },
+  spell: {
+    stat: 'spell',
+    name: 'Grimoire Ash Offering',
+    relicLabel: 'Spell Relic Levels',
+    bonusLabel: '+1 Permanent Starting Spell Lv (All Heroes)',
+    description: 'Sacrifice 10 Spell Relic levels from this run + 2 Boss Cores to start every future run with +1 Spell Lv on all heroes.',
+    coreCost: 2,
+    levelsRequired: 10,
+    accent: '#a855f7',
+  },
+  regen: {
+    stat: 'regen',
+    name: 'Undying Hearth Offering',
+    relicLabel: 'Regen Relic Levels',
+    bonusLabel: '+1 Permanent Room Regen (All Heroes)',
+    description: 'Sacrifice 10 Regen Relic levels from this run + 2 Boss Cores to grant +1 HP/MP room recovery to every hero forever.',
+    coreCost: 2,
+    levelsRequired: 10,
+    accent: '#34d399',
+  },
+  agility: {
+    stat: 'agility',
+    name: 'Shadow Gale Offering',
+    relicLabel: 'Shadow / Agility Levels',
+    bonusLabel: '+4% Permanent Crit & Speed (All Heroes)',
+    description: 'Sacrifice 10 Shadow/Agility Relic levels from this run + 2 Boss Cores for permanent +4% Crit & +4% Speed on all heroes.',
+    coreCost: 2,
+    levelsRequired: 10,
     accent: '#38bdf8',
   },
 };
@@ -1136,8 +2020,8 @@ export const CRAFT_RECIPES: CraftRecipe[] = [
   },
   {
     id: 'craft_sword',
-    name: 'Forge Silver Broadsword (Any Hero)',
-    description: 'Universal weapon for any hero. Fast crescent slash with Blade Wave [3].',
+    name: 'Forge Silver Broadsword (Hunter)',
+    description: 'Vampire Hunter exclusive. Fast crescent slash with Blade Wave [3].',
     cost: 4,
     category: 'weapon',
     weaponId: 'sword',
@@ -1268,16 +2152,16 @@ export const ARTIFACTS: Record<ArtifactId, ArtifactDef> = {
 // ===== Tuning v2 defaults (values mirror the original hard-coded constants) =====
 export const DEFAULT_KILL_FREEZE: KillFreezeTuning = {
   enabled: true,
-  freezeMs: 260,
+  freezeMs: 280,
   bossFreezeMult: 1.0,
-  slowMoScale: 0.35,
-  slowMoMs: 320,
-  zoomPunch: 0.14,
+  slowMoScale: 0.26,
+  slowMoMs: 420,
+  zoomPunch: 0.16,
   flash: true,
-  flashAlpha: 0.68,
-  impactFrameMs: 95,
-  shake: 16.5,
-  shakeMs: 380,
+  flashAlpha: 0.72,
+  impactFrameMs: 115,
+  shake: 17.5,
+  shakeMs: 400,
   holdUntilKey: false,
 };
 

@@ -388,6 +388,10 @@ const CHAR_TAB_LABEL: Record<CharacterId, string> = {
   monk: 'Monk',
   wizard: 'Wizard',
   assassin: 'Assassin',
+  ranger: 'Ranger',
+  vanguard: 'Vanguard',
+  dancer: 'Dancer',
+  bouncer: 'Striker',
 };
 
 function assassinGroups(P: (k: string) => string[]): GroupDef[] {

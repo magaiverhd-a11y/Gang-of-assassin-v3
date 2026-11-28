@@ -1,4 +1,4 @@
-import { buildEnemies, EnemySpawn } from './level';
+import { buildEnemies, EnemySpawn, withUndergroundPassage } from './level';
 import { Platform, StageDef } from './types';
 
 const FLOOR = 860;
@@ -228,7 +228,7 @@ const N5_SPAWNS: EnemySpawn[] = [
   },
 ];
 
-export const NECROPOLIS_RAID_ROOMS: StageDef[] = [
+const RAW_NECROPOLIS_RAID_ROOMS: StageDef[] = [
   {
     index: 0,
     roomNumber: 1,
@@ -462,6 +462,42 @@ export const NECROPOLIS_RAID_ROOMS: StageDef[] = [
   },
 ];
 
+export const NECROPOLIS_RAID_ROOMS: StageDef[] = [
+  withUndergroundPassage(RAW_NECROPOLIS_RAID_ROOMS[0], {
+    idPrefix: 'nec1',
+    startX: 2220,
+    endX: 2940,
+    grateInX: 2255,
+    grateOutX: 2795,
+    chestLabel: 'Sunken Ossuary Vault (+Potion & Shards)',
+  }),
+  withUndergroundPassage(RAW_NECROPOLIS_RAID_ROOMS[1], {
+    idPrefix: 'nec2',
+    startX: 1450,
+    endX: 2140,
+    grateInX: 1485,
+    grateOutX: 2005,
+    chestLabel: 'Belfry Crypt Passage (+Potion & Shards)',
+  }),
+  withUndergroundPassage(RAW_NECROPOLIS_RAID_ROOMS[2], {
+    idPrefix: 'nec3',
+    startX: 260,
+    endX: 800,
+    grateInX: 290,
+    grateOutX: 670,
+    chestLabel: 'Catacomb Reliquary (+Potion & Shards)',
+  }),
+  withUndergroundPassage(RAW_NECROPOLIS_RAID_ROOMS[3], {
+    idPrefix: 'nec4',
+    startX: 260,
+    endX: 800,
+    grateInX: 290,
+    grateOutX: 670,
+    chestLabel: 'Necromancer Under-Vault (+Potion & Shards)',
+  }),
+  RAW_NECROPOLIS_RAID_ROOMS[4],
+];
+
 // ============================================================================
 // RAID 4: BRIMSTONE SANCTUM (Volcanic Infernal Foundry — 4 Forges + Forge-Lord!)
 // ============================================================================
@@ -686,7 +722,7 @@ const B5_SPAWNS: EnemySpawn[] = [
   },
 ];
 
-export const BRIMSTONE_RAID_ROOMS: StageDef[] = [
+const RAW_BRIMSTONE_RAID_ROOMS: StageDef[] = [
   {
     index: 0,
     roomNumber: 1,
@@ -918,6 +954,42 @@ export const BRIMSTONE_RAID_ROOMS: StageDef[] = [
     hidingSpots: [],
     createEnemies: (m = 1, f = 0) => buildEnemies(B5_SPAWNS, 0, m, f),
   },
+];
+
+export const BRIMSTONE_RAID_ROOMS: StageDef[] = [
+  withUndergroundPassage(RAW_BRIMSTONE_RAID_ROOMS[0], {
+    idPrefix: 'br1',
+    startX: 260,
+    endX: 820,
+    grateInX: 290,
+    grateOutX: 685,
+    chestLabel: 'Smelter Under-Duct (+Potion & Shards)',
+  }),
+  withUndergroundPassage(RAW_BRIMSTONE_RAID_ROOMS[1], {
+    idPrefix: 'br2',
+    startX: 260,
+    endX: 780,
+    grateInX: 290,
+    grateOutX: 650,
+    chestLabel: 'Slag Cooling Tunnel (+Potion & Shards)',
+  }),
+  withUndergroundPassage(RAW_BRIMSTONE_RAID_ROOMS[2], {
+    idPrefix: 'br3',
+    startX: 260,
+    endX: 800,
+    grateInX: 290,
+    grateOutX: 665,
+    chestLabel: 'Magma Pipe Vault (+Potion & Shards)',
+  }),
+  withUndergroundPassage(RAW_BRIMSTONE_RAID_ROOMS[3], {
+    idPrefix: 'br4',
+    startX: 260,
+    endX: 800,
+    grateInX: 290,
+    grateOutX: 665,
+    chestLabel: 'Foundry Secret Vault (+Potion & Shards)',
+  }),
+  RAW_BRIMSTONE_RAID_ROOMS[4],
 ];
 
 // ============================================================================

@@ -87,6 +87,42 @@ const BASE_FEEL: Record<BaseKind, BaseFeel> = {
     hitstopMs: 14,
     look: 'Sinking shade wisps and black smoke pooling at the feet; hits implode with dark tendrils that cling to foes (wither).',
   },
+  storm: {
+    pal: { core: '#e0f2fe', mid: '#38bdf8', dark: '#1e3a8a', smoke: '#1e293b' },
+    shake: 1.15,
+    hitstopMs: 10,
+    look: 'Crackling blue-gold arcs and static sparks; hits snap with chain thunder.',
+  },
+  glacial: {
+    pal: { core: '#ffffff', mid: '#93c5fd', dark: '#1d4ed8', smoke: '#334155' },
+    shake: 1.0,
+    hitstopMs: 12,
+    look: 'Razor frost mist and icicle glints; hits shatter brittle crystalline rime.',
+  },
+  venom: {
+    pal: { core: '#ecfccb', mid: '#84cc16', dark: '#365314', smoke: '#1a2e05' },
+    shake: 0.85,
+    hitstopMs: 6,
+    look: 'Hissing emerald-lime droplets and corrosive mist; hits coat foes in blight.',
+  },
+  blood: {
+    pal: { core: '#ffe4e6', mid: '#f43f5e', dark: '#881337', smoke: '#2a0a14' },
+    shake: 1.25,
+    hitstopMs: 14,
+    look: 'Crimson sanguine droplets and arterial aura; hits unleash visceral life-draining arcs.',
+  },
+  metal: {
+    pal: { core: '#f8fafc', mid: '#cbd5e1', dark: '#334155', smoke: '#1e293b' },
+    shake: 1.35,
+    hitstopMs: 16,
+    look: 'Gleaming forged-steel sparks and metallic chime arcs; hits burst razor iron shrapnel.',
+  },
+  arcane: {
+    pal: { core: '#fdf4ff', mid: '#e879f9', dark: '#4338ca', smoke: '#1e1b4b' },
+    shake: 1.05,
+    hitstopMs: 12,
+    look: 'Luminous astral starlight runes and swirling violet-cyan nebulae; hits weave homing stars.',
+  },
 };
 
 export interface FxProfile {
@@ -155,9 +191,9 @@ export function getFxProfile(id: ElementId): FxProfile {
       id,
       name: def.name,
       pal: {
-        core: mute(def.glowColor, 0.25, 0.04),
-        mid: mute(def.primaryColor, 0.35, 0.16),
-        dark: mute(def.secondaryColor, 0.45, 0.62),
+        core: mute(def.glowColor, 0.08, 0.02),
+        mid: mute(def.primaryColor, 0.14, 0.06),
+        dark: mute(def.secondaryColor, 0.28, 0.44),
         smoke: fa.pal.smoke,
       },
       pal2: fb.pal,
@@ -192,13 +228,15 @@ export interface TierLook {
 
 export const TIER_LOOKS: TierLook[] = [
   { tier: 0, name: 'Base', metal: '#cbd5e1', metalEdge: '#f8fafc', glow: '#94a3b8', glowCore: '#e2e8f0' },
-  { tier: 1, name: 'Awakened', metal: '#9aa3ad', metalEdge: '#e9dcc3', glow: '#c98a3e', glowCore: '#ffd9a1' },
-  { tier: 2, name: 'Mythic', metal: '#4a3f45', metalEdge: '#d9a07a', glow: '#a8323a', glowCore: '#ffb39a' },
-  { tier: 3, name: 'Transcendent', metal: '#211c26', metalEdge: '#cfd6e6', glow: '#8f86c9', glowCore: '#f1eeff' },
+  { tier: 1, name: 'Awakened', metal: '#9aa3ad', metalEdge: '#fef08a', glow: '#f59e0b', glowCore: '#fef9c3' },
+  { tier: 2, name: 'Mythic', metal: '#4a3f45', metalEdge: '#fb923c', glow: '#e11d48', glowCore: '#fecdd3' },
+  { tier: 3, name: 'Transcendent', metal: '#211c26', metalEdge: '#e0f2fe', glow: '#a855f7', glowCore: '#f3e8ff' },
+  { tier: 4, name: 'Sovereign', metal: '#172554', metalEdge: '#67e8f9', glow: '#22d3ee', glowCore: '#ecfeff' },
+  { tier: 5, name: 'Apex', metal: '#1c1028', metalEdge: '#fde047', glow: '#f472b6', glowCore: '#ffffff' },
 ];
 
 export function tierLook(tier: number): TierLook {
-  return TIER_LOOKS[Math.max(0, Math.min(3, tier))];
+  return TIER_LOOKS[Math.max(0, Math.min(5, tier))];
 }
 
 // ---------------------------------------------------------------------------
@@ -239,7 +277,7 @@ export function visualElement(p: Player, fx: FxTuning | null = RC.fx): FxProfile
 }
 
 export function realTier(p: Player): number {
-  return Math.floor(Math.max(0, p.weaponDamageBonus) / 5);
+  return Math.min(5, Math.floor((1 + Math.max(0, p.weaponDamageBonus)) / 5));
 }
 
 export function visualTier(p: Player, fx: FxTuning | null = RC.fx): number {
@@ -310,11 +348,22 @@ export function weaponSwingShape(w: WeaponId): 'arc' | 'line' | 'lash' | 'cast' 
     case 'whip':
     case 'ribbon_whip':
     case 'silk_whip':
+    case 'kusarigama':
       return 'lash';
     case 'spire_staff':
+    case 'arcane_wand':
+    case 'orbiting_grimoire':
+    case 'burst_crossbow':
+    case 'twin_chakram':
       return 'cast';
     case 'ash_wraps':
+    case 'shield_mace':
+    case 'prism_gauntlets':
       return 'fist';
+    case 'prism_lance':
+      return 'line';
+    case 'solar_glaive':
+      return 'arc';
   }
   return 'arc';
 }

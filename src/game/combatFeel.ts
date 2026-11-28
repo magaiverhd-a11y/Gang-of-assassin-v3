@@ -34,7 +34,7 @@ export function combatTune(t: TuningConfig): CombatTuning {
 
 export function evoCombatTier(p: Player, t: TuningConfig): number {
   if (!combatTune(t).weaponEvoAttacks) return 0;
-  return Math.min(3, Math.floor(Math.max(0, p.weaponDamageBonus) / 5));
+  return Math.min(5, Math.floor((1 + Math.max(0, p.weaponDamageBonus)) / 5));
 }
 
 export interface AffinityFlags {
@@ -44,6 +44,12 @@ export interface AffinityFlags {
   earth: boolean;
   light: boolean;
   shadow: boolean;
+  storm: boolean;
+  glacial: boolean;
+  venom: boolean;
+  blood: boolean;
+  metal: boolean;
+  arcane: boolean;
   combined: boolean;
   id: string | null;
   profile: FxProfile | null;
@@ -56,6 +62,12 @@ const EMPTY_FLAGS: AffinityFlags = {
   earth: false,
   light: false,
   shadow: false,
+  storm: false,
+  glacial: false,
+  venom: false,
+  blood: false,
+  metal: false,
+  arcane: false,
   combined: false,
   id: null,
   profile: null,
@@ -77,29 +89,36 @@ export function affFlags(p: Player, t: TuningConfig): AffinityFlags {
 
 /** Reach multiplier for melee hitboxes (and auto-attack reach). */
 export function attackReachMul(weapon: WeaponId | string, tier: number, flags: AffinityFlags, c: CombatTuning): number {
-  let m = 1 + 0.1 * tier * c.evoReach;
-  if (weapon === 'rapier' || weapon === 'naginata' || weapon === 'whip') m += 0.04 * tier * c.evoReach;
-  if (flags.air) m += 0.12 * c.affinityPower;
+  let m = 1 + 0.08 * tier * c.evoReach;
+  if (weapon === 'rapier' || weapon === 'naginata' || weapon === 'whip' || weapon === 'estoc_spear' || weapon === 'joust_lance') {
+    m += 0.03 * tier * c.evoReach;
+  }
+  if (flags.air || flags.storm) m += 0.12 * c.affinityPower;
+  if (flags.metal) m += 0.06 * c.affinityPower;
   return m;
 }
 
 export function attackHeightMul(weapon: WeaponId | string, tier: number, flags: AffinityFlags, c: CombatTuning): number {
-  let m = 1;
-  if (tier >= 1 && (weapon === 'whip' || weapon === 'ribbon_whip' || weapon === 'silk_whip' || weapon === 'rapier')) {
-    m += 0.12 * c.evoReach;
+  let m = 1 + 0.04 * tier * c.evoReach;
+  if (tier >= 1 && (weapon === 'whip' || weapon === 'ribbon_whip' || weapon === 'silk_whip' || weapon === 'rapier' || weapon === 'estoc_spear')) {
+    m += 0.1 * c.evoReach;
   }
-  if (tier >= 2 && (weapon === 'katana' || weapon === 'sword' || weapon === 'greataxe')) m += 0.08 * c.evoReach;
-  if (flags.earth) m += 0.08 * c.affinityPower;
+  if (tier >= 2 && (weapon === 'katana' || weapon === 'sword' || weapon === 'greataxe' || weapon === 'cleaver_greatsword' || weapon === 'war_fans')) {
+    m += 0.08 * c.evoReach;
+  }
+  if (flags.earth || flags.glacial || flags.metal) m += 0.08 * c.affinityPower;
   return m;
 }
 
-/** Startup time multiplier (air is snappier, earth a touch heavier). */
+/** Startup time multiplier (air/storm is snappier, earth a touch heavier). */
 export function startupMul(_weapon: WeaponId | string, tier: number, flags: AffinityFlags, c: CombatTuning): number {
-  let m = 1;
-  if (flags.air) m *= 1 - 0.14 * c.affinityPower;
-  if (flags.earth) m *= 1 + 0.06 * c.affinityPower;
-  if (tier >= 2 && (_weapon === 'rapier' || _weapon === 'ash_wraps' || _weapon === 'shadow_daggers')) m *= 0.92;
-  return Math.max(0.7, m);
+  let m = 1 - Math.min(0.18, tier * 0.035);
+  if (flags.air || flags.storm) m *= 1 - 0.14 * c.affinityPower;
+  if (flags.earth) m *= 1 + 0.04 * c.affinityPower;
+  if (tier >= 2 && (_weapon === 'rapier' || _weapon === 'ash_wraps' || _weapon === 'shadow_daggers' || _weapon === 'estoc_spear' || _weapon === 'short_blade' || _weapon === 'war_fans')) {
+    m *= 0.92;
+  }
+  return Math.max(0.62, m);
 }
 
 /** Extra hit pulses during the active window (second swing / afterimage / finisher). */
@@ -107,6 +126,12 @@ export function extraPulses(weapon: WeaponId | string, tier: number): number {
   if (tier >= 3) {
     if (
       weapon === 'rapier' ||
+      weapon === 'estoc_spear' ||
+      weapon === 'short_blade' ||
+      weapon === 'war_fans' ||
+      weapon === 'cleaver_greatsword' ||
+      weapon === 'joust_lance' ||
+      weapon === 'meteor_flail' ||
       weapon === 'ash_wraps' ||
       weapon === 'shadow_daggers' ||
       weapon === 'naginata' ||
@@ -114,12 +139,14 @@ export function extraPulses(weapon: WeaponId | string, tier: number): number {
       weapon === 'ribbon_whip' ||
       weapon === 'silk_whip' ||
       weapon === 'katana' ||
-      weapon === 'hammer'
+      weapon === 'hammer' ||
+      weapon === 'shield_mace' ||
+      weapon === 'kusarigama'
     ) {
       return 1;
     }
   }
-  if (tier >= 2 && weapon === 'rapier') return 1;
+  if (tier >= 2 && (weapon === 'rapier' || weapon === 'estoc_spear' || weapon === 'war_fans' || weapon === 'kusarigama')) return 1;
   return 0;
 }
 
@@ -173,6 +200,30 @@ export function swingWaves(weapon: WeaponId | string, tier: number, c: CombatTun
     case 'silk_whip':
       if (tier >= 2) add({ kind: 'sword_wave', count: 1, speed: 400 * p, radius: 14 + 3 * p, life: 0.4, yOff: [0] });
       if (tier >= 3) add({ kind: 'storm_arc', count: 1, speed: 440 * p, radius: 14 + 3 * p, life: 0.5, yOff: [0] });
+      break;
+    case 'cleaver_greatsword':
+      if (tier >= 2) add({ kind: 'sword_wave', count: 1, speed: 410 * p, radius: 22 + 4 * p, life: 0.65, yOff: [0] });
+      break;
+    case 'joust_lance':
+      if (tier >= 2) add({ kind: 'storm_arc', count: 1, speed: 540 * p, radius: 16 + 3 * p, life: 0.55, yOff: [0] });
+      break;
+    case 'meteor_flail':
+      if (tier >= 2) add({ kind: 'player_quake', count: 1, speed: 320 * p, radius: 18 + 4 * p, life: 0.65, yOff: [0] });
+      break;
+    case 'war_fans':
+      if (tier >= 2) add({ kind: 'storm_arc', count: 1, speed: 460 * p, radius: 14 + 3 * p, life: 0.35, yOff: [0] });
+      break;
+    case 'shield_mace':
+      if (tier >= 2) add({ kind: 'player_quake', count: 1, speed: 310 * p, radius: 16 + 3 * p, life: 0.5, yOff: [0] });
+      break;
+    case 'kusarigama':
+      if (tier >= 2) add({ kind: 'storm_arc', count: 1, speed: 440 * p, radius: 14 + 3 * p, life: 0.45, yOff: [0] });
+      break;
+    case 'solar_glaive':
+      if (tier >= 2) add({ kind: 'sword_wave', count: 1, speed: 490 * p, radius: 18 + 4 * p, life: 0.6, yOff: [0] });
+      break;
+    case 'prism_gauntlets':
+      if (tier >= 2) add({ kind: 'storm_arc', count: 1, speed: 500 * p, radius: 14 + 3 * p, life: 0.42, yOff: [0] });
       break;
     default:
       break;
@@ -252,6 +303,36 @@ export function affinityHitMods(
     mods.lifestealChance = (skill3 ? 0.28 : 0.16) * p;
     if (!enemy.alerted) mods.bonusDamage += skill3 ? 2 : 1;
   }
+  if (flags.storm) {
+    mods.stunAdd += (skill3 ? 0.2 : 0.1) * p;
+    mods.splashR = Math.max(mods.splashR, 64 * p * skill);
+    mods.splashDmg = Math.max(mods.splashDmg, 1);
+  }
+  if (flags.glacial) {
+    mods.chill = Math.max(mods.chill, (skill3 ? 4.2 : 3.0) * p);
+    mods.bonusDamage += enemy.chillTimer && enemy.chillTimer > 0 ? 1 : 0;
+  }
+  if (flags.venom) {
+    mods.burn = Math.max(mods.burn, (skill3 ? 4.0 : 2.8) * p);
+    mods.wither = Math.max(mods.wither, (skill3 ? 3.2 : 2.2) * p);
+    mods.splashR = Math.max(mods.splashR, 54 * p * skill);
+    mods.splashDmg = Math.max(mods.splashDmg, 1);
+  }
+  if (flags.blood) {
+    mods.bonusDamage += skill3 ? 2 : 1;
+    mods.lifestealChance = Math.max(mods.lifestealChance, (skill3 ? 0.32 : 0.2) * p);
+  }
+  if (flags.metal) {
+    mods.kbMul *= 1 + 0.28 * p * skill;
+    mods.stunAdd += (skill3 ? 0.18 : 0.1) * p;
+    mods.splashR = Math.max(mods.splashR, 56 * p * skill);
+    mods.splashDmg = Math.max(mods.splashDmg, 1);
+  }
+  if (flags.arcane) {
+    mods.splashR = Math.max(mods.splashR, 62 * p * skill);
+    mods.splashDmg = Math.max(mods.splashDmg, 1);
+    mods.bonusDamage += skill3 ? 1 : 0;
+  }
   return mods;
 }
 
@@ -263,6 +344,12 @@ export function skillZoneRadius(flags: AffinityFlags, c: CombatTuning): number {
   if (flags.shadow) return 30 * p;
   if (flags.water) return 32 * p;
   if (flags.air) return 30 * p;
+  if (flags.storm) return 38 * p;
+  if (flags.glacial) return 34 * p;
+  if (flags.venom) return 36 * p;
+  if (flags.blood) return 32 * p;
+  if (flags.metal) return 36 * p;
+  if (flags.arcane) return 40 * p;
   return 0;
 }
 

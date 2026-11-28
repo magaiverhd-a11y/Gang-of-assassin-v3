@@ -1,6 +1,9 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Backpack,
+  BookOpen,
+  Coins,
+  Crown,
   Flame,
   Gem,
   Hammer,
@@ -11,6 +14,7 @@ import {
   RotateCcw,
   Skull,
   SlidersHorizontal,
+  Users,
   Volume2,
   VolumeX,
   Zap,
@@ -18,19 +22,23 @@ import {
 import { CraftingModal } from './components/CraftingModal';
 import { AbilityIcon, SpecialItemIcon, WeaponIcon } from './components/GameIcons';
 import { InventoryModal } from './components/InventoryModal';
+import { LoreModal } from './components/LoreModal';
 import { MapModal } from './components/MapModal';
 import { MobileAction, MobileControls, TouchDirectionalState, vibrate } from './components/MobileControls';
 import { RaidSelectModal } from './components/RaidSelectModal';
 import { LeftHud, RightHud } from './components/SideHuds';
 import { TuningPanel } from './components/TuningPanel';
 import { CreditsModal } from './components/CreditsModal';
+import { LORE_FRAGMENTS } from './game/lore';
 import { cloneTuning, loadStoredTuning, saveStoredTuning } from './game/tuningStore';
 import { sound } from './game/audio';
 import { soundDirector } from './game/soundDirector';
 import {
   BASE_ELEMENTS,
+  BOSS_CHARMS,
   CHARACTERS,
   CHARACTER_ORDER,
+  CHARM_SYNERGIES,
   COMBINED_ELEMENTS,
   DEFAULT_TUNING,
   getActiveElementDef,
@@ -42,10 +50,13 @@ import {
   AbilityId,
   ArtifactId,
   CharacterId,
+  HeroSkinId,
   HudSnapshot,
   InputState,
   ItemId,
   RaidId,
+  SacrificeAltarStat,
+  SpecialItemId,
   TuningConfig,
   WeaponId,
 } from './game/types';
@@ -124,6 +135,13 @@ export default function App() {
   const [showTuning, setShowTuning] = useState<boolean>(false);
   const [muted, setMuted] = useState<boolean>(false);
   const [showCredits, setShowCredits] = useState<boolean>(false);
+  const [showLore, setShowLore] = useState<boolean>(false);
+  const showLoreRef = useRef<boolean>(false);
+  showLoreRef.current = showLore;
+  const [loreInitialRaid, setLoreInitialRaid] = useState<RaidId | undefined>(undefined);
+  const [upgradeFocusIdx, setUpgradeFocusIdx] = useState<number>(0);
+  const upgradeFocusRef = useRef<number>(0);
+  upgradeFocusRef.current = upgradeFocusIdx;
   const [hud, setHud] = useState<HudSnapshot>({
     characterId: 'hunter',
     inCamp: true,
@@ -132,7 +150,7 @@ export default function App() {
     activeRaidName: 'Nocturne Castle',
     raidOrderTier: 1,
     raidsClearedInRun: [],
-    offeredRaids: ['nocturne_castle', 'goblin_camp'],
+    offeredRaids: ['nocturne_castle', 'mushroom_kingdom', 'sand_fortress'],
     endRaidUnlocked: false,
     raidsRequiredForEnd: 3,
     roomNumber: 0,
@@ -179,6 +197,14 @@ export default function App() {
       cinder_palm: 0,
       chain_storm: 0,
       venom_needles: 0,
+      ricochet_snare: 0,
+      aegis_slam: 0,
+      solar_bloom: 0,
+      prism_beam: 0,
+      frost_nova: 0,
+      phantom_blades: 0,
+      meteor_call: 0,
+      blood_siphon: 0,
     },
     itemSlots: ['health_potion', 'mana_potion', 'armor_potion'],
     itemCounts: {
@@ -190,6 +216,8 @@ export default function App() {
     specialItemCounts: {
       eclipse_hourglass: 1,
       hero_tag_horn: 0,
+      smoke_vial: 1,
+      fire_bomb: 1,
     },
     specialItemCooldown: 0,
     eclipseFreezeTimer: 0,
@@ -210,7 +238,7 @@ export default function App() {
     progressPct: 0,
     level: 1,
     xp: 0,
-    xpToNext: 3,
+    xpToNext: 5,
     baseElements: [],
     combinedElement: null,
     elementResonance: 0,
@@ -220,11 +248,33 @@ export default function App() {
     shadowChainCount: 0,
     minstrelSlowMo: false,
     parries: 0,
+    parryCooldown: 0,
     secretsFound: 0,
     isCursedChamber: false,
     cursedDoorAvailable: false,
     tagPartner: null,
     tagPartnerCooldown: 0,
+    gold: 60,
+    raidGoldEarned: 0,
+    raidDamageDealt: 0,
+    raidElapsedSeconds: 0,
+    raidMapRelicsCollected: 0,
+    raidScore: 0,
+    raidRank: 'C',
+    runHeroLocked: null,
+    testFreeHeroSwitch: true,
+    skin: 'default',
+    unlockedSkins: ['default'],
+    unlockedSpecials: ['eclipse_hourglass', 'smoke_vial', 'fire_bomb'],
+    charPermanentWeapons: ['whip'],
+    charPermanentSpells: ['fireball'],
+    runRelicLevels: { hp: 0, mp: 0, weapon: 0, spell: 0, regen: 0, agility: 0 },
+    permAltarBonuses: { hp: 0, mp: 0, weapon: 0, spell: 0, regen: 0, agility: 0 },
+    bossCharms: [],
+    activeCharmSynergies: [],
+    lastBossCharmDrop: null,
+    collectedLoreIds: [],
+    lastLoreToast: null,
   });
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -304,6 +354,53 @@ export default function App() {
   const handleCraftRecipe = useCallback((recipeId: string) => {
     if (engineRef.current) {
       if (!engineRef.current.craftRecipe(recipeId, tuningRef.current)) sound.playUi('error');
+      setHud(engineRef.current.getHudSnapshot());
+    }
+  }, []);
+
+  const handleBuyGoldPrep = useCallback((recipeId: string) => {
+    if (engineRef.current) {
+      if (!engineRef.current.buyGoldPrep(recipeId, tuningRef.current)) sound.playUi('error');
+      setHud(engineRef.current.getHudSnapshot());
+    }
+  }, []);
+
+  const handleUnlockForCurrentChar = useCallback(
+    (kind: 'weapon' | 'spell' | 'special' | 'skin', id: string, coreCost: number) => {
+      if (engineRef.current) {
+        if (!engineRef.current.unlockForCurrentChar(kind, id, coreCost, tuningRef.current)) {
+          sound.playUi('error');
+        }
+        setHud(engineRef.current.getHudSnapshot());
+      }
+    },
+    []
+  );
+
+  const handleSelectSkin = useCallback((skinId: HeroSkinId) => {
+    if (engineRef.current) {
+      engineRef.current.selectSkin(skinId);
+      setHud(engineRef.current.getHudSnapshot());
+    }
+  }, []);
+
+  const handleSacrificeRelicAltar = useCallback((stat: SacrificeAltarStat) => {
+    if (engineRef.current) {
+      if (!engineRef.current.sacrificeRelicAltar(stat, tuningRef.current)) sound.playUi('error');
+      setHud(engineRef.current.getHudSnapshot());
+    }
+  }, []);
+
+  const handleSelectSpecialItem = useCallback((specialId: SpecialItemId) => {
+    if (engineRef.current) {
+      engineRef.current.selectSpecialItem(specialId);
+      setHud(engineRef.current.getHudSnapshot());
+    }
+  }, []);
+
+  const handleToggleTestHeroSwitch = useCallback(() => {
+    if (engineRef.current) {
+      engineRef.current.setTestFreeHeroSwitch(!engineRef.current.testFreeHeroSwitch);
       setHud(engineRef.current.getHudSnapshot());
     }
   }, []);
@@ -433,6 +530,19 @@ export default function App() {
     lastAssassinationsRef.current = hud.assassinations;
   }, [hud.assassinations]);
 
+  // Reset upgrade focus to card 0 whenever a new relic/upgrade choice opens
+  useEffect(() => {
+    if (hud.status === 'CHOOSING_UPGRADE') {
+      setUpgradeFocusIdx(0);
+      upgradeFocusRef.current = 0;
+    }
+  }, [hud.status, hud.pendingUpgrades.length, hud.upgradePromptTitle]);
+
+  const handleOpenLore = useCallback((raidId?: RaidId) => {
+    setLoreInitialRaid(raidId);
+    setShowLore(true);
+  }, []);
+
   // Strict Keyboard Bindings:
   // WASD Move & Crouch-Walk · 1 Attack · 2 Jump · 3 Weapon Skill · 0 Interact
   // 4 Cast Equipped Spell · 5 Use Equipped Item · 6 Use Special Item · I Inventory · M Map · Esc Close Modal · Tab Tuning
@@ -461,6 +571,11 @@ export default function App() {
         code === 'ArrowRight'
       ) {
         e.preventDefault();
+      }
+
+      // When Lore Codex is open, let LoreModal handle all keyboard navigation (WASD / 0 / Esc)
+      if (showLoreRef.current) {
+        return;
       }
 
       const status = engineRef.current?.status;
@@ -498,23 +613,8 @@ export default function App() {
         return;
       }
 
+      // RaidSelectModal owns full WASD + 0/Enter + Esc navigation via its own capture listener
       if (status === 'RAID_SELECT') {
-        if (!e.repeat) {
-          const eng = engineRef.current;
-          if (code === 'Digit1' || code === 'Numpad1') {
-            if (eng?.isEndRaidUnlocked()) {
-              handleStartRaid('eclipse_gauntlet');
-            } else if (eng?.offeredRaids[0]) {
-              handleStartRaid(eng.offeredRaids[0]);
-            }
-          } else if (code === 'Digit2' || code === 'Numpad2') {
-            if (!eng?.isEndRaidUnlocked() && eng?.offeredRaids[1]) {
-              handleStartRaid(eng.offeredRaids[1]);
-            }
-          } else if (code === 'Digit0' || code === 'Numpad0') {
-            handleCloseModal();
-          }
-        }
         return;
       }
 
@@ -522,20 +622,71 @@ export default function App() {
         return;
       }
 
-      // When choosing 1 of 3 upgrades, pressing 1 / 2 / 3 picks the reward card directly
+      // End-of-raid scorecard: press 0 or Enter to return to Base Camp
+      if ((status === 'VICTORY' || status === 'GAME_OVER') && !e.repeat) {
+        if (code === 'Digit0' || code === 'Numpad0' || code === 'Enter') {
+          e.preventDefault();
+          handleReturnToCamp(status === 'VICTORY');
+          return;
+        }
+      }
+
+      // Relic / Upgrade / Elemental Affinity choices: WASD (or Arrows) to move focus, 0 (or Enter) to choose, 1..9 quick-pick
       if (engineRef.current && status === 'CHOOSING_UPGRADE' && !e.repeat) {
         const opts = engineRef.current.pendingUpgrades;
-        if ((code === 'Digit1' || code === 'Numpad1') && opts[0]) {
-          handleSelectUpgrade(opts[0].id);
-          return;
-        }
-        if ((code === 'Digit2' || code === 'Numpad2') && opts[1]) {
-          handleSelectUpgrade(opts[1].id);
-          return;
-        }
-        if ((code === 'Digit3' || code === 'Numpad3') && opts[2]) {
-          handleSelectUpgrade(opts[2].id);
-          return;
+        const count = opts.length;
+        if (count > 0) {
+          const cols = count > 3 ? (count <= 6 ? 3 : 5) : count;
+          const cur = Math.max(0, Math.min(count - 1, upgradeFocusRef.current));
+          if (code === 'KeyA' || code === 'ArrowLeft') {
+            e.preventDefault();
+            const next = (cur - 1 + count) % count;
+            upgradeFocusRef.current = next;
+            setUpgradeFocusIdx(next);
+            sound.playUi('hover');
+            return;
+          }
+          if (code === 'KeyD' || code === 'ArrowRight') {
+            e.preventDefault();
+            const next = (cur + 1) % count;
+            upgradeFocusRef.current = next;
+            setUpgradeFocusIdx(next);
+            sound.playUi('hover');
+            return;
+          }
+          if (code === 'KeyW' || code === 'ArrowUp') {
+            e.preventDefault();
+            const step = count > 3 ? cols : 1;
+            const next = cur - step >= 0 ? cur - step : (cur - 1 + count) % count;
+            upgradeFocusRef.current = next;
+            setUpgradeFocusIdx(next);
+            sound.playUi('hover');
+            return;
+          }
+          if (code === 'KeyS' || code === 'ArrowDown') {
+            e.preventDefault();
+            const step = count > 3 ? cols : 1;
+            const next = cur + step < count ? cur + step : (cur + 1) % count;
+            upgradeFocusRef.current = next;
+            setUpgradeFocusIdx(next);
+            sound.playUi('hover');
+            return;
+          }
+          if (code === 'Digit0' || code === 'Numpad0' || code === 'Enter') {
+            e.preventDefault();
+            if (opts[cur]) {
+              handleSelectUpgrade(opts[cur].id);
+            }
+            return;
+          }
+          const digitMatch = /^(?:Digit|Numpad)([1-9])$/.exec(code);
+          if (digitMatch) {
+            const idx = Number(digitMatch[1]) - 1;
+            if (opts[idx]) {
+              handleSelectUpgrade(opts[idx].id);
+              return;
+            }
+          }
         }
         return;
       }
@@ -704,6 +855,7 @@ export default function App() {
         up: held.has('KeyW') || held.has('ArrowUp') || touch.up,
         down: held.has('KeyS') || held.has('ArrowDown') || touch.down,
         jumpHeld: held.has('Digit2') || held.has('Numpad2') || held.has('Space') || touchJumpHeldRef.current,
+        attackHeld: held.has('Digit1') || held.has('Numpad1'),
         autoAttack: mobile,
         jumpJustPressed: jumpQueuedRef.current,
         attackJustPressed: attackQueuedRef.current,
@@ -762,10 +914,14 @@ export default function App() {
   // Modals / overlays: inside the game view on desktop, over game + control deck on mobile portrait.
   const modalLayer = (
     <>
-          {/* Camp Crafting Forge & Blood Altar Modal */}
+          {/* Camp Crafting Forge, Hero Unlocks & Sacrifice Altar Modal */}
           {hud.status === 'CRAFTING' && (
             <CraftingModal
               hud={hud}
+              onBuyGoldPrep={handleBuyGoldPrep}
+              onUnlockForCurrentChar={handleUnlockForCurrentChar}
+              onSelectSkin={handleSelectSkin}
+              onSacrificeRelicAltar={handleSacrificeRelicAltar}
               onCraftRecipe={handleCraftRecipe}
               onCraftArtifact={handleCraftArtifact}
               onSacrificeArtifact={handleSacrificeArtifact}
@@ -781,16 +937,18 @@ export default function App() {
               onSelectWeapon={handleSelectWeapon}
               onSelectAbility={handleSelectAbility}
               onSelectItem={handleSelectItem}
+              onSelectSpecialItem={handleSelectSpecialItem}
+              onSelectSkin={handleSelectSkin}
               onClose={handleCloseModal}
             />
           )}
 
-          {/* Raid Selection Modal */}
-          {hud.status === 'RAID_SELECT' && (
+          {/* Raid Selection Modal (temporarily yields to Lore Codex if user clicks Lore inside it) */}
+          {hud.status === 'RAID_SELECT' && !showLore && (
             <RaidSelectModal
               hud={hud}
               onStartRaid={handleStartRaid}
-              onSelectCharacter={handleSelectCharacter}
+              onOpenLore={(raidId) => handleOpenLore(raidId)}
               onClose={handleCloseModal}
             />
           )}
@@ -798,23 +956,66 @@ export default function App() {
           {/* Raid Map Modal (M) */}
           {hud.status === 'MAP' && <MapModal hud={hud} onClose={handleCloseModal} />}
 
-          {/* Choose 1 of 3 Upgrade Modal (Opened from Boss Chests & Relic Altars) */}
+          {/* Lore Codex Modal */}
+          {showLore && (
+            <LoreModal
+              collectedLoreIds={hud.collectedLoreIds}
+              initialRaidId={loreInitialRaid}
+              onClose={() => setShowLore(false)}
+            />
+          )}
+
+          {/* Non-blocking Lore Discovered Toast */}
+          {hud.lastLoreToast && !showLore && (hud.status === 'PLAYING' || hud.status === 'CAMP') && (
+            <button
+              type="button"
+              onClick={() => handleOpenLore(hud.activeRaidId)}
+              className="absolute bottom-5 left-1/2 -translate-x-1/2 z-20 flex items-center gap-3 px-4 py-2.5 bg-[#121624]/95 border border-[#e5a93c] shadow-[0_0_24px_rgba(229,169,60,0.35)] hover:bg-[#1a2033] transition-colors text-left max-w-[92%]"
+            >
+              <BookOpen className="w-5 h-5 text-[#fde68a] shrink-0" />
+              <div className="min-w-0">
+                <div className="text-[10px] font-mono uppercase tracking-wider text-[#e5a93c]">
+                  Lore Fragment Recovered ({hud.lastLoreToast.count}/4 · {hud.lastLoreToast.raidName})
+                </div>
+                <div className="text-xs font-semibold text-[#f3efe6] truncate">
+                  {hud.lastLoreToast.title} — Click to read Chronicle
+                </div>
+              </div>
+            </button>
+          )}
+
+          {/* Choose Upgrade OR Pick-ANY Elemental Affinity (WASD to focus · 0 to choose) */}
           {hud.status === 'CHOOSING_UPGRADE' && hud.pendingUpgrades.length > 0 && (
-            <div className="absolute inset-0 bg-[#080a10]/84 flex items-start sm:items-center justify-center p-6 z-20 overflow-y-auto">
-              <div className="max-w-3xl w-full bg-[#11141f] border border-[#2f364d] p-6 space-y-5">
+            <div className="absolute inset-0 bg-[#080a10]/86 flex items-start sm:items-center justify-center p-4 sm:p-6 z-20 overflow-y-auto">
+              <div
+                className={`${
+                  hud.pendingUpgrades.length > 3 ? 'max-w-4xl' : 'max-w-3xl'
+                } w-full bg-[#11141f] border border-[#2f364d] p-5 space-y-4`}
+              >
                 <div className="text-center space-y-1">
                   <h2
                     className="text-xl font-bold tracking-wider text-[#e5a93c]"
                     style={{ fontFamily: 'var(--font-display)' }}
                   >
-                    {hud.upgradePromptTitle || 'Choose 1 of 3 Upgrades'}
+                    {hud.upgradePromptTitle ||
+                      (hud.pendingUpgrades.length > 3
+                        ? 'Choose 1 of 6 Elemental Affinities'
+                        : 'Choose 1 of 3 Relics')}
                   </h2>
                   <p className="text-xs text-[#9aa2b8]">
-                    Select one blessing below or press 1, 2, or 3 to continue.
+                    {hud.pendingUpgrades.length > 3
+                      ? 'Use WASD to highlight 1 of 6 affinities and press 0 to awaken or fuse (or click / press 1–6).'
+                      : 'Use WASD to highlight a relic and press 0 to choose (or click / press 1, 2, 3).'}
                   </p>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div
+                  className={
+                    hud.pendingUpgrades.length > 3
+                      ? 'grid grid-cols-2 sm:grid-cols-3 gap-3'
+                      : 'grid grid-cols-1 md:grid-cols-3 gap-4'
+                  }
+                >
                   {hud.pendingUpgrades.map((opt, idx) => {
                     const combinedDef = opt.combinedElementId
                       ? COMBINED_ELEMENTS[opt.combinedElementId]
@@ -823,19 +1024,30 @@ export default function App() {
                     const elVisual = combinedDef ?? baseElDef;
                     const isElementCard =
                       opt.kind === 'element_affinity' || opt.kind === 'element_resonance';
+                    const isFocused = idx === upgradeFocusIdx;
 
                     return (
                       <button
                         key={opt.id}
                         type="button"
                         data-snd="none"
+                        onMouseEnter={() => {
+                          setUpgradeFocusIdx(idx);
+                          upgradeFocusRef.current = idx;
+                        }}
                         onClick={() => handleSelectUpgrade(opt.id)}
-                        className="text-left bg-[#161a28] hover:bg-[#1e2436] border border-[#2c334a] hover:border-[#e5a93c] p-4 flex flex-col justify-between gap-4 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#e5a93c]"
+                        className={`text-left p-4 flex flex-col justify-between gap-4 transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#e5a93c] border ${
+                          isFocused
+                            ? 'bg-[#1d2438] border-[#e5a93c] ring-2 ring-[#e5a93c]/60 -translate-y-0.5'
+                            : 'bg-[#161a28] hover:bg-[#1e2436] border-[#2c334a] hover:border-[#e5a93c]'
+                        }`}
                         style={
                           isElementCard && elVisual
                             ? {
-                                borderColor: `${elVisual.primaryColor}88`,
-                                boxShadow: `inset 0 0 24px ${elVisual.primaryColor}18`,
+                                borderColor: isFocused ? '#fde68a' : `${elVisual.primaryColor}88`,
+                                boxShadow: isFocused
+                                  ? `0 0 22px ${elVisual.primaryColor}45, inset 0 0 24px ${elVisual.primaryColor}24`
+                                  : `inset 0 0 24px ${elVisual.primaryColor}18`,
                               }
                             : undefined
                         }
@@ -845,7 +1057,13 @@ export default function App() {
                             <span className="font-medium" style={{ color: opt.accent }}>
                               {opt.category}
                             </span>
-                            <span className="font-mono text-[#7c859e]">[{idx + 1}]</span>
+                            <span
+                              className={`font-mono ${
+                                isFocused ? 'text-[#fde68a] font-bold' : 'text-[#7c859e]'
+                              }`}
+                            >
+                              {isFocused ? '[0 · PICK]' : `[${idx + 1}]`}
+                            </span>
                           </div>
 
                           {(isElementCard ||
@@ -888,14 +1106,19 @@ export default function App() {
                         </div>
 
                         <div
-                          className="pt-2 border-t border-[#242a3d] text-xs font-medium"
+                          className="pt-2 border-t border-[#242a3d] flex items-center justify-between text-xs font-medium"
                           style={{ color: isElementCard ? opt.accent : '#e5a93c' }}
                         >
-                          {combinedDef
-                            ? `Fuse ${combinedDef.name}`
-                            : opt.kind === 'element_affinity'
-                              ? 'Awaken Element'
-                              : 'Choose Blessing'}
+                          <span>
+                            {combinedDef
+                              ? `Fuse ${combinedDef.name}`
+                              : opt.kind === 'element_affinity'
+                                ? 'Awaken Element'
+                                : 'Choose Relic'}
+                          </span>
+                          {isFocused && (
+                            <span className="font-mono text-[10px] text-[#fde68a]">Press 0</span>
+                          )}
                         </div>
                       </button>
                     );
@@ -905,62 +1128,134 @@ export default function App() {
             </div>
           )}
 
-          {/* Victory / Defeat Overlay */}
+          {/* Victory / Defeat End-of-Raid Scorecard Overlay */}
           {(hud.status === 'VICTORY' || hud.status === 'GAME_OVER') && (
-            <div className="absolute inset-0 bg-[#080a10]/84 flex items-center justify-center p-6 z-20">
-              <div className="max-w-md w-full bg-[#121520] border border-[#2c3347] p-7 text-center space-y-5">
-                <div className="space-y-1.5">
-                  <h2
-                    className={`text-2xl font-bold tracking-wider ${
-                      hud.status === 'VICTORY' ? 'text-[#e5a93c]' : 'text-[#c82333]'
-                    }`}
-                    style={{ fontFamily: 'var(--font-display)' }}
+            <div className="absolute inset-0 bg-[#080a10]/86 flex items-center justify-center p-4 sm:p-6 z-20 overflow-y-auto">
+              <div className="max-w-lg w-full bg-[#121520] border border-[#323a52] p-6 text-center space-y-4">
+                <div className="flex items-center justify-between border-b border-[#252c40] pb-3">
+                  <div className="text-left">
+                    <h2
+                      className={`text-xl font-bold tracking-wider ${
+                        hud.status === 'VICTORY' ? 'text-[#e5a93c]' : 'text-[#c82333]'
+                      }`}
+                      style={{ fontFamily: 'var(--font-display)' }}
+                    >
+                      {hud.status === 'VICTORY'
+                        ? hud.activeRaidId === 'eclipse_gauntlet'
+                          ? 'Eclipse Overlord Vanquished'
+                          : `${hud.activeRaidName} Conquered`
+                        : 'Fallen in the Raid'}
+                    </h2>
+                    <p className="text-[11px] text-[#9aa2b8]">
+                      {hud.status === 'VICTORY'
+                        ? 'Run Relics, Gold, Boss Charms & Gear carry back to Base Camp!'
+                        : 'Run Relics & Boss Charms reset — Gold, Boss Cores, Hero Unlocks & Altar Bonuses endure!'}
+                    </p>
+                  </div>
+                  <div
+                    className="w-12 h-12 shrink-0 border-2 flex flex-col items-center justify-center bg-[#0d1018]"
+                    style={{
+                      borderColor:
+                        hud.raidRank === 'S'
+                          ? '#facc15'
+                          : hud.raidRank === 'A'
+                            ? '#34d399'
+                            : hud.raidRank === 'B'
+                              ? '#38bdf8'
+                              : '#94a3b8',
+                    }}
                   >
-                    {hud.status === 'VICTORY'
-                      ? hud.activeRaidId === 'eclipse_gauntlet'
-                        ? 'Eclipse Overlord Vanquished'
-                        : 'Raid Conquered'
-                      : 'Fallen in the Raid'}
-                  </h2>
-                  <p className="text-xs text-[#a5adc2]">
-                    {hud.status === 'VICTORY'
-                      ? hud.activeRaidId === 'eclipse_gauntlet'
-                        ? 'You conquered the End Boss Gauntlet! All raids have unlocked for a fresh campaign cycle while your upgrades and artifacts carry onward.'
-                        : 'All upgrades, spells, and gear carry back to Base Camp for your next raid!'
-                      : 'Raid upgrades were lost — only your forged Permanent Artifacts and Boss Cores endure.'}
-                  </p>
+                    <span className="text-[8px] font-mono text-[#9aa2b8] leading-none">RANK</span>
+                    <span
+                      className="text-xl font-bold leading-tight"
+                      style={{
+                        color:
+                          hud.raidRank === 'S'
+                            ? '#facc15'
+                            : hud.raidRank === 'A'
+                              ? '#34d399'
+                              : hud.raidRank === 'B'
+                                ? '#38bdf8'
+                                : '#cbd5e1',
+                      }}
+                    >
+                      {hud.raidRank}
+                    </span>
+                  </div>
                 </div>
 
-                <div className="flex items-center justify-center gap-4 text-xs text-[#9aa2b8]">
-                  <span>
-                    Room{' '}
-                    <span className="font-mono tabular-nums text-[#e8e4dc]">
-                      {hud.isBigBossRoom ? 'Final Boss' : `${hud.roomNumber}/${hud.raidRoomsTotal}`}
-                    </span>
-                  </span>
-                  <span aria-hidden="true">·</span>
-                  <span>
-                    Cores{' '}
-                    <span className="font-mono tabular-nums text-[#ff6b8b]">
-                      {hud.bossCores}
-                    </span>
-                  </span>
-                  <span aria-hidden="true">·</span>
-                  <span>
-                    Artifacts{' '}
-                    <span className="font-mono tabular-nums text-[#e5a93c]">
-                      {hud.ownedArtifacts.length}
-                    </span>
-                  </span>
+                {/* End-of-Raid Scorecard Grid */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-left">
+                  <div className="p-2 bg-[#0d1019] border border-[#22283d]">
+                    <div className="text-[9px] font-mono text-[#8a93ab] uppercase">Raid Score</div>
+                    <div className="text-sm font-mono font-bold text-[#fde68a]">
+                      {hud.raidScore.toLocaleString()}
+                    </div>
+                  </div>
+                  <div className="p-2 bg-[#0d1019] border border-[#22283d]">
+                    <div className="text-[9px] font-mono text-[#8a93ab] uppercase">Gold Earned</div>
+                    <div className="text-sm font-mono font-bold text-[#facc15]">
+                      +{hud.raidGoldEarned}g <span className="text-[10px] text-[#9aa2b8]">({hud.gold}g)</span>
+                    </div>
+                  </div>
+                  <div className="p-2 bg-[#0d1019] border border-[#22283d]">
+                    <div className="text-[9px] font-mono text-[#8a93ab] uppercase">Clear Time</div>
+                    <div className="text-sm font-mono font-bold text-[#38bdf8]">
+                      {String(Math.floor(hud.raidElapsedSeconds / 60)).padStart(2, '0')}:
+                      {String(Math.floor(hud.raidElapsedSeconds % 60)).padStart(2, '0')}
+                    </div>
+                  </div>
+                  <div className="p-2 bg-[#0d1019] border border-[#22283d]">
+                    <div className="text-[9px] font-mono text-[#8a93ab] uppercase">Damage Dealt</div>
+                    <div className="text-sm font-mono font-bold text-[#fb7185]">
+                      {hud.raidDamageDealt.toLocaleString()}
+                    </div>
+                  </div>
+                  <div className="p-2 bg-[#0d1019] border border-[#22283d]">
+                    <div className="text-[9px] font-mono text-[#8a93ab] uppercase">Map Relics</div>
+                    <div className="text-sm font-mono font-bold text-[#fbbf24]">
+                      {hud.raidMapRelicsCollected}
+                    </div>
+                  </div>
+                  <div className="p-2 bg-[#0d1019] border border-[#22283d]">
+                    <div className="text-[9px] font-mono text-[#8a93ab] uppercase">Assassinations</div>
+                    <div className="text-sm font-mono font-bold text-[#c084fc]">
+                      {hud.assassinations}
+                    </div>
+                  </div>
                 </div>
 
-                <div className="flex items-center justify-center gap-3">
+                {/* Boss Charm Earned & Synergies */}
+                {hud.lastBossCharmDrop && (
+                  <div
+                    className="p-2.5 bg-[#191426] border text-left space-y-1"
+                    style={{ borderColor: BOSS_CHARMS[hud.lastBossCharmDrop].color }}
+                  >
+                    <div className="flex items-center gap-1.5 text-xs font-bold" style={{ color: BOSS_CHARMS[hud.lastBossCharmDrop].color }}>
+                      <Crown className="w-3.5 h-3.5" />
+                      <span>Boss Charm Claimed: {BOSS_CHARMS[hud.lastBossCharmDrop].name}</span>
+                    </div>
+                    <div className="text-[11px] text-[#cbd5e1]">
+                      {BOSS_CHARMS[hud.lastBossCharmDrop].effectSummary}
+                    </div>
+                    {hud.activeCharmSynergies.length > 0 && (
+                      <div className="text-[10px] text-[#e9d5ff] pt-1 border-t border-[#2f2347]">
+                        Active Synergies:{' '}
+                        {hud.activeCharmSynergies
+                          .map((s) => CHARM_SYNERGIES.find((c) => c.id === s)?.name ?? s)
+                          .join(' · ')}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <div className="flex items-center justify-center gap-3 pt-1">
                   <button
                     type="button"
                     onClick={() => handleReturnToCamp(hud.status === 'VICTORY')}
                     className="px-5 py-2.5 text-sm font-medium bg-[#c82333] hover:bg-[#d92b3c] text-white rounded transition-colors whitespace-nowrap"
                   >
-                    Return to Base Camp
+                    Return to Base Camp [0]
                   </button>
                 </div>
               </div>
@@ -1032,16 +1327,20 @@ export default function App() {
               active: hud.status === 'MAP',
               disabled: !canMenu,
             })}
+            {iconBtn('lore', 'Lore', <BookOpen className="w-4 h-4" />, () => handleOpenLore(hud.activeRaidId), {
+              active: showLore,
+              accent: '#e5a93c',
+            })}
             {hud.inCamp &&
               iconBtn('craft', 'Forge', <Hammer className="w-4 h-4" />, handleOpenCrafting, {
                 active: hud.status === 'CRAFTING',
                 disabled: hud.status !== 'CAMP',
               })}
-            {hud.inCamp &&
-              iconBtn('hero', 'Hero', <RotateCcw className="w-4 h-4" />, () => {
+            {(hud.inCamp || hud.testFreeHeroSwitch) &&
+              iconBtn('hero', 'Hero', <Users className="w-4 h-4" />, () => {
                 const idx = CHARACTER_ORDER.indexOf(hud.characterId);
                 handleSelectCharacter(CHARACTER_ORDER[(idx + 1) % CHARACTER_ORDER.length]);
-              }, { disabled: hud.status !== 'CAMP' })}
+              }, { disabled: hud.status !== 'CAMP' && hud.status !== 'PLAYING' })}
             {hud.inCamp
               ? iconBtn('raid', 'Raid', <Flame className="w-4 h-4" />, handleOpenRaidSelect, {
                   active: hud.status === 'RAID_SELECT',
@@ -1082,10 +1381,10 @@ export default function App() {
                 <div className="h-full bg-gradient-to-r from-[#1e3a8a] to-[#3b82f6]" style={{ width: `${mpPct}%` }} />
               </div>
             </div>
-            <div className="w-[64px] shrink-0">
+            <div className="w-[74px] shrink-0">
               <div className="flex justify-between leading-none mb-0.5">
                 <span className="text-[#38bdf8] font-bold">LV{hud.level}</span>
-                <span className="text-[#ffd166]">◆{hud.shards}</span>
+                <span className="text-[#facc15]">{hud.gold}g</span>
               </div>
               <div className="h-2 bg-[#161c2c] border border-[#2a3856]">
                 <div className="h-full bg-gradient-to-r from-[#38bdf8] to-[#c084fc]" style={{ width: `${xpPct}%` }} />
@@ -1211,9 +1510,18 @@ export default function App() {
 
         {/* Zone 2: Stage / Camp Status */}
         <div className="hidden md:flex items-center gap-3 text-xs text-[#9aa2b8] min-w-0">
-          <span className="whitespace-nowrap shrink-0 text-[#e5a93c] font-medium">
+          <span
+            className={`whitespace-nowrap shrink-0 font-medium ${
+              hud.isCursedChamber ? 'text-[#67e8f9]' : 'text-[#e5a93c]'
+            }`}
+          >
             {hud.stageName}
           </span>
+          {hud.isCursedChamber && (
+            <span className="whitespace-nowrap shrink-0 px-1.5 py-0.5 text-[10px] font-semibold tracking-wider uppercase border border-[#67e8f9]/40 bg-[#1a1336] text-[#f472b6]">
+              CURSED · LOW-G · 2X LOOT
+            </span>
+          )}
 
           <span className="text-[#353c52]" aria-hidden="true">·</span>
 
@@ -1223,10 +1531,10 @@ export default function App() {
 
           <span className="text-[#353c52]" aria-hidden="true">·</span>
 
-          <span className="whitespace-nowrap shrink-0">
-            Shards{' '}
-            <span className="font-mono tabular-nums text-[#ffd166] font-semibold">
-              {hud.shards}
+          <span className="whitespace-nowrap shrink-0 inline-flex items-center gap-1">
+            <Coins className="w-3 h-3 text-[#facc15]" />
+            <span className="font-mono tabular-nums text-[#facc15] font-semibold">
+              {hud.gold}g
             </span>
           </span>
 
@@ -1234,7 +1542,6 @@ export default function App() {
 
           <span className="whitespace-nowrap shrink-0 inline-flex items-center gap-1">
             <Gem className="w-3 h-3 text-[#ff6b8b]" />
-            <span>Cores</span>{' '}
             <span className="font-mono tabular-nums text-[#ff6b8b] font-semibold">
               {hud.bossCores}
             </span>
@@ -1339,34 +1646,51 @@ export default function App() {
           )}
         </div>
 
-        {/* Zone 3: Actions */}
+        {/* Zone 3: Actions (Includes Anytime Test Hero Switcher!) */}
         <div className="flex items-center gap-2 shrink-0">
+          {(hud.inCamp || hud.testFreeHeroSwitch) && (
+            <button
+              type="button"
+              onClick={(e) => {
+                const idx = CHARACTER_ORDER.indexOf(hud.characterId);
+                const nextChar = CHARACTER_ORDER[(idx + 1) % CHARACTER_ORDER.length];
+                handleSelectCharacter(nextChar);
+                (e.currentTarget as HTMLButtonElement).blur();
+              }}
+              title="Switch hero anywhere/anytime while Test Swap is ON"
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-[#e8e4dc] bg-[#191d2b] hover:bg-[#23293b] border border-[#2a3145] rounded transition-colors whitespace-nowrap"
+            >
+              <Users className="w-3.5 h-3.5 text-[#38bdf8]" />
+              <span>Swap Hero</span>
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={(e) => {
+              handleToggleTestHeroSwitch();
+              (e.currentTarget as HTMLButtonElement).blur();
+            }}
+            title="Toggle free hero switching anywhere/anytime vs locked run commitment"
+            className={`hidden xl:inline-flex items-center px-2 py-1.5 text-[10px] font-mono border rounded transition-colors whitespace-nowrap ${
+              hud.testFreeHeroSwitch
+                ? 'bg-[#122429] border-[#22d3ee] text-[#67e8f9]'
+                : 'bg-[#191d2b] border-[#2a3145] text-[#8a93ab]'
+            }`}
+          >
+            {hud.testFreeHeroSwitch ? 'Test Swap: ON' : 'Run Lock: ON'}
+          </button>
           {hud.inCamp && (
-            <div className="hidden xl:flex items-center gap-1.5 mr-1">
-              <button
-                type="button"
-                onClick={(e) => {
-                  const idx = CHARACTER_ORDER.indexOf(hud.characterId);
-                  const nextChar = CHARACTER_ORDER[(idx + 1) % CHARACTER_ORDER.length];
-                  handleSelectCharacter(nextChar);
-                  (e.currentTarget as HTMLButtonElement).blur();
-                }}
-                className="px-2.5 py-1.5 text-xs font-medium text-[#e8e4dc] bg-[#191d2b] hover:bg-[#23293b] border border-[#2a3145] rounded transition-colors whitespace-nowrap"
-              >
-                Swap Hero
-              </button>
-              <button
-                type="button"
-                onClick={(e) => {
-                  handleOpenRaidSelect();
-                  (e.currentTarget as HTMLButtonElement).blur();
-                }}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-[#991b2e] hover:bg-[#b52238] border border-[#c82333] rounded transition-colors whitespace-nowrap"
-              >
-                <Flame className="w-3.5 h-3.5" />
-                Choose Raid
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={(e) => {
+                handleOpenRaidSelect();
+                (e.currentTarget as HTMLButtonElement).blur();
+              }}
+              className="hidden xl:inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-[#991b2e] hover:bg-[#b52238] border border-[#c82333] rounded transition-colors whitespace-nowrap"
+            >
+              <Flame className="w-3.5 h-3.5" />
+              Choose Raid
+            </button>
           )}
 
           <button
@@ -1401,6 +1725,25 @@ export default function App() {
           >
             <MapIcon className="w-3.5 h-3.5" />
             <span>M</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={(e) => {
+              handleOpenLore(hud.activeRaidId);
+              (e.currentTarget as HTMLButtonElement).blur();
+            }}
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded border transition-colors whitespace-nowrap shrink-0 ${
+              showLore
+                ? 'bg-[#2a2315] border-[#e5a93c] text-[#fde68a]'
+                : 'bg-[#191d2b] border-[#2a3145] text-[#d4d8e3] hover:text-white hover:bg-[#23293b]'
+            }`}
+            title="Lore Codex · Collected Realm Chronicles"
+          >
+            <BookOpen className="w-3.5 h-3.5 text-[#e5a93c]" />
+            <span className="font-mono text-[11px]">
+              {hud.collectedLoreIds.length}/{LORE_FRAGMENTS.length}
+            </span>
           </button>
 
           <button

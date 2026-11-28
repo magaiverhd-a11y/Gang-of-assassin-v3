@@ -1,12 +1,35 @@
 export type Facing = 1 | -1;
 
-export type CharacterId = 'hunter' | 'brute' | 'ronin' | 'minstrel' | 'monk' | 'wizard' | 'assassin';
+export type CharacterId =
+  | 'hunter'
+  | 'brute'
+  | 'ronin'
+  | 'minstrel'
+  | 'monk'
+  | 'wizard'
+  | 'assassin'
+  | 'ranger'
+  | 'vanguard'
+  | 'dancer'
+  | 'bouncer';
 
 export type RaidId =
   | 'nocturne_castle'
   | 'goblin_camp'
   | 'weeping_necropolis'
   | 'brimstone_sanctum'
+  | 'mushroom_kingdom'
+  | 'sand_fortress'
+  | 'alien_ship'
+  | 'dragon_crane'
+  | 'dwarven_mines'
+  | 'cyberpunk_city'
+  | 'pirate_armada'
+  | 'ghost_paradox'
+  | 'noble_mansion'
+  | 'underwater_city'
+  | 'frost_wardens'
+  | 'barbaric_nation'
   | 'eclipse_gauntlet';
 
 export type EnemyType =
@@ -45,7 +68,27 @@ export type EnemyType =
   | 'boss_slag_titan'
   | 'boss_infernal_knight'
   | 'boss_forge_lord'
-  | 'boss_eclipse_overlord';
+  | 'boss_eclipse_overlord'
+  | 'boss_mushroom_sovereign'
+  | 'boss_sand_pharaoh'
+  | 'boss_alien_archon'
+  | 'boss_dragon_crane'
+  | 'spore_hopper'
+  | 'mycelium_spitter'
+  | 'cap_brute'
+  | 'dune_stalker'
+  | 'scarab_swarmer'
+  | 'sun_acolyte'
+  | 'plasma_drone'
+  | 'void_stalker'
+  | 'mech_turret'
+  | 'crane_disciple'
+  | 'jade_sentinel'
+  | 'cloud_wyrmling'
+  | 'dwarf_miner'
+  | 'dwarf_sapper'
+  | 'runed_golem'
+  | 'boss_dwarf_king';
 
 export type GameStatus =
   | 'CAMP'
@@ -70,7 +113,22 @@ export type WeaponId =
   | 'ash_wraps'
   | 'spire_staff'
   | 'shadow_daggers'
-  | 'sword';
+  | 'sword'
+  | 'estoc_spear'
+  | 'short_blade'
+  | 'cleaver_greatsword'
+  | 'joust_lance'
+  | 'arcane_wand'
+  | 'war_fans'
+  | 'meteor_flail'
+  | 'orbiting_grimoire'
+  | 'burst_crossbow'
+  | 'shield_mace'
+  | 'kusarigama'
+  | 'twin_chakram'
+  | 'solar_glaive'
+  | 'prism_lance'
+  | 'prism_gauntlets';
 
 export type AbilityId =
   | 'fireball'
@@ -80,14 +138,22 @@ export type AbilityId =
   | 'fire_weapon'
   | 'cinder_palm'
   | 'chain_storm'
-  | 'venom_needles';
+  | 'venom_needles'
+  | 'ricochet_snare'
+  | 'aegis_slam'
+  | 'solar_bloom'
+  | 'prism_beam'
+  | 'frost_nova'
+  | 'phantom_blades'
+  | 'meteor_call'
+  | 'blood_siphon';
 
 export type ItemId =
   | 'health_potion'
   | 'mana_potion'
   | 'armor_potion';
 
-export type SpecialItemId = 'eclipse_hourglass' | 'hero_tag_horn';
+export type SpecialItemId = 'eclipse_hourglass' | 'hero_tag_horn' | 'smoke_vial' | 'fire_bomb';
 
 export interface SpecialItemDef {
   id: SpecialItemId;
@@ -97,6 +163,133 @@ export interface SpecialItemDef {
   cooldown: number;
   maxCharges: number;
   accent: string;
+  isSimple?: boolean;
+}
+
+export type HeroSkinId = 'default' | 'crimson_moon' | 'gilded_saint' | 'abyssal_knight' | 'phantom_ivory';
+
+export interface HeroSkinDef {
+  id: HeroSkinId;
+  name: string;
+  description: string;
+  coreCost: number;
+  accent: string;
+  filter: string;
+  auraColor: string;
+}
+
+export type SacrificeAltarStat = 'hp' | 'mp' | 'weapon' | 'spell' | 'regen' | 'agility';
+
+export interface SacrificeAltarDef {
+  stat: SacrificeAltarStat;
+  name: string;
+  relicLabel: string;
+  bonusLabel: string;
+  description: string;
+  coreCost: number;
+  levelsRequired: number;
+  accent: string;
+}
+
+export interface GoldPrepRecipe {
+  id: string;
+  name: string;
+  description: string;
+  goldCost: number;
+  category: 'potion' | 'special_item';
+  itemId?: ItemId;
+  specialItemId?: SpecialItemId;
+  accent: string;
+}
+
+export interface CharacterUnlockState {
+  weapons: WeaponId[];
+  spells: AbilityId[];
+  specials: SpecialItemId[];
+  skins: HeroSkinId[];
+}
+
+export type BossCharmId =
+  | 'crimson_chalice'
+  | 'blackpowder_idol'
+  | 'phylactery_locket'
+  | 'molten_anvil_heart'
+  | 'mycelial_crown'
+  | 'sunscarab_seal'
+  | 'singularity_core'
+  | 'jade_feather_pearl'
+  | 'deep_vein_heart'
+  | 'neon_overclock_chip'
+  | 'cursed_compass'
+  | 'paradox_hourglass'
+  | 'velvet_signet'
+  | 'abyssal_trident_pearl'
+  | 'glacial_aegis_shard'
+  | 'ironhorn_war_tusk'
+  | 'astral_eclipse_prism';
+
+export interface BossCharmDef {
+  id: BossCharmId;
+  raidId: RaidId;
+  name: string;
+  bossName: string;
+  pursuitLore: string;
+  effectSummary: string;
+  color: string;
+  glow: string;
+  sigil: string;
+}
+
+export type CharmSynergyId =
+  | 'blood_and_powder'
+  | 'plague_necromancy'
+  | 'solar_singularity'
+  | 'skyforged_tempest'
+  | 'eclipse_sovereign'
+  | 'mycelial_mirage'
+  | 'astral_crane'
+  | 'forge_of_souls'
+  | 'crimson_spores'
+  | 'sunfire_ordnance'
+  | 'void_alchemist'
+  | 'celestial_chalice'
+  | 'gilded_furnace'
+  | 'crystal_singularity'
+  | 'neon_paradox'
+  | 'gilded_corsair'
+  | 'frozen_abyss'
+  | 'iron_glacier'
+  | 'cyber_corsair';
+
+export interface CharmSynergyDef {
+  id: CharmSynergyId;
+  name: string;
+  charms: [BossCharmId, BossCharmId];
+  summary: string;
+  color: string;
+}
+
+export interface LoreFragmentDef {
+  id: string;
+  raidId: RaidId;
+  order: 1 | 2 | 3 | 4;
+  title: string;
+  excerpt: string;
+}
+
+export interface WorldPickup {
+  id: number;
+  kind: 'gold' | 'hp_goblet' | 'mp_goblet' | 'map_relic' | 'boss_charm' | 'lore_fragment';
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  value: number;
+  life: number;
+  bobPhase: number;
+  grounded: boolean;
+  charmId?: BossCharmId;
+  loreId?: string;
 }
 
 export type ArtifactId =
@@ -149,6 +342,8 @@ export interface RaidDef {
   name: string;
   subtitle: string;
   description: string;
+  gimmick: string;
+  enemySummary: string;
   finalBossName: string;
   accent: string;
   isEndRaid?: boolean;
@@ -187,6 +382,8 @@ export interface AbilityDef {
   cooldown: number;
   description: string;
   accent: string;
+  starterChar?: CharacterId;
+  forgeOnly?: boolean;
 }
 
 export interface ItemDef {
@@ -197,31 +394,131 @@ export interface ItemDef {
   accent: string;
 }
 
-export type BaseElementId = 'water' | 'fire' | 'air' | 'earth' | 'light' | 'shadow';
+export type BaseElementId =
+  | 'water'
+  | 'fire'
+  | 'air'
+  | 'earth'
+  | 'light'
+  | 'shadow'
+  | 'storm'
+  | 'glacial'
+  | 'venom'
+  | 'blood'
+  | 'metal'
+  | 'arcane';
 
 export type CombinedElementId =
   | 'steam'
-  | 'frost'
+  | 'mist'
   | 'nature'
   | 'prism'
   | 'abyss'
-  | 'lightning'
+  | 'maelstrom'
+  | 'permafrost'
+  | 'mire'
+  | 'ichor'
+  | 'quicksilver'
+  | 'aether_tide'
+  | 'wildfire'
   | 'magma'
   | 'solar'
   | 'hellfire'
+  | 'plasma'
+  | 'frostburn'
+  | 'plaguefire'
+  | 'sanguine_flame'
+  | 'molten_steel'
+  | 'starfire'
   | 'sandstorm'
   | 'aether'
   | 'phantom'
+  | 'tempest'
+  | 'blizzard'
+  | 'miasma'
+  | 'crimson_gale'
+  | 'razorwind'
+  | 'zephyr_rune'
   | 'crystal'
   | 'obsidian'
-  | 'eclipse';
+  | 'thunderquake'
+  | 'tundra'
+  | 'rotstone'
+  | 'crimson_titan'
+  | 'adamant'
+  | 'runestone'
+  | 'eclipse'
+  | 'radiant_bolt'
+  | 'aurora'
+  | 'purifying_bane'
+  | 'seraph_blood'
+  | 'gilded_aegis'
+  | 'celestial'
+  | 'void_thunder'
+  | 'black_ice'
+  | 'nightshade'
+  | 'bloodmoon'
+  | 'dusksteel'
+  | 'void_star'
+  | 'hailstorm'
+  | 'acid_storm'
+  | 'crimson_storm'
+  | 'magnet_arc'
+  | 'astral_storm'
+  | 'rimeblight'
+  | 'frost_vein'
+  | 'cryosteel'
+  | 'astral_rime'
+  | 'hematoxin'
+  | 'rustbane'
+  | 'eldritch_rot'
+  | 'iron_siphon'
+  | 'hemomancy'
+  | 'chrono_forge';
 
 export type ElementId = BaseElementId | CombinedElementId;
+
+export type CursedRelicId =
+  | 'mirror_prism_crown'
+  | 'shattered_hourglass'
+  | 'bloodglass_chalice'
+  | 'phantom_veil_cloak'
+  | 'void_mirror_edge'
+  | 'cathedral_aegis_shard';
+
+export interface CursedRelicDef {
+  id: CursedRelicId;
+  name: string;
+  tagline: string;
+  description: string;
+  accent: string;
+}
+
+export type ElementalStatusId =
+  | 'burn'
+  | 'freeze'
+  | 'stun'
+  | 'poison'
+  | 'blind'
+  | 'bleed'
+  | 'soaked'
+  | 'hex';
+
+export type ElementalStatusId =
+  | 'burn'
+  | 'freeze'
+  | 'stun'
+  | 'poison'
+  | 'blind'
+  | 'bleed'
+  | 'soaked'
+  | 'hex';
 
 export interface ElementDef {
   id: ElementId;
   name: string;
   title: string;
+  playstyleTag?: string;
   shortDesc: string;
   description: string;
   primaryColor: string;
@@ -253,12 +550,22 @@ export type UpgradeKind =
   | 'assassin_training'
   | 'swift_footwork'
   | 'element_affinity'
+  | 'element_double_down'
   | 'element_resonance'
   | 'tag_partner'
+  | 'cursed_unique_relic'
   | 'cursed_glass_cannon'
   | 'cursed_blood_grimoire'
   | 'cursed_reaper_pact'
   | 'weapon_damage'
+  | 'weapon_power'
+  | 'tri_arsenal_relic'
+  | 'item_extra_uses'
+  | 'item_potion_power'
+  | 'item_special_charges'
+  | 'item_special_power'
+  | 'item_free_sip'
+  | 'item_refill_all'
   | 'max_hp'
   | 'max_mp'
   | 'hp_regen'
@@ -276,6 +583,7 @@ export interface UpgradeOption {
   specialItemId?: SpecialItemId;
   elementId?: BaseElementId;
   combinedElementId?: CombinedElementId;
+  cursedRelicId?: CursedRelicId;
   partnerCharId?: CharacterId;
   slotIndex?: 0 | 1 | 2;
 }
@@ -585,7 +893,11 @@ export interface Platform extends Rect {
     | 'timber'
     | 'palisade'
     | 'crypt_slab'
-    | 'obsidian';
+    | 'obsidian'
+    | 'grate'
+    | 'underground'
+    | 'bounce_cap'
+    | 'wind_pad';
 }
 
 export interface HangingBrazier {
@@ -624,9 +936,26 @@ export type InteractableKind =
   | 'camp_hero_monk'
   | 'camp_hero_wizard'
   | 'camp_hero_assassin'
+  | 'camp_hero_ranger'
+  | 'camp_hero_vanguard'
+  | 'camp_hero_dancer'
+  | 'camp_hero_bouncer'
   | 'camp_weapon_rack'
   | 'camp_craft_bench'
   | 'camp_raid_gate';
+
+export interface GlassWall {
+  id: number;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  orientation: 'vertical' | 'horizontal';
+  life: number;
+  maxLife: number;
+  flashTimer: number;
+  color: string;
+}
 
 export interface SecretWall {
   id: string;
@@ -690,7 +1019,25 @@ export interface StageDef {
   index: number;
   roomNumber: number;
   raidId?: RaidId;
-  environment?: 'castle' | 'goblin_camp' | 'cemetery' | 'foundry' | 'eclipse';
+  environment?:
+    | 'castle'
+    | 'goblin_camp'
+    | 'cemetery'
+    | 'foundry'
+    | 'eclipse'
+    | 'mushroom'
+    | 'sand'
+    | 'alien'
+    | 'dragon'
+    | 'dwarven_mines'
+    | 'cyberpunk'
+    | 'pirate'
+    | 'paradox'
+    | 'mansion'
+    | 'underwater'
+    | 'frost'
+    | 'barbaric'
+    | 'mirror_cathedral';
   isCamp?: boolean;
   isBigBossRoom?: boolean;
   isBossGauntletRoom?: boolean;
@@ -746,7 +1093,14 @@ export interface Projectile {
     | 'storm_arc'
     | 'arcane_bolt'
     | 'thrown_dagger'
-    | 'venom_needle';
+    | 'venom_needle'
+    | 'grimoire_orb'
+    | 'crossbow_bolt'
+    | 'chakram'
+    | 'chakram_vortex'
+    | 'rail_beam'
+    | 'spore_glob'
+    | 'jade_bolt';
   /** Arcane bolt colours (element-tinted) and flags. */
   color?: string;
   color2?: string;
@@ -756,6 +1110,11 @@ export interface Projectile {
   startX?: number;
   slotLevel?: number;
   returnTimer?: number;
+  returning?: boolean;
+  returnAge?: number;
+  orbElement?: BaseElementId;
+  element?: BaseElementId;
+  maxLife?: number;
 }
 
 export interface GasCloud {
@@ -965,10 +1324,41 @@ export interface Player {
   baseElements: BaseElementId[];
   combinedElement: CombinedElementId | null;
   elementResonance: number;
+  affinityLevel: number;
+  affinityLockedSingle: boolean;
+  weaponPowerLevel: number;
+  potionPowerBonus: number;
+  itemExtraUsesBonus: number;
+  specialItemPowerBonus: number;
+  specialItemMaxChargesBonus: number;
+  alchemistBeltLevel: number;
+  cursedRelics: CursedRelicId[];
+  mirrorCrownHitCounter: number;
+  voidEdgeMpCooldown: number;
   parryWindowTimer: number;
+  parryCooldownTimer: number;
+  weaponChargeTimer: number;
+  grimoireElementIndex: number;
+  grimoireOrbs: number;
+  grimoireOrbRechargeTimer: number;
+  shieldGuardActive: boolean;
+  vanguardBashTimer: number;
+  vanguardBashHitIds: Set<number>;
+  // Prism Striker (Bouncer) Physics Ricochet Lunge
+  bounceActive: boolean;
+  bouncesLeft: number;
+  maxBounces: number;
+  bounceTimer: number;
+  bounceSpeed: number;
+  bounceHitIds: Set<number>;
+  bounceWallCooldown: number;
+  bounceDistLeft: number;
+  bounceCountDone: number;
   tagPartner: CharacterId | null;
   tagPartnerCooldown: number;
   cursedGlassVulnerable: boolean;
+  skin: HeroSkinId;
+  runRelicLevels: Record<SacrificeAltarStat, number>;
   backdashTimer: number;
   weaponSkillCooldown: number;
   dashAttackTimer: number;
@@ -998,6 +1388,18 @@ export interface Player {
   invulnTimer: number;
   flashTimer: number;
 
+  // Elemental Status Effects inflicted on the player
+  statusBurnTimer: number;
+  statusBurnTickTimer: number;
+  statusFreezeTimer: number;
+  statusStunTimer: number;
+  statusPoisonTimer: number;
+  statusPoisonTickTimer: number;
+  statusBlindTimer: number;
+  statusBleedTimer: number;
+  statusSoakedTimer: number;
+  statusHexTimer: number;
+
   animTime: number;
   landTimer: number;
 }
@@ -1019,6 +1421,8 @@ export interface Enemy {
   isBigBoss?: boolean;
   enraged?: boolean;
   summoned?: boolean;
+  isMirrorPhantom?: boolean;
+  mirrorSplitDone?: boolean;
 
   homeX: number;
   homeY: number;
@@ -1051,6 +1455,15 @@ export interface Enemy {
   /** Mark for Death: seconds left; boss marks add damage taken. */
   markTimer?: number;
   markMaxTimer?: number;
+  /** Elemental Affinity & Status Effects */
+  element?: BaseElementId;
+  freezeTimer?: number;
+  stunTimer?: number;
+  blindTimer?: number;
+  bleedTimer?: number;
+  bleedTickTimer?: number;
+  soakedTimer?: number;
+  hexTimer?: number;
   animTime: number;
   dead: boolean;
   shieldActive?: boolean;
@@ -1188,6 +1601,7 @@ export interface InputState {
   jumpHeld: boolean;
   jumpJustPressed: boolean;
   attackJustPressed: boolean;
+  attackHeld?: boolean;
   backdashJustPressed: boolean;
   interactJustPressed: boolean;
   spellJustPressed: boolean;
@@ -1205,6 +1619,7 @@ export interface BossHudBar {
   maxHp: number;
   enraged: boolean;
   isBigBoss: boolean;
+  element?: BaseElementId;
 }
 
 export interface HudSnapshot {
@@ -1272,8 +1687,13 @@ export interface HudSnapshot {
   baseElements: BaseElementId[];
   combinedElement: CombinedElementId | null;
   elementResonance: number;
+  affinityLevel: number;
+  affinityMaxLevel: number;
+  weaponPowerLevel: number;
+  weaponPowerEvolutionTier: number;
   weaponEvolutionTier: number;
   spellEvolutionTier: number;
+  cursedRelics: CursedRelicId[];
   shadowChainTimer: number;
   shadowChainCount: number;
   minstrelSlowMo: boolean;
@@ -1292,10 +1712,37 @@ export interface HudSnapshot {
   assassinations: number;
   crits: number;
   parries: number;
+  parryCooldown: number;
   secretsFound: number;
   isCursedChamber: boolean;
   cursedDoorAvailable: boolean;
   tagPartner: CharacterId | null;
   tagPartnerCooldown: number;
+  gold: number;
+  raidGoldEarned: number;
+  raidDamageDealt: number;
+  raidElapsedSeconds: number;
+  raidMapRelicsCollected: number;
+  raidScore: number;
+  raidRank: 'S' | 'A' | 'B' | 'C';
+  runHeroLocked: CharacterId | null;
+  testFreeHeroSwitch: boolean;
+  skin: HeroSkinId;
+  unlockedSkins: HeroSkinId[];
+  unlockedSpecials: SpecialItemId[];
+  charPermanentWeapons: WeaponId[];
+  charPermanentSpells: AbilityId[];
+  runRelicLevels: Record<SacrificeAltarStat, number>;
+  permAltarBonuses: Record<SacrificeAltarStat, number>;
+  bossCharms: BossCharmId[];
+  activeCharmSynergies: CharmSynergyId[];
+  lastBossCharmDrop: BossCharmId | null;
+  grimoireElement?: BaseElementId;
+  grimoireOrbs?: number;
+  bouncesLeft?: number;
+  maxBounces?: number;
+  collectedLoreIds: string[];
+  lastLoreToast: { id: string; title: string; raidName: string; count: number } | null;
+  playerStatuses: Partial<Record<ElementalStatusId, number>>;
   progressPct: number;
 }

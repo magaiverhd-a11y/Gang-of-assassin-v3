@@ -232,6 +232,84 @@ export const ENEMY_SPECS: Record<
     isBoss: true,
     isBigBoss: true,
   },
+
+  // The Mushroom Kingdom — BIG BOSS
+  boss_mushroom_sovereign: {
+    name: 'Sporelord Amanita · Mycelium Sovereign',
+    baseW: 88,
+    baseH: 130,
+    hp: 72,
+    visionRange: 640,
+    isBoss: true,
+    isBigBoss: true,
+  },
+
+  // Sand Fortress — BIG BOSS
+  boss_sand_pharaoh: {
+    name: 'Pharaoh-Khan Sethra · Dune Sovereign',
+    baseW: 80,
+    baseH: 126,
+    hp: 74,
+    visionRange: 650,
+    isBoss: true,
+    isBigBoss: true,
+  },
+
+  // Alien Ship — BIG BOSS
+  boss_alien_archon: {
+    name: 'Void Archon Xel\'Vora · Star Harvester',
+    baseW: 86,
+    baseH: 128,
+    hp: 76,
+    visionRange: 660,
+    isBoss: true,
+    isBigBoss: true,
+  },
+
+  // Dragon Crane — BIG BOSS
+  boss_dragon_crane: {
+    name: 'Longhe · Celestial Crane-Wyrm',
+    baseW: 96,
+    baseH: 122,
+    hp: 78,
+    visionRange: 670,
+    isBoss: true,
+    isBigBoss: true,
+  },
+
+  // The Mushroom Kingdom — Bespoke Fungal Roster
+  spore_hopper: { name: 'Spore Hopper', baseW: 30, baseH: 34, hp: 3, visionRange: 270, isBoss: false },
+  mycelium_spitter: { name: 'Mycelium Spitter', baseW: 32, baseH: 48, hp: 3, visionRange: 340, isBoss: false },
+  cap_brute: { name: 'Toadstool Roller', baseW: 42, baseH: 54, hp: 5, visionRange: 260, isBoss: false },
+
+  // Sand Fortress — Bespoke Desert Roster
+  dune_stalker: { name: 'Dune Mirage-Stalker', baseW: 28, baseH: 50, hp: 3, visionRange: 295, isBoss: false },
+  scarab_swarmer: { name: 'Sun-Scarab Roller', baseW: 34, baseH: 26, hp: 3, visionRange: 280, isBoss: false },
+  sun_acolyte: { name: 'Solar Obelisk Priest', baseW: 28, baseH: 52, hp: 3, visionRange: 350, isBoss: false },
+
+  // Alien Ship — Bespoke Xeno-Tech Roster
+  plasma_drone: { name: 'Plasma Saucer-Drone', baseW: 38, baseH: 26, hp: 3, visionRange: 340, isBoss: false },
+  void_stalker: { name: 'Xeno Leaper', baseW: 34, baseH: 44, hp: 4, visionRange: 300, isBoss: false },
+  mech_turret: { name: 'Exo-Rail Walker', baseW: 42, baseH: 60, hp: 5, visionRange: 380, isBoss: false },
+
+  // Dragon Crane — Bespoke Cloud-Peak Roster
+  crane_disciple: { name: 'Crane Sky-Acrobat', baseW: 28, baseH: 50, hp: 3, visionRange: 310, isBoss: false },
+  jade_sentinel: { name: 'Jade Lantern-Golem', baseW: 34, baseH: 46, hp: 4, visionRange: 330, isBoss: false },
+  cloud_wyrmling: { name: 'Cloud Wyrmling', baseW: 44, baseH: 30, hp: 4, visionRange: 350, isBoss: false },
+
+  // Corrupted Dwarven Mines — Bespoke Subterranean Roster
+  dwarf_miner: { name: 'Corrupted Pick-Miner', baseW: 32, baseH: 44, hp: 4, visionRange: 255, isBoss: false },
+  dwarf_sapper: { name: 'Crystal Keg-Sapper', baseW: 30, baseH: 42, hp: 3, visionRange: 295, isBoss: false },
+  runed_golem: { name: 'Runed Vault-Golem', baseW: 44, baseH: 60, hp: 6, visionRange: 270, isBoss: false },
+  boss_dwarf_king: {
+    name: 'Thane Borin · The Gilded Hollow',
+    baseW: 84,
+    baseH: 118,
+    hp: 76,
+    visionRange: 660,
+    isBoss: true,
+    isBigBoss: true,
+  },
 };
 
 export function isFlyingEnemyType(type: EnemyType): boolean {
@@ -241,12 +319,18 @@ export function isFlyingEnemyType(type: EnemyType): boolean {
     type === 'wraith' ||
     type === 'gargoyle' ||
     type === 'ember_imp' ||
+    type === 'sun_acolyte' ||
+    type === 'plasma_drone' ||
+    type === 'jade_sentinel' ||
+    type === 'cloud_wyrmling' ||
     type === 'boss_malakor' ||
     type === 'boss_gargoyle_king' ||
     type === 'boss_goblin_shaman' ||
     type === 'boss_banshee' ||
     type === 'boss_necromancer' ||
-    type === 'boss_pyre_matriarch'
+    type === 'boss_pyre_matriarch' ||
+    type === 'boss_alien_archon' ||
+    type === 'boss_dragon_crane'
   );
 }
 
@@ -258,15 +342,18 @@ export function buildEnemies(
 ): Enemy[] {
   return spawns.map((spawn, idx) => {
     const spec = ENEMY_SPECS[spawn.type];
-    const baseHp =
+    const isBig = Boolean(spawn.isBigBoss || spec.isBigBoss);
+    const rawBaseHp =
       spawn.customHp !== undefined
         ? spawn.customHp
         : spec.isBoss
           ? spec.hp
           : spec.hp + roomHpBonus;
+    // Doubled base HP for all enemies, plus extra 1.75x durability for Stage Big Bosses!
+    const baseHp = Math.round(rawBaseHp * 2 * (isBig ? 1.75 : 1));
     const scaledHp = spec.isBoss
       ? Math.max(baseHp, Math.round(baseHp * raidHpMult))
-      : Math.max(baseHp, Math.round(baseHp * raidHpMult) + (raidFlatBonus > 0 && baseHp <= 3 ? 1 : 0));
+      : Math.max(baseHp, Math.round(baseHp * raidHpMult) + raidFlatBonus);
 
     return {
       id: idx + 1,
@@ -315,10 +402,27 @@ export function buildEnemies(
 // ============================================================================
 // BASE CAMP — In front of Nocturne Castle with Campfire, 3 Heroes & Crafting Forge
 // ============================================================================
-export const CAMP_FIRE_X = 460;
+export const CAMP_FIRE_X = 685;
 const CAMP_FLOOR = 860;
-const CAMP_WIDTH = 1360;
+const CAMP_WIDTH = 1840;
 const CAMP_HEIGHT = 1080;
+
+export const CAMP_HERO_SPOTS: Record<
+  import('./types').CharacterId,
+  { x: number; y: number; facing: 1 | -1 }
+> = {
+  monk: { x: 135, y: 615, facing: 1 },        // Top of the Small Mountain summit
+  ranger: { x: 280, y: 705, facing: 1 },      // Mid Mountain rocky cliff shelf
+  ronin: { x: 350, y: 555, facing: 1 },       // High Mountain lookout timber rafter
+  hunter: { x: 590, y: CAMP_FLOOR, facing: 1 },   // Cozy left side of the Campfire
+  brute: { x: 780, y: CAMP_FLOOR, facing: -1 },   // Cozy right side of the Campfire
+  vanguard: { x: 865, y: CAMP_FLOOR, facing: -1 }, // Guarding just beside the Campfire hearth
+  minstrel: { x: 685, y: 745, facing: 1 },    // Elevated Campfire stage balcony
+  wizard: { x: 1035, y: 760, facing: -1 },    // Arcane Rune Terrace above the Armory
+  bouncer: { x: 1175, y: 665, facing: -1 },   // Upper Crystal Spire ledge
+  dancer: { x: 1385, y: 735, facing: -1 },    // Lantern Pavilion bridge above the Forge
+  assassin: { x: 1745, y: 695, facing: -1 },  // Shadowed Castle Gate battlements
+};
 
 export const CAMP_STAGE: StageDef = {
   index: -1,
@@ -346,86 +450,138 @@ export const CAMP_STAGE: StageDef = {
     { id: 'wall-left', x: -40, y: 0, w: 40, h: CAMP_HEIGHT, style: 'pillar' },
     { id: 'wall-right', x: CAMP_WIDTH, y: 0, w: 40, h: CAMP_HEIGHT, style: 'pillar' },
     { id: 'camp-ground', x: 0, y: CAMP_FLOOR, w: CAMP_WIDTH, h: 220, style: 'camp_ground' },
-    // Practice stone pillar & rafters so Ronin wall-cling and Minstrel whip-grappling can be tested in Camp!
-    { id: 'camp-practice-pillar', x: 165, y: 740, w: 68, h: 120, style: 'pillar' },
-    { id: 'camp-practice-rafter-l', x: 250, y: 635, w: 185, h: 18, oneWay: true, style: 'rafter' },
-    { id: 'camp-practice-crumble', x: 465, y: 615, w: 145, h: 16, oneWay: true, style: 'bridge', crumbling: true },
-    { id: 'camp-practice-rafter-r', x: 645, y: 605, w: 205, h: 18, oneWay: true, style: 'rafter' },
+
+    // Zone A: Stepped Small Mountain (solid climbable rock tiers + summit + lookout rafter)
+    { id: 'camp-mtn-summit', x: 45, y: 615, w: 185, h: 245, style: 'stone' },
+    { id: 'camp-mtn-mid', x: 205, y: 705, w: 155, h: 155, style: 'stone' },
+    { id: 'camp-mtn-foothill', x: 340, y: 785, w: 120, h: 75, style: 'stone' },
+    { id: 'camp-mtn-lookout', x: 265, y: 555, w: 170, h: 18, oneWay: true, style: 'rafter' },
+
+    // Zone B: Campfire Hearth Stage & Stepping Ledge
+    { id: 'camp-fire-step', x: 495, y: 795, w: 72, h: 16, oneWay: true, style: 'bridge' },
+    { id: 'camp-minstrel-stage', x: 580, y: 745, w: 210, h: 18, oneWay: true, style: 'rafter' },
+
+    // Zone C: Crumbling Practice Bridge, Arcane Rune Terrace & Upper Crystal Spire
+    { id: 'camp-practice-crumble', x: 808, y: 748, w: 128, h: 16, oneWay: true, style: 'bridge', crumbling: true },
+    { id: 'camp-arcane-terrace', x: 952, y: 760, w: 175, h: 18, oneWay: true, style: 'bridge' },
+    { id: 'camp-crystal-spire', x: 1090, y: 665, w: 165, h: 18, oneWay: true, style: 'rafter' },
+
+    // Zone D: Lantern Pavilion Bridge above the Crafting Forge
+    { id: 'camp-lantern-bridge', x: 1295, y: 735, w: 180, h: 18, oneWay: true, style: 'bridge' },
+
+    // Zone E: Castle Gate Parapet Step & Shadowed Battlements
+    { id: 'camp-gate-step', x: 1545, y: 775, w: 96, h: 18, oneWay: true, style: 'bridge' },
+    { id: 'camp-gate-battlement', x: 1668, y: 695, w: 152, h: 18, oneWay: true, style: 'stone' },
   ],
   torches: [
-    { x: 125, y: 760, phase: 0.4 },
-    { x: 1110, y: 740, phase: 2.1 },
-    { x: 1275, y: 740, phase: 3.5 },
+    { x: 95, y: 540, phase: 0.3 },
+    { x: 420, y: 715, phase: 1.1 },
+    { x: 965, y: 755, phase: 1.9 },
+    { x: 1255, y: 755, phase: 2.6 },
+    { x: 1560, y: 740, phase: 3.2 },
+    { x: 1720, y: 740, phase: 3.9 },
   ],
   interactables: [
     {
-      id: 'camp-hero-hunter',
-      kind: 'camp_hero_hunter',
-      x: 335,
-      y: CAMP_FLOOR,
-      label: 'Play Vampire Hunter (Fast · Double Jump)',
+      id: 'camp-hero-monk',
+      kind: 'camp_hero_monk',
+      x: CAMP_HERO_SPOTS.monk.x,
+      y: CAMP_HERO_SPOTS.monk.y,
+      label: 'Play The Ash Monk (Fists & Kusarigama · Mountain Summit)',
       used: false,
     },
     {
-      id: 'camp-hero-brute',
-      kind: 'camp_hero_brute',
-      x: 550,
-      y: CAMP_FLOOR,
-      label: 'Play Iron Brute (Heavy · High Jump)',
+      id: 'camp-hero-ranger',
+      kind: 'camp_hero_ranger',
+      x: CAMP_HERO_SPOTS.ranger.x,
+      y: CAMP_HERO_SPOTS.ranger.y,
+      label: 'Play Dusk Ranger (Burst Crossbow · Cliff Lookout)',
       used: false,
     },
     {
       id: 'camp-hero-ronin',
       kind: 'camp_hero_ronin',
-      x: 635,
-      y: CAMP_FLOOR,
-      label: 'Play Ronin Swordsman (Katana · Wall Cling)',
+      x: CAMP_HERO_SPOTS.ronin.x,
+      y: CAMP_HERO_SPOTS.ronin.y,
+      label: 'Play Ronin Swordsman (Katana · Wall Cling · High Rafter)',
+      used: false,
+    },
+    {
+      id: 'camp-hero-hunter',
+      kind: 'camp_hero_hunter',
+      x: CAMP_HERO_SPOTS.hunter.x,
+      y: CAMP_HERO_SPOTS.hunter.y,
+      label: 'Play Vampire Hunter (Fast · Double Jump · Campfire)',
+      used: false,
+    },
+    {
+      id: 'camp-hero-brute',
+      kind: 'camp_hero_brute',
+      x: CAMP_HERO_SPOTS.brute.x,
+      y: CAMP_HERO_SPOTS.brute.y,
+      label: 'Play Iron Brute (Heavy · High Jump · Campfire)',
+      used: false,
+    },
+    {
+      id: 'camp-hero-vanguard',
+      kind: 'camp_hero_vanguard',
+      x: CAMP_HERO_SPOTS.vanguard.x,
+      y: CAMP_HERO_SPOTS.vanguard.y,
+      label: 'Play Iron Vanguard (Tower Shield & Mace · Tank)',
       used: false,
     },
     {
       id: 'camp-hero-minstrel',
       kind: 'camp_hero_minstrel',
-      x: 720,
-      y: CAMP_FLOOR,
-      label: 'Play The Minstrel (Whip-Zip · Encore Waltz)',
+      x: CAMP_HERO_SPOTS.minstrel.x,
+      y: CAMP_HERO_SPOTS.minstrel.y,
+      label: 'Play The Minstrel (Whip-Zip · Encore Waltz · Stage Balcony)',
       used: false,
     },
     {
       id: 'camp-hero-wizard',
       kind: 'camp_hero_wizard',
-      x: 398,
-      y: CAMP_FLOOR,
-      label: 'Play The Sable Wizard (Elemental Bolt · Air Float · Repulsion Nova)',
+      x: CAMP_HERO_SPOTS.wizard.x,
+      y: CAMP_HERO_SPOTS.wizard.y,
+      label: 'Play The Sable Wizard (Spire Staff · Orbiting Grimoire in [I])',
+      used: false,
+    },
+    {
+      id: 'camp-hero-bouncer',
+      kind: 'camp_hero_bouncer',
+      x: CAMP_HERO_SPOTS.bouncer.x,
+      y: CAMP_HERO_SPOTS.bouncer.y,
+      label: 'Play Prism Striker (Ricochet Bounce · Glass Box · Crystal Spire)',
+      used: false,
+    },
+    {
+      id: 'camp-hero-dancer',
+      kind: 'camp_hero_dancer',
+      x: CAMP_HERO_SPOTS.dancer.x,
+      y: CAMP_HERO_SPOTS.dancer.y,
+      label: 'Play Sun Blade-Dancer (Looping Chakrams · Lantern Bridge)',
       used: false,
     },
     {
       id: 'camp-hero-assassin',
       kind: 'camp_hero_assassin',
-      x: 1295,
-      y: CAMP_FLOOR,
-      label: 'Play The Hollow Assassin (Twin Daggers · Mark for Death · Shadow Blink)',
-      used: false,
-    },
-    {
-      id: 'camp-hero-monk',
-      kind: 'camp_hero_monk',
-      x: 1100,
-      y: CAMP_FLOOR,
-      label: 'Play The Ash Monk (Fists · Charged Leap · 8-Way Pyre Dash)',
+      x: CAMP_HERO_SPOTS.assassin.x,
+      y: CAMP_HERO_SPOTS.assassin.y,
+      label: 'Play The Hollow Assassin (Twin Daggers · Shadow Blink · Battlements)',
       used: false,
     },
     {
       id: 'camp-weapon-rack',
       kind: 'camp_weapon_rack',
-      x: 845,
+      x: 1035,
       y: CAMP_FLOOR,
-      label: 'Armory & Loadout (Inventory [I])',
+      label: 'Armory & Orbiting Grimoire Loadout (Inventory [I])',
       used: false,
     },
     {
       id: 'camp-craft-bench',
       kind: 'camp_craft_bench',
-      x: 995,
+      x: 1325,
       y: CAMP_FLOOR,
       label: 'Crafting Forge & Blood Altar',
       used: false,
@@ -433,9 +589,9 @@ export const CAMP_STAGE: StageDef = {
     {
       id: 'camp-raid-gate',
       kind: 'camp_raid_gate',
-      x: 1205,
+      x: 1640,
       y: CAMP_FLOOR,
-      label: 'Choose Raid (1 of 2 Stages · End Boss Raid)',
+      label: 'Choose Raid · 10 Realms & End Boss',
       used: false,
     },
   ],
@@ -853,7 +1009,146 @@ const ROOM_5_SPAWNS: EnemySpawn[] = [
   },
 ];
 
-export const NOCTURNE_RAID_ROOMS: StageDef[] = [
+export interface UndergroundPassageConfig {
+  idPrefix: string;
+  startX: number;
+  endX: number;
+  grateInX: number;
+  grateOutX: number;
+  chestLabel?: string;
+}
+
+/**
+ * Carves a genuine navigable Underground Secret Passage beneath `stage.floorY`:
+ * - Splits any solid ground slabs across [startX, endX] into thin roof slabs + two drop-through iron grates.
+ * - Places a deep subterranean stone corridor (y = floorY + 148) with step rungs to pop up behind enemy patrols,
+ *   underground torches, and a hidden secret chest!
+ */
+export function withUndergroundPassage(stage: StageDef, cfg: UndergroundPassageConfig): StageDef {
+  const newHeight = Math.max(stage.worldHeight, stage.floorY + 340);
+  const tunnelFloorY = stage.floorY + 148;
+  const grateW = 104;
+  const gx1 = Math.max(cfg.startX + 16, Math.min(cfg.endX - grateW - 16, cfg.grateInX));
+  const gx2 = Math.max(gx1 + grateW + 60, Math.min(cfg.endX - grateW - 16, cfg.grateOutX));
+
+  const nextPlatforms: Platform[] = [];
+  for (const plat of stage.platforms) {
+    if (plat.id === 'wall-left' || plat.id === 'wall-right') {
+      nextPlatforms.push({ ...plat, h: newHeight });
+      continue;
+    }
+    const isSolidGround =
+      !plat.oneWay &&
+      plat.y >= stage.floorY - 70 &&
+      plat.y <= stage.floorY + 24 &&
+      plat.h >= 120 &&
+      plat.x + plat.w > cfg.startX &&
+      plat.x < cfg.endX;
+
+    if (!isSolidGround) {
+      nextPlatforms.push(plat);
+      continue;
+    }
+
+    // Left solid chunk before tunnel
+    if (plat.x < cfg.startX) {
+      nextPlatforms.push({
+        ...plat,
+        id: `${plat.id}-L`,
+        w: cfg.startX - plat.x,
+        h: newHeight - plat.y,
+      });
+    }
+    // Right solid chunk after tunnel
+    if (plat.x + plat.w > cfg.endX) {
+      nextPlatforms.push({
+        ...plat,
+        id: `${plat.id}-R`,
+        x: cfg.endX,
+        w: plat.x + plat.w - cfg.endX,
+        h: newHeight - plat.y,
+      });
+    }
+
+    // Inside [overlapStart, overlapEnd], create thin roof slabs skipping the two grate hatches!
+    const ovStart = Math.max(plat.x, cfg.startX);
+    const ovEnd = Math.min(plat.x + plat.w, cfg.endX);
+    const holes: Array<[number, number]> = [
+      [gx1, gx1 + grateW],
+      [gx2, gx2 + grateW],
+    ];
+    let cur = ovStart;
+    let segIdx = 0;
+    for (const [hStart, hEnd] of holes) {
+      if (hStart > cur + 8 && hStart < ovEnd) {
+        nextPlatforms.push({
+          ...plat,
+          id: `${plat.id}-roof-${segIdx++}`,
+          x: cur,
+          w: Math.min(ovEnd, hStart) - cur,
+          h: 26,
+        });
+      }
+      cur = Math.max(cur, hEnd);
+    }
+    if (cur + 8 < ovEnd) {
+      nextPlatforms.push({
+        ...plat,
+        id: `${plat.id}-roof-${segIdx++}`,
+        x: cur,
+        w: ovEnd - cur,
+        h: 26,
+      });
+    }
+  }
+
+  // Two drop-through iron grates at surface level
+  nextPlatforms.push(
+    { id: `grate-${cfg.idPrefix}-in`, x: gx1, y: stage.floorY, w: grateW, h: 16, oneWay: true, style: 'grate' },
+    { id: `grate-${cfg.idPrefix}-out`, x: gx2, y: stage.floorY, w: grateW, h: 16, oneWay: true, style: 'grate' },
+    // Subterranean tunnel floor + climbing rungs under both grates
+    {
+      id: `ug-${cfg.idPrefix}-floor`,
+      x: cfg.startX - 18,
+      y: tunnelFloorY,
+      w: cfg.endX - cfg.startX + 36,
+      h: newHeight - tunnelFloorY,
+      style: 'underground',
+    },
+    { id: `ug-${cfg.idPrefix}-rung1`, x: gx1 + 10, y: stage.floorY + 76, w: grateW - 20, h: 14, oneWay: true, style: 'bridge' },
+    { id: `ug-${cfg.idPrefix}-rung2`, x: gx2 + 10, y: stage.floorY + 76, w: grateW - 20, h: 14, oneWay: true, style: 'bridge' }
+  );
+
+  const midX = Math.round((cfg.startX + cfg.endX) * 0.5);
+  const nextTorches: TorchProp[] = [
+    ...stage.torches,
+    { x: cfg.startX + 95, y: tunnelFloorY - 82, phase: 0.9 },
+    { x: midX, y: tunnelFloorY - 82, phase: 2.3 },
+    { x: cfg.endX - 95, y: tunnelFloorY - 82, phase: 3.7 },
+  ];
+
+  const nextInteractables: Interactable[] = [
+    ...stage.interactables,
+    {
+      id: `ug-${cfg.idPrefix}-chest`,
+      kind: 'chest',
+      x: midX,
+      y: tunnelFloorY,
+      label: cfg.chestLabel ?? 'Secret Tunnel Vault (+Potion, Gold & Shards)',
+      used: false,
+    },
+  ];
+
+  return {
+    ...stage,
+    worldHeight: newHeight,
+    platforms: nextPlatforms,
+    torches: nextTorches,
+    interactables: nextInteractables,
+  };
+}
+
+const RAW_NOCTURNE_RAID_ROOMS: StageDef[] = [
   {
     index: 0,
     roomNumber: 1,
@@ -1005,6 +1300,75 @@ export const NOCTURNE_RAID_ROOMS: StageDef[] = [
     hidingSpots: [],
     createEnemies: (m = 1, f = 0) => buildEnemies(ROOM_5_SPAWNS, 0, m, f),
   },
+];
+
+export const NOCTURNE_RAID_ROOMS: StageDef[] = [
+  withUndergroundPassage(RAW_NOCTURNE_RAID_ROOMS[0], {
+    idPrefix: 'nc1',
+    startX: 1520,
+    endX: 1990,
+    grateInX: 1545,
+    grateOutX: 1860,
+    chestLabel: 'Courtyard Sewer Vault (+Potion & Shards)',
+  }),
+  withUndergroundPassage(
+    {
+      ...RAW_NOCTURNE_RAID_ROOMS[1],
+      platforms: [
+        ...RAW_NOCTURNE_RAID_ROOMS[1].platforms,
+        // Extra vertical Belfry clock-gear switchback tower!
+        { id: 's2-tower-hi1', x: 740, y: 365, w: 220, h: 18, oneWay: true, style: 'rafter' },
+        { id: 's2-tower-hi2', x: 1880, y: 385, w: 230, h: 18, oneWay: true, style: 'rafter' },
+      ],
+    },
+    {
+      idPrefix: 'nc2',
+      startX: 1380,
+      endX: 1980,
+      grateInX: 1410,
+      grateOutX: 1845,
+      chestLabel: 'Clockwork Under-Gear Vault (+Potion & Shards)',
+    }
+  ),
+  withUndergroundPassage(
+    {
+      ...RAW_NOCTURNE_RAID_ROOMS[2],
+      platforms: [
+        ...RAW_NOCTURNE_RAID_ROOMS[2].platforms,
+        // Hanging chandelier sky-bridges across the Nave!
+        { id: 'r3-chan1', x: 1320, y: 390, w: 210, h: 18, oneWay: true, style: 'rafter' },
+        { id: 'r3-chan2', x: 1960, y: 410, w: 220, h: 18, oneWay: true, style: 'rafter' },
+      ],
+    },
+    {
+      idPrefix: 'nc3',
+      startX: 1450,
+      endX: 2110,
+      grateInX: 1480,
+      grateOutX: 1980,
+      chestLabel: 'Nave Catacomb Reliquary (+Potion & Shards)',
+    }
+  ),
+  withUndergroundPassage(
+    {
+      ...RAW_NOCTURNE_RAID_ROOMS[3],
+      platforms: [
+        ...RAW_NOCTURNE_RAID_ROOMS[3].platforms,
+        // Crimson Sanctum high assassin galleries!
+        { id: 's3-gal1', x: 890, y: 395, w: 240, h: 18, oneWay: true, style: 'rafter' },
+        { id: 's3-gal2', x: 2040, y: 400, w: 230, h: 18, oneWay: true, style: 'rafter' },
+      ],
+    },
+    {
+      idPrefix: 'nc4',
+      startX: 2230,
+      endX: 2820,
+      grateInX: 2260,
+      grateOutX: 2690,
+      chestLabel: 'Crimson Crypt Passage (+Potion & Shards)',
+    }
+  ),
+  RAW_NOCTURNE_RAID_ROOMS[4],
 ];
 
 // ============================================================================
@@ -1241,7 +1605,7 @@ const G5_SPAWNS: EnemySpawn[] = [
   },
 ];
 
-export const GOBLIN_RAID_ROOMS: StageDef[] = [
+const RAW_GOBLIN_RAID_ROOMS: StageDef[] = [
   {
     index: 0,
     roomNumber: 1,
@@ -1478,6 +1842,42 @@ export const GOBLIN_RAID_ROOMS: StageDef[] = [
     hidingSpots: [],
     createEnemies: (m = 1, f = 0) => buildEnemies(G5_SPAWNS, 0, m, f),
   },
+];
+
+export const GOBLIN_RAID_ROOMS: StageDef[] = [
+  withUndergroundPassage(RAW_GOBLIN_RAID_ROOMS[0], {
+    idPrefix: 'gc1',
+    startX: 340,
+    endX: 890,
+    grateInX: 370,
+    grateOutX: 760,
+    chestLabel: 'Goblin Sapper Tunnel (+Potion & Shards)',
+  }),
+  withUndergroundPassage(RAW_GOBLIN_RAID_ROOMS[1], {
+    idPrefix: 'gc2',
+    startX: 340,
+    endX: 860,
+    grateInX: 370,
+    grateOutX: 730,
+    chestLabel: 'Powder Smuggler Tunnel (+Potion & Shards)',
+  }),
+  withUndergroundPassage(RAW_GOBLIN_RAID_ROOMS[2], {
+    idPrefix: 'gc3',
+    startX: 320,
+    endX: 820,
+    grateInX: 350,
+    grateOutX: 690,
+    chestLabel: 'Shaman Burrow Cache (+Potion & Shards)',
+  }),
+  withUndergroundPassage(RAW_GOBLIN_RAID_ROOMS[3], {
+    idPrefix: 'gc4',
+    startX: 260,
+    endX: 760,
+    grateInX: 290,
+    grateOutX: 630,
+    chestLabel: 'War-Camp Under-Vault (+Potion & Shards)',
+  }),
+  RAW_GOBLIN_RAID_ROOMS[4],
 ];
 
 export const RAID_ROOMS = NOCTURNE_RAID_ROOMS;

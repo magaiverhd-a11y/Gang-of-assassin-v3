@@ -1,6 +1,6 @@
 import { affinityFxEnabled, visualElement, visualTier } from './affinityFx';
 import { drawBruteHammerEvo, drawFistEvo, drawHeldWeaponEvo, drawStaffEvo, heldScale, setHeldEvo } from './weaponEvo';
-import { getActiveElementDef } from './defaults';
+import { getActiveElementDef, HERO_SKINS } from './defaults';
 import { CharacterId, Facing, Player, WeaponId } from './types';
 
 interface LimbPose {
@@ -2697,6 +2697,21 @@ export function drawAnimatedPlayer(
   const flash = player.flashTimer > 0;
   const isHurt = player.hitStunTimer > 0;
 
+  // Apply Hero Skin visual palette filter + subtle aura halo
+  const skinDef = HERO_SKINS[player.skin ?? 'default'] ?? HERO_SKINS.default;
+  if (skinDef.id !== 'default') {
+    ctx.save();
+    ctx.globalAlpha = 0.24;
+    ctx.fillStyle = skinDef.accent;
+    ctx.beginPath();
+    ctx.ellipse(0, -h * 0.52, w * 0.85, h * 0.62, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+    if (skinDef.filter && skinDef.filter !== 'none') {
+      ctx.filter = skinDef.filter;
+    }
+  }
+
   if (player.characterId === 'brute') {
     drawIronBrute(ctx, w, h, scale, pose, flash, player.weapon, player.attackState);
   } else if (player.characterId === 'ronin') {
@@ -2730,8 +2745,43 @@ export function drawAnimatedPlayer(
         ? 1
         : 0.25 + evo * 0.25;
     drawSableWizard(ctx, w, h, scale, pose, flash, isHurt, player.weapon, player.attackState, el ? el.primaryColor : '#a5b4fc', power);
+  } else if (player.characterId === 'ranger') {
+    drawDuskRanger(ctx, w, h, scale, pose, flash, isHurt, player.weapon, player.attackState);
+  } else if (player.characterId === 'vanguard') {
+    drawIronVanguard(ctx, w, h, scale, pose, flash, player.weapon, player.attackState, player.shieldGuardActive);
+  } else if (player.characterId === 'dancer') {
+    drawSunBladeDancer(ctx, w, h, scale, pose, flash, isHurt, player.weapon, player.attackState, player.animTime);
+  } else if (player.characterId === 'bouncer') {
+    drawPrismStriker(ctx, w, h, scale, pose, flash, isHurt, player.bounceActive, player.bouncesLeft, player.animTime);
   } else {
     drawAnimeVampireBoy(ctx, w, h, scale, pose, flash, isHurt, player.weapon, player.attackState);
+  }
+
+  // Orbiting Grimoire: 3 floating elemental spheres orbiting the hero!
+  if (player.weapon === 'orbiting_grimoire') {
+    const grimoirePalette = ['#f97316', '#38bdf8', '#fde047', '#84cc16', '#a855f7', '#fef08a'];
+    const orbCol = grimoirePalette[player.grimoireElementIndex % 6];
+    const orbCount = Math.max(0, Math.min(3, player.grimoireOrbs));
+    for (let oi = 0; oi < orbCount; oi++) {
+      const ang = player.animTime * 3.4 + (oi * Math.PI * 2) / 3;
+      const ox = Math.cos(ang) * 26 * scale;
+      const oy = -h * 0.58 + Math.sin(ang) * 14 * scale;
+      ctx.save();
+      ctx.fillStyle = orbCol;
+      ctx.globalAlpha = 0.34;
+      ctx.beginPath();
+      ctx.arc(ox, oy, 8.5 * scale, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.beginPath();
+      ctx.arc(ox, oy, 4.8 * scale, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(ox - 1.2 * scale, oy - 1.2 * scale, 2 * scale, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
   }
 
   // Forward Dash Attack spear flash
@@ -2747,6 +2797,273 @@ export function drawAnimatedPlayer(
 
   setHeldEvo(null);
   ctx.restore();
+}
+
+function drawDuskRanger(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+  scale: number,
+  pose: LimbPose,
+  flash: boolean,
+  _isHurt: boolean,
+  _weapon: WeaponId,
+  attackState: Player['attackState']
+): void {
+  const cloak = flash ? '#ffffff' : '#065f46';
+  const cloakLight = flash ? '#ffffff' : '#10b981';
+  const leather = flash ? '#ffffff' : '#292524';
+  const trim = '#fbbf24';
+  const yOff = pose.bodyOffsetY;
+  // Quiver on back
+  ctx.fillStyle = '#78350f';
+  ctx.fillRect(-w * 0.36, -h * 0.78 + yOff, w * 0.2, h * 0.34);
+  ctx.fillStyle = '#34d399';
+  ctx.fillRect(-w * 0.34, -h * 0.85 + yOff, 3 * scale, 8 * scale);
+  ctx.fillRect(-w * 0.25, -h * 0.83 + yOff, 3 * scale, 7 * scale);
+  // Legs
+  ctx.fillStyle = leather;
+  ctx.fillRect(-w * 0.22, -h * 0.36 + yOff, w * 0.18, h * 0.36);
+  ctx.fillRect(w * 0.06, -h * 0.36 + yOff, w * 0.18, h * 0.36);
+  // Forest ranger cloak & tunic
+  ctx.fillStyle = cloak;
+  ctx.beginPath();
+  ctx.moveTo(-w * 0.45, -h * 0.18 + yOff);
+  ctx.lineTo(-w * 0.28, -h * 0.78 + yOff);
+  ctx.lineTo(w * 0.28, -h * 0.78 + yOff);
+  ctx.lineTo(w * 0.32, -h * 0.26 + yOff);
+  ctx.closePath();
+  ctx.fill();
+  // Scarf & belt
+  ctx.fillStyle = cloakLight;
+  ctx.fillRect(-w * 0.28, -h * 0.74 + yOff, w * 0.56, h * 0.11);
+  ctx.fillStyle = trim;
+  ctx.fillRect(-w * 0.26, -h * 0.42 + yOff, w * 0.52, h * 0.06);
+  // Hooded head & glowing amber ranger eyes
+  ctx.fillStyle = cloak;
+  ctx.beginPath();
+  ctx.arc(0, -h * 0.86 + yOff, w * 0.36, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#111827';
+  ctx.fillRect(-w * 0.06, -h * 0.91 + yOff, w * 0.34, h * 0.12);
+  ctx.fillStyle = '#34d399';
+  ctx.fillRect(w * 0.1, -h * 0.88 + yOff, 4 * scale, 2.5 * scale);
+  // Burst Crossbow held forward
+  const aimX = attackState === 'active' ? w * 0.76 : w * 0.58;
+  ctx.fillStyle = '#475569';
+  ctx.fillRect(w * 0.12, -h * 0.62 + yOff, aimX - w * 0.1, 5 * scale);
+  ctx.strokeStyle = '#34d399';
+  ctx.lineWidth = 2.4 * scale;
+  ctx.beginPath();
+  ctx.moveTo(aimX - 4 * scale, -h * 0.74 + yOff);
+  ctx.quadraticCurveTo(aimX + 8 * scale, -h * 0.6 + yOff, aimX - 4 * scale, -h * 0.46 + yOff);
+  ctx.stroke();
+}
+
+function drawIronVanguard(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+  scale: number,
+  pose: LimbPose,
+  flash: boolean,
+  _weapon: WeaponId,
+  attackState: Player['attackState'],
+  shieldGuardActive: boolean
+): void {
+  const plate = flash ? '#ffffff' : '#334155';
+  const plateHi = flash ? '#ffffff' : '#64748b';
+  const crest = '#38bdf8';
+  const yOff = pose.bodyOffsetY;
+  // Heavy greaves
+  ctx.fillStyle = '#1e293b';
+  ctx.fillRect(-w * 0.32, -h * 0.36 + yOff, w * 0.26, h * 0.36);
+  ctx.fillRect(w * 0.06, -h * 0.36 + yOff, w * 0.26, h * 0.36);
+  // Broad armored cuirass & pauldrons
+  ctx.fillStyle = plate;
+  ctx.fillRect(-w * 0.44, -h * 0.8 + yOff, w * 0.88, h * 0.48);
+  ctx.fillStyle = plateHi;
+  ctx.fillRect(-w * 0.48, -h * 0.82 + yOff, w * 0.96, h * 0.12);
+  // Crested Greathelm
+  ctx.fillStyle = plate;
+  ctx.fillRect(-w * 0.28, -h * 1.02 + yOff, w * 0.56, h * 0.24);
+  ctx.fillStyle = crest;
+  ctx.fillRect(-w * 0.08, -h * 1.12 + yOff, w * 0.22, h * 0.12);
+  ctx.fillStyle = '#7dd3fc';
+  ctx.fillRect(w * 0.02, -h * 0.93 + yOff, w * 0.24, 3.2 * scale);
+  // Flanged Mace behind/swinging
+  const swing = attackState === 'active' ? 1.1 : attackState === 'startup' ? -0.5 : 0;
+  ctx.save();
+  ctx.translate(w * 0.12, -h * 0.64 + yOff);
+  ctx.rotate(swing);
+  ctx.fillStyle = '#78716c';
+  ctx.fillRect(-2 * scale, -24 * scale, 4 * scale, 26 * scale);
+  ctx.fillStyle = '#cbd5e1';
+  ctx.beginPath();
+  ctx.arc(0, -26 * scale, 8 * scale, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+  // Massive Tower Shield in front!
+  const shX = shieldGuardActive ? w * 0.38 : w * 0.26;
+  ctx.fillStyle = shieldGuardActive ? '#0284c7' : '#1e3a5f';
+  ctx.fillRect(shX, -h * 0.84 + yOff, 12 * scale, h * 0.68);
+  ctx.strokeStyle = shieldGuardActive ? '#bae6fd' : '#38bdf8';
+  ctx.lineWidth = (shieldGuardActive ? 3.2 : 2) * scale;
+  ctx.strokeRect(shX, -h * 0.84 + yOff, 12 * scale, h * 0.68);
+  if (shieldGuardActive) {
+    ctx.strokeStyle = 'rgba(125, 211, 252, 0.72)';
+    ctx.lineWidth = 4 * scale;
+    ctx.beginPath();
+    ctx.arc(shX + 12 * scale, -h * 0.5 + yOff, h * 0.44, -Math.PI * 0.42, Math.PI * 0.42);
+    ctx.stroke();
+  }
+}
+
+function drawSunBladeDancer(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+  scale: number,
+  pose: LimbPose,
+  flash: boolean,
+  _isHurt: boolean,
+  _weapon: WeaponId,
+  _attackState: Player['attackState'],
+  time: number
+): void {
+  const silk = flash ? '#ffffff' : '#be123c';
+  const gold = '#fbbf24';
+  const yOff = pose.bodyOffsetY;
+  // Flowing golden ribbon sash behind
+  ctx.strokeStyle = gold;
+  ctx.lineWidth = 3 * scale;
+  ctx.beginPath();
+  ctx.moveTo(-w * 0.2, -h * 0.55 + yOff);
+  ctx.quadraticCurveTo(-w * 0.85, -h * 0.68 + Math.sin(time * 7) * 8 * scale, -w * 1.1, -h * 0.38 + yOff);
+  ctx.stroke();
+  // Agile dancer legs
+  ctx.fillStyle = '#4c0519';
+  ctx.fillRect(-w * 0.2, -h * 0.38 + yOff, w * 0.16, h * 0.38);
+  ctx.fillRect(w * 0.06, -h * 0.38 + yOff, w * 0.16, h * 0.38);
+  // Crimson & gold dancer vest
+  ctx.fillStyle = silk;
+  ctx.beginPath();
+  ctx.moveTo(-w * 0.28, -h * 0.76 + yOff);
+  ctx.lineTo(w * 0.28, -h * 0.76 + yOff);
+  ctx.lineTo(w * 0.22, -h * 0.34 + yOff);
+  ctx.lineTo(-w * 0.22, -h * 0.34 + yOff);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = gold;
+  ctx.fillRect(-w * 0.26, -h * 0.46 + yOff, w * 0.52, h * 0.08);
+  // Head & Sun Tiara
+  ctx.fillStyle = '#fde68a';
+  ctx.beginPath();
+  ctx.arc(0, -h * 0.86 + yOff, w * 0.3, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#1c1917';
+  ctx.beginPath();
+  ctx.arc(-w * 0.05, -h * 0.9 + yOff, w * 0.3, Math.PI * 0.9, Math.PI * 2.1);
+  ctx.fill();
+  ctx.fillStyle = gold;
+  ctx.beginPath();
+  ctx.moveTo(0, -h * 1.06 + yOff);
+  ctx.lineTo(w * 0.16, -h * 0.93 + yOff);
+  ctx.lineTo(-w * 0.16, -h * 0.93 + yOff);
+  ctx.closePath();
+  ctx.fill();
+  // Spinning Golden Chakram at hand!
+  ctx.save();
+  ctx.translate(w * 0.42, -h * 0.56 + yOff);
+  ctx.rotate(time * 9);
+  ctx.strokeStyle = gold;
+  ctx.lineWidth = 3 * scale;
+  ctx.beginPath();
+  ctx.arc(0, 0, 9.5 * scale, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.strokeStyle = '#fef08a';
+  ctx.lineWidth = 1.4 * scale;
+  ctx.beginPath();
+  ctx.arc(0, 0, 6.5 * scale, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawPrismStriker(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+  scale: number,
+  pose: LimbPose,
+  flash: boolean,
+  _isHurt: boolean,
+  bounceActive: boolean,
+  bouncesLeft: number,
+  time: number
+): void {
+  const bodyCol = flash ? '#ffffff' : '#0e7490';
+  const prismCyan = '#22d3ee';
+  const prismPink = '#f472b6';
+  const yOff = pose.bodyOffsetY;
+  // Kinetic prism aura when rocketing in bounce flight!
+  if (bounceActive) {
+    ctx.save();
+    ctx.globalAlpha = 0.42;
+    ctx.fillStyle = bouncesLeft <= 1 ? prismPink : prismCyan;
+    ctx.beginPath();
+    ctx.moveTo(w * 1.25, -h * 0.52);
+    ctx.lineTo(-w * 0.95, -h * 0.95);
+    ctx.lineTo(-w * 0.65, -h * 0.52);
+    ctx.lineTo(-w * 0.95, -h * 0.08);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+  // Sleek crystalline boots & legs
+  ctx.fillStyle = '#083344';
+  ctx.fillRect(-w * 0.22, -h * 0.36 + yOff, w * 0.17, h * 0.36);
+  ctx.fillRect(w * 0.06, -h * 0.36 + yOff, w * 0.17, h * 0.36);
+  // Angular Prism Armor Chest
+  ctx.fillStyle = bodyCol;
+  ctx.beginPath();
+  ctx.moveTo(-w * 0.34, -h * 0.78 + yOff);
+  ctx.lineTo(w * 0.34, -h * 0.78 + yOff);
+  ctx.lineTo(w * 0.24, -h * 0.34 + yOff);
+  ctx.lineTo(-w * 0.24, -h * 0.34 + yOff);
+  ctx.closePath();
+  ctx.fill();
+  // Glowing crystal diamond core on chest
+  ctx.fillStyle = bouncesLeft <= 1 && bounceActive ? prismPink : prismCyan;
+  ctx.beginPath();
+  ctx.moveTo(0, -h * 0.68 + yOff);
+  ctx.lineTo(w * 0.16, -h * 0.56 + yOff);
+  ctx.lineTo(0, -h * 0.44 + yOff);
+  ctx.lineTo(-w * 0.16, -h * 0.56 + yOff);
+  ctx.closePath();
+  ctx.fill();
+  // Crystal Visor Helmet
+  ctx.fillStyle = '#164e63';
+  ctx.beginPath();
+  ctx.arc(0, -h * 0.88 + yOff, w * 0.34, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = prismCyan;
+  ctx.fillRect(-w * 0.02, -h * 0.92 + yOff, w * 0.34, 4.2 * scale);
+  // Radiant Prism Ricochet Lance aimed forward
+  const pulse = 1 + Math.sin(time * 8) * 0.1;
+  ctx.fillStyle = bounceActive && bouncesLeft <= 1 ? prismPink : prismCyan;
+  ctx.beginPath();
+  ctx.moveTo(w * 0.15, -h * 0.64 + yOff);
+  ctx.lineTo(w * (1.28 * pulse), -h * 0.54 + yOff);
+  ctx.lineTo(w * 0.15, -h * 0.44 + yOff);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath();
+  ctx.moveTo(w * 0.35, -h * 0.58 + yOff);
+  ctx.lineTo(w * (1.16 * pulse), -h * 0.54 + yOff);
+  ctx.lineTo(w * 0.35, -h * 0.5 + yOff);
+  ctx.closePath();
+  ctx.fill();
 }
 
 // Render idle hero stand-ins by the Campfire so players see all selectable heroes in Camp!
@@ -2830,6 +3147,14 @@ export function drawCampHeroFigure(
         true,
         false
       );
+    } else if (characterId === 'ranger') {
+      drawDuskRanger(ctx, w, h, scale, pose, false, false, 'burst_crossbow', 'idle');
+    } else if (characterId === 'vanguard') {
+      drawIronVanguard(ctx, w * 1.15, h * 1.06, scale, pose, false, 'shield_mace', 'idle', false);
+    } else if (characterId === 'dancer') {
+      drawSunBladeDancer(ctx, w, h, scale, pose, false, false, 'twin_chakram', 'idle', t30);
+    } else if (characterId === 'bouncer') {
+      drawPrismStriker(ctx, w, h, scale, pose, false, false, false, 2, t30);
     } else {
       drawAnimeVampireBoy(ctx, w, h, scale, pose, false, false, 'whip', 'idle');
     }

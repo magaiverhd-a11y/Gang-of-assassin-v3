@@ -1,6 +1,8 @@
-import { Backpack, Map as MapIcon, Shield, Sparkles } from 'lucide-react';
+import { Backpack, Coins, Crown, Map as MapIcon, Shield, Sparkles } from 'lucide-react';
 import {
   ABILITIES,
+  BOSS_CHARMS,
+  CHARM_SYNERGIES,
   getActiveElementDef,
   getEvolutionTierName,
   getSpellCurrentTag,
@@ -127,6 +129,23 @@ export function LeftHud({ hud, onOpenInventory }: LeftHudProps) {
               </div>
             </div>
           )}
+
+          {/* Gold & Parry Cooldown Status Strip */}
+          <div className="flex items-center justify-between gap-1.5 text-[10px] font-mono">
+            <span className="px-2 py-1 bg-[#1e1a0d] border border-[#6e5314] text-[#facc15] inline-flex items-center gap-1">
+              <Coins className="w-3 h-3" />
+              {hud.gold}g
+            </span>
+            <span
+              className={`px-2 py-1 border ${
+                hud.parryCooldown > 0
+                  ? 'bg-[#1c1317] border-[#522430] text-[#fca5a5]'
+                  : 'bg-[#111b20] border-[#254552] text-[#67e8f9]'
+              }`}
+            >
+              {hud.parryCooldown > 0 ? `Parry ${hud.parryCooldown.toFixed(1)}s` : 'Parry Ready'}
+            </span>
+          </div>
         </section>
 
         <div className="h-px bg-[#1f2435]" />
@@ -318,6 +337,22 @@ export function LeftHud({ hud, onOpenInventory }: LeftHudProps) {
                     ? hud.minstrelSlowMo
                       ? 'SLOW-MO: 1 Zip · 2 Vault · 3 Waltz'
                       : 'Dir+1 Whip-Zip · Crouch+1 Lash'
+                    : hud.weapon === 'orbiting_grimoire'
+                      ? `${(hud.grimoireElement ?? 'fire').toUpperCase()} · ${hud.grimoireOrbs ?? 3}/3 Orbs · [3] Shift`
+                    : hud.weapon === 'prism_lance'
+                      ? `${hud.bouncesLeft ?? 2}/${hud.maxBounces ?? 2} Bounces · [3] ${Math.min(4, 1 + hud.weaponEvolutionTier)}-Wall Glass`
+                    : hud.weapon === 'prism_gauntlets'
+                      ? `${hud.bouncesLeft ?? 2}/${hud.maxBounces ?? 2} Pinball Fists · [3] X-Nova Slam`
+                    : hud.weapon === 'burst_crossbow'
+                      ? '3-Bolt Spread · [3] Vault Volley'
+                    : hud.weapon === 'shield_mace'
+                      ? 'Frontal Auto-Guard · [3] Shield Bash'
+                    : hud.weapon === 'kusarigama'
+                      ? 'Chain Yank Pull · [3] 360° Tempest'
+                    : hud.weapon === 'twin_chakram'
+                      ? 'Looping Blades · [3] Warp / Vortex'
+                    : hud.weapon === 'solar_glaive'
+                      ? 'Wide Sun Sweep · [3] Spin-Dash'
                     : hud.weapon === 'shadow_daggers'
                       ? '1 Stab · Slash · Cross · Crouch+1 Throw'
                     : hud.weapon === 'ash_wraps'
@@ -741,20 +776,54 @@ export function RightHud({ hud, onOpenMap }: RightHudProps) {
           );
         })()}
 
-        {/* RELICS VS PERMANENT ARTIFACTS SUMMARY */}
-        <section className="p-2.5 border bg-[#101420] border-[#252d44] space-y-1.5">
+        {/* BOSS CHARMS & SYNERGIES + ARTIFACTS SUMMARY */}
+        <section className="p-2.5 border bg-[#101420] border-[#252d44] space-y-2">
           <div className="flex items-center justify-between">
-            <span className="flex items-center gap-1.5 text-[10px] font-bold tracking-wider text-[#e5a93c] uppercase">
-              <Sparkles className="w-3 h-3" />
-              <span>Artifacts</span>
+            <span className="flex items-center gap-1.5 text-[10px] font-bold tracking-wider text-[#fbbf24] uppercase">
+              <Crown className="w-3 h-3" />
+              <span>Boss Charms</span>
             </span>
             <span className="font-mono tabular-nums text-[10px] text-[#fde68a]">
-              {hud.ownedArtifacts.length} Bound
+              {hud.bossCharms.length} · {hud.activeCharmSynergies.length} Syn
             </span>
           </div>
-          <p className="text-[10px] text-[#7f88a3] leading-snug">
-            Relics empower <strong className="text-[#cbd5e1]">all heroes</strong> during a run. Forged Artifacts stay <strong className="text-[#e5a93c]">forever</strong> after death.
-          </p>
+          {hud.bossCharms.length > 0 ? (
+            <div className="space-y-1">
+              <div className="flex flex-wrap gap-1">
+                {hud.bossCharms.map((cid) => (
+                  <span
+                    key={cid}
+                    className="px-1.5 py-0.5 text-[9px] font-mono border bg-[#151222]"
+                    style={{ borderColor: `${BOSS_CHARMS[cid].color}88`, color: BOSS_CHARMS[cid].color }}
+                    title={BOSS_CHARMS[cid].effectSummary}
+                  >
+                    {BOSS_CHARMS[cid].name}
+                  </span>
+                ))}
+              </div>
+              {hud.activeCharmSynergies.map((sid) => {
+                const syn = CHARM_SYNERGIES.find((item) => item.id === sid);
+                if (!syn) return null;
+                return (
+                  <div key={sid} className="text-[9.5px] leading-snug text-[#e9d5ff]">
+                    <strong style={{ color: syn.color }}>{syn.name}:</strong>{' '}
+                    {syn.summary}
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="text-[9.5px] text-[#7f88a3] leading-snug">
+              Slay Raid Final Bosses for signature Charms &amp; Synergies.
+            </p>
+          )}
+          <div className="pt-1.5 border-t border-[#1e2436] flex items-center justify-between text-[10px]">
+            <span className="flex items-center gap-1 text-[#e5a93c] font-semibold">
+              <Sparkles className="w-3 h-3" />
+              Artifacts
+            </span>
+            <span className="font-mono text-[#fde68a]">{hud.ownedArtifacts.length} Bound</span>
+          </div>
         </section>
       </div>
 

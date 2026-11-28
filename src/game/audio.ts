@@ -860,21 +860,46 @@ class SoundBank {
 
   public playHit(heavy = false, weapon?: WeaponId): void {
     const ctx = this.ensure();
-    if (ctx && (this.noteCombat(), this.sample(heavy ? 'hit_heavy' : 'hit_light'))) return;
-    if (!ctx || this.tryPlayCustom(heavy ? 'hit_heavy' : 'hit', 0.85)) return;
+    if (!ctx) return;
+    this.noteCombat();
+    if (this.tryPlayCustom(heavy ? 'hit_heavy' : 'hit', 0.85)) return;
     const now = ctx.currentTime;
 
-    // 1. Meaty punchy body thump (saturated sub kick + low-mid impact burst)
-    this.playSubPunch(now, heavy ? 145 : 185, heavy ? 34 : 52, heavy ? 0.15 : 0.095, heavy ? 0.38 : 0.28, true, 0.16);
-    this.playNoiseBurst(now, heavy ? 0.085 : 0.055, 'lowpass', heavy ? 900 : 1250, 220, 0.9, heavy ? 0.28 : 0.2, 0.16, 0.002, true);
+    // 1. Clean warm low-end impact thud (no harsh clipping or screeching!)
+    this.playSubPunch(
+      now,
+      heavy ? 132 : 168,
+      heavy ? 36 : 54,
+      heavy ? 0.13 : 0.085,
+      heavy ? 0.30 : 0.22,
+      false,
+      0.10
+    );
+    // 2. Soft lowpass leather/flesh impact snap
+    this.playNoiseBurst(
+      now,
+      heavy ? 0.068 : 0.046,
+      'lowpass',
+      heavy ? 760 : 1020,
+      240,
+      0.7,
+      heavy ? 0.19 : 0.14,
+      0.10,
+      0.002,
+      false
+    );
 
-    // 2. Subtle steel flesh-cut shimmer for bladed weapons
-    if (weapon === 'katana' || weapon === 'rapier' || weapon === 'sword' || weapon === 'naginata') {
-      this.playMetallicRing(now, 1480, 0.075, 0.045, [1, 2.28], 0.32);
+    // 3. Gentle steel cut whisper for bladed weapons
+    if (
+      weapon === 'katana' ||
+      weapon === 'rapier' ||
+      weapon === 'sword' ||
+      weapon === 'naginata' ||
+      weapon === 'solar_glaive' ||
+      weapon === 'short_blade'
+    ) {
+      this.playMetallicRing(now, 1180, 0.06, 0.028, [1, 1.85], 0.18);
     }
-
-    // 3. Wet blood splash
-    this.playBloodSplatter(heavy ? 1.3 : 0.9);
   }
 
   public playCrit(): void {
@@ -1363,19 +1388,45 @@ class SoundBank {
   }
 
   public playEnemyHurt(t: EnemyType): void {
-    if (!this.ensure()) return;
+    const ctx = this.ensure();
+    if (!ctx) return;
     this.noteCombat();
-    this.sample('enemy_hurt', { gain: t === 'skeleton' ? 0.55 : 0.85 });
+    const now = ctx.currentTime;
+    const jitter = 0.92 + Math.random() * 0.16;
+
+    if (
+      t === 'knight' ||
+      t === 'obsidian_guard' ||
+      t === 'runed_golem' ||
+      t === 'mech_turret' ||
+      t === 'gargoyle'
+    ) {
+      // Muted warm iron/stone plate knock
+      this.playMetallicRing(now, 330 * jitter, 0.09, 0.045, [1, 1.48], 0.22);
+      this.playSubPunch(now, 128 * jitter, 58, 0.07, 0.14, false, 0.08);
+    } else if (t === 'skeleton' || t === 'wraith' || t === 'acolyte') {
+      // Crisp short dry bone/parchment click
+      this.playNoiseBurst(now, 0.036, 'bandpass', 880 * jitter, 520 * jitter, 3.2, 0.11, 0.14, 0.002);
+    } else {
+      // Soft low tactile recoil thump (never screechy or harsh!)
+      this.playSubPunch(now, 175 * jitter, 82 * jitter, 0.075, 0.12, false, 0.08);
+      this.playNoiseBurst(now, 0.045, 'bandpass', 620 * jitter, 280 * jitter, 1.4, 0.085, 0.1, 0.004);
+    }
   }
 
   public playEnemyAlert(t: EnemyType): void {
     if (!this.ensure()) return;
-    this.sample(t.startsWith('goblin') ? 'goblin_alert' : 'alert', { gain: 0.85 });
+    this.sample(t.startsWith('goblin') ? 'goblin_alert' : 'alert', { gain: 0.72 });
   }
 
   public playEnemyAttack(): void {
-    if (!this.ensure()) return;
-    this.sample('enemy_attack', { gain: 0.7 });
+    const ctx = this.ensure();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+    const jitter = 0.94 + Math.random() * 0.12;
+    // Clean, readable airy weapon-swing whoosh + soft dark steel glint
+    this.playNoiseBurst(now, 0.11, 'bandpass', 920 * jitter, 340 * jitter, 1.5, 0.12, 0.14, 0.012);
+    this.playMetallicRing(now + 0.01, 540 * jitter, 0.085, 0.032, [1, 1.5], 0.16);
   }
 
   public playBossIntro(): void {
@@ -1428,6 +1479,39 @@ class SoundBank {
   public playDefeat(): void {
     if (!this.ensure()) return;
     this.sample('defeat');
+  }
+
+  public playGoldCoin(): void {
+    const ctx = this.ensure();
+    if (!ctx) return;
+    if (this.sample('coin', { gain: 0.72, rate: 1.08 })) return;
+    const now = ctx.currentTime;
+    this.playHarpNote(now, 1174.66, 0.14, 0.085);
+    this.playHarpNote(now + 0.04, 1567.98, 0.22, 0.09);
+  }
+
+  public playGobletDrink(isMana = false): void {
+    const ctx = this.ensure();
+    if (!ctx) return;
+    if (this.sample('gem', { gain: 0.85, rate: isMana ? 1.15 : 0.96 })) return;
+    const now = ctx.currentTime;
+    const notes = isMana ? [523.25, 659.25, 987.77] : [440, 554.37, 659.25];
+    notes.forEach((f, i) => this.playHarpNote(now + i * 0.045, f, 0.34, 0.095));
+  }
+
+  /** Amazing shimmering crystalline harp-bell arpeggio when picking up a scattered Map Relic! */
+  public playMapRelicPickup(): void {
+    const ctx = this.ensure();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+    this.sample('gem', { gain: 0.55, rate: 1.24 });
+    // Radiant golden-crystal cascading chime in cathedral reverb!
+    const chord = [587.33, 739.99, 880, 1174.66, 1479.98, 1760];
+    chord.forEach((f, idx) => {
+      this.playHarpNote(now + idx * 0.036, f, 0.62 - idx * 0.04, 0.105);
+    });
+    this.playMetallicRing(now + 0.04, 1760, 0.48, 0.065, [1, 1.5, 2.0], 0.75);
+    this.playSubPunch(now, 220, 110, 0.14, 0.12, false, 0.3);
   }
 
   /** UI sounds: 'click' | 'chunky' | 'confirm' | 'back' | 'hover' | 'error' | 'buy'. */

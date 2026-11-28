@@ -1,21 +1,27 @@
-import { Backpack, Check, Gem, Lock, Sparkles, X } from 'lucide-react';
+import { Backpack, Check, Coins, Crown, Gem, Lock, Palette, Sparkles, X } from 'lucide-react';
 import {
   ABILITIES,
   ABILITY_ORDER,
   ARTIFACTS,
+  BOSS_CHARM_ORDER,
+  BOSS_CHARMS,
   canCharacterUseWeapon,
   CHARACTERS,
+  CHARM_SYNERGIES,
   getSpellCurrentTag,
   getSpellMilestoneInfo,
   getWeaponCurrentTag,
   getWeaponMilestoneInfo,
+  HERO_SKIN_ORDER,
+  HERO_SKINS,
   ITEM_ORDER,
   ITEMS,
+  SPECIAL_ITEM_ORDER,
   SPECIAL_ITEMS,
   WEAPON_ORDER,
   WEAPONS,
 } from '../game/defaults';
-import { AbilityId, HudSnapshot, ItemId, WeaponId } from '../game/types';
+import { AbilityId, HeroSkinId, HudSnapshot, ItemId, SpecialItemId, WeaponId } from '../game/types';
 import { AbilityIcon, ItemIcon, SpecialItemIcon, WeaponIcon } from './GameIcons';
 
 interface InventoryModalProps {
@@ -23,6 +29,8 @@ interface InventoryModalProps {
   onSelectWeapon: (weaponId: WeaponId) => void;
   onSelectAbility: (slotIndex: 0 | 1 | 2, abilityId: AbilityId) => void;
   onSelectItem: (slotIndex: 0 | 1 | 2, itemId: ItemId) => void;
+  onSelectSpecialItem: (specialId: SpecialItemId) => void;
+  onSelectSkin: (skinId: HeroSkinId) => void;
   onClose: () => void;
 }
 
@@ -31,6 +39,8 @@ export function InventoryModal({
   onSelectWeapon,
   onSelectAbility,
   onSelectItem,
+  onSelectSpecialItem,
+  onSelectSkin,
   onClose,
 }: InventoryModalProps) {
   const canEdit = hud.inCamp;
@@ -61,7 +71,11 @@ export function InventoryModal({
             </div>
           </div>
 
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="px-2.5 py-1 bg-[#221d0e] border border-[#856414] text-xs font-mono tabular-nums text-[#facc15] flex items-center gap-1">
+              <Coins className="w-3.5 h-3.5" />
+              <span>{hud.gold}g</span>
+            </div>
             <div className="px-2.5 py-1 bg-[#181c2b] border border-[#4a3a22] text-xs font-mono tabular-nums text-[#ffd166]">
               {hud.shards} Shards
             </div>
@@ -99,8 +113,8 @@ export function InventoryModal({
                 const owned = hud.unlockedWeapons.includes(wId);
                 const equipped = hud.weapon === wId;
                 const ownerBadge = def.ownerChar
-                  ? `${def.ownerChar.toUpperCase()} ONLY`
-                  : 'ANY HERO';
+                  ? `${CHARACTERS[def.ownerChar].name.toUpperCase()} ONLY`
+                  : 'HERO ONLY';
 
                 return (
                   <button
@@ -207,7 +221,7 @@ export function InventoryModal({
               Equipped Spell (Key 4 · Camp Only)
             </h3>
             <span className="font-mono text-[10px] text-[#9aa2b8]">
-              {hud.unlockedAbilities.length}/5 Spells Learned
+              {hud.unlockedAbilities.length}/{ABILITY_ORDER.length} Spells Learned
             </span>
           </div>
 
@@ -247,7 +261,7 @@ export function InventoryModal({
                 </div>
 
                 {/* Base-Camp Spell Picker */}
-                <div className="pt-2.5 border-t border-[#22293e] grid grid-cols-2 sm:grid-cols-5 gap-2">
+                <div className="pt-2.5 border-t border-[#22293e] grid grid-cols-2 sm:grid-cols-4 gap-2">
                   {ABILITY_ORDER.map((abId) => {
                     const learned = hud.unlockedAbilities.includes(abId);
                     const chosen = equippedId === abId;
@@ -402,13 +416,127 @@ export function InventoryModal({
                   </div>
                 </div>
 
-                <div className="pt-2 border-t border-[#2e2047] flex items-center justify-between text-[10px] font-mono text-[#a78bfa]">
-                  <span>Cooldown: {def.cooldown}s</span>
-                  <span>Refill at Camp Forge or Boss Relics</span>
+                <div className="pt-2 border-t border-[#2e2047] space-y-2">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                    {SPECIAL_ITEM_ORDER.map((cand) => {
+                      const unlocked = hud.unlockedSpecials.includes(cand);
+                      const chosen = cand === spId;
+                      return (
+                        <button
+                          key={cand}
+                          type="button"
+                          disabled={!canEdit || !unlocked}
+                          onClick={() => onSelectSpecialItem(cand)}
+                          className={`py-1 px-1.5 flex items-center justify-center gap-1 border text-[10px] transition-colors ${
+                            chosen
+                              ? 'bg-[#2b1542] border-[#c084fc] text-white'
+                              : unlocked && canEdit
+                                ? 'bg-[#101220] border-[#342654] text-[#c4b5fd] hover:border-[#a855f7]'
+                                : 'bg-[#0c0e18] border-[#1f2233] text-[#596178] opacity-50 cursor-not-allowed'
+                          }`}
+                        >
+                          <SpecialItemIcon id={cand} className="w-3.5 h-3.5 shrink-0" />
+                          <span className="font-mono">x{hud.specialItemCounts[cand] ?? 0}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="flex items-center justify-between text-[10px] font-mono text-[#a78bfa]">
+                    <span>Cooldown: {def.cooldown}s</span>
+                    <span>Buy more w/ Gold in Camp</span>
+                  </div>
                 </div>
               </div>
             );
           })()}
+        </section>
+
+        {/* SECTION 3B: MYTHIC BOSS CHARMS & CROSS-CHARM SYNERGIES (RUN-SCOPED) */}
+        <section className="space-y-2.5">
+          <div className="flex items-baseline justify-between">
+            <h3 className="text-xs font-bold tracking-widest text-[#fbbf24] uppercase flex items-center gap-1.5">
+              <Crown className="w-3.5 h-3.5" />
+              <span>Boss Charms &amp; Active Synergies (Run Loadout)</span>
+            </h3>
+            <span className="font-mono text-[10px] text-[#fde68a]">
+              {hud.bossCharms.length}/{BOSS_CHARM_ORDER.length} Charms · {hud.activeCharmSynergies.length} Synergies
+            </span>
+          </div>
+
+          {hud.bossCharms.length === 0 ? (
+            <div className="p-3 bg-[#10131e] border border-dashed border-[#342d47] text-xs text-[#8a93ab]">
+              Defeat any Raid&apos;s Final Big Boss to claim their unique pursued <strong className="text-[#fbbf24]">Boss Charm</strong>. Combine Charms from different raids to unlock powerful <strong className="text-[#c084fc]">Cross-Charm Synergies</strong>!
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                {hud.bossCharms.map((cid) => {
+                  const c = BOSS_CHARMS[cid];
+                  return (
+                    <div key={cid} className="p-2.5 bg-[#191522] border" style={{ borderColor: `${c.color}88` }}>
+                      <div className="text-xs font-bold" style={{ color: c.color }}>{c.name}</div>
+                      <div className="text-[10px] text-[#cbd5e1] mt-0.5">{c.effectSummary}</div>
+                    </div>
+                  );
+                })}
+              </div>
+              {hud.activeCharmSynergies.length > 0 && (
+                <div className="p-2.5 bg-[#22142b] border border-[#a855f7] space-y-1.5">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-[#e9d5ff]">
+                    Active Charm Synergies
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-1.5">
+                    {hud.activeCharmSynergies.map((sid) => {
+                      const syn = CHARM_SYNERGIES.find((item) => item.id === sid);
+                      if (!syn) return null;
+                      return (
+                        <div key={sid} className="text-[11px]">
+                          <span className="font-bold" style={{ color: syn.color }}>{syn.name}:</span>{' '}
+                          <span className="text-[#e2e8f0]">{syn.summary}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </section>
+
+        {/* SECTION 3C: HERO SKINS (EQUIP UNLOCKED SKINS IN CAMP) */}
+        <section className="space-y-2">
+          <div className="flex items-baseline justify-between">
+            <h3 className="text-xs font-bold tracking-widest text-[#cbd5e1] uppercase flex items-center gap-1.5">
+              <Palette className="w-3.5 h-3.5 text-[#e5a93c]" />
+              <span>Hero Skins ({hud.unlockedSkins.length}/{HERO_SKIN_ORDER.length})</span>
+            </h3>
+            <span className="text-[10px] font-mono text-[#7c859e]">Unlock more in Camp Forge</span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {HERO_SKIN_ORDER.map((skinId) => {
+              const s = HERO_SKINS[skinId];
+              const unlocked = hud.unlockedSkins.includes(skinId);
+              const active = hud.skin === skinId;
+              return (
+                <button
+                  key={skinId}
+                  type="button"
+                  disabled={!unlocked}
+                  onClick={() => onSelectSkin(skinId)}
+                  className={`px-2.5 py-1.5 border text-xs flex items-center gap-1.5 transition-colors ${
+                    active
+                      ? 'bg-[#211c12] border-[#facc15] text-[#fef08a]'
+                      : unlocked
+                        ? 'bg-[#141826] border-[#2e3750] text-[#cbd5e1] hover:border-[#e5a93c]'
+                        : 'bg-[#0b0e16] border-dashed border-[#202638] text-[#596178] opacity-55 cursor-not-allowed'
+                  }`}
+                >
+                  <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: s.accent }} />
+                  <span>{s.name}</span>
+                </button>
+              );
+            })}
+          </div>
         </section>
 
         {/* SECTION 4: PERMANENT ARTIFACTS */}
