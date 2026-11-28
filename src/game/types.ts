@@ -504,16 +504,6 @@ export type ElementalStatusId =
   | 'soaked'
   | 'hex';
 
-export type ElementalStatusId =
-  | 'burn'
-  | 'freeze'
-  | 'stun'
-  | 'poison'
-  | 'blind'
-  | 'bleed'
-  | 'soaked'
-  | 'hex';
-
 export interface ElementDef {
   id: ElementId;
   name: string;
