@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { CSSProperties, PointerEvent as ReactPointerEvent, ReactNode } from 'react';
 import { ArrowUp, Hand, Skull, Swords, Wind } from 'lucide-react';
 import { ABILITIES, ITEMS, SPECIAL_ITEMS, WEAPONS } from '../game/defaults';
@@ -15,6 +15,8 @@ export interface TouchDirectionalState {
 /** Index = value stored in tuning.mobileBtn* (keep in sync with MOBILE_ACTION_LABELS). */
 export type MobileAction = 'jump' | 'skill' | 'spell' | 'interact' | 'item' | 'special' | 'attack';
 export const MOBILE_ACTIONS: MobileAction[] = ['jump', 'skill', 'spell', 'interact', 'item', 'special', 'attack'];
+
+export const MOBILE_STICK_HINT_KEY = 'nocturne-castle.mobile-stick-hint';
 
 export function mobileActionAt(index: number): MobileAction {
   return MOBILE_ACTIONS[Math.max(0, Math.min(MOBILE_ACTIONS.length - 1, Math.round(index) || 0))];
@@ -52,7 +54,7 @@ interface ButtonVisual {
 function describeAction(action: MobileAction, hud: HudSnapshot): ButtonVisual {
   switch (action) {
     case 'jump':
-      return { label: 'Jump', sub: 'Hold = higher', icon: <ArrowUp className="w-7 h-7 stroke-[2.5]" />, ready: true, color: '#d94660' };
+      return { label: 'Jump', sub: 'Or push stick up', icon: <ArrowUp className="w-7 h-7 stroke-[2.5]" />, ready: true, color: '#d94660' };
     case 'skill': {
       const ready = hud.weaponSkillCooldown <= 0;
       return {
@@ -212,18 +214,85 @@ function DeckButton({
   );
 }
 
+interface StickStroke {
+  id: number;
+  startX: number;
+  startY: number;
+  lastX: number;
+  lastY: number;
+  startTime: number;
+  /** Touch began on the visual stick, so a quick still press can be Interact. */
+  onStick: boolean;
+  moved: boolean;
+  /** Jump / drop edges are allowed once this is a confirmed steer (moved, off-stick, or held past tap time). */
+  armed: boolean;
+  dropped: boolean;
+}
+
 /**
- * Portrait control deck: joystick in the middle, one big button in each corner,
- * optional mini Item / Relic buttons on the sides. Lives BELOW the game view, never over it.
+ * Portrait control deck: joystick in the middle, one big button in each corner.
+ * Push stick up to jump (flick / rising edge). Tap the stick to interact / execute.
+ * Optional mini Item / Relic buttons stay available from Tune but are off by default.
  */
 export function MobileControls({ hud, tuning, onDirectionChange, onAction, onAnyTouch }: MobileControlsProps) {
   const zoneRef = useRef<HTMLDivElement | null>(null);
   const baseRef = useRef<HTMLDivElement | null>(null);
-  const stickPointerIdRef = useRef<number | null>(null);
   const lastDirsRef = useRef<TouchDirectionalState>(NO_DIRS);
+  const strokeRef = useRef<StickStroke | null>(null);
+  const jumpHeldStickRef = useRef(false);
+  const armTimerRef = useRef<number | null>(null);
+  const onActionRef = useRef(onAction);
+  const onDirectionChangeRef = useRef(onDirectionChange);
+  const onAnyTouchRef = useRef(onAnyTouch);
+  const tuningRef = useRef(tuning);
+  const hudRef = useRef(hud);
   const [knob, setKnob] = useState({ x: 0, y: 0 });
   const [dirs, setDirs] = useState<TouchDirectionalState>(NO_DIRS);
+  const [showHint, setShowHint] = useState(() => {
+    try {
+      return localStorage.getItem(MOBILE_STICK_HINT_KEY) !== '1';
+    } catch {
+      return true;
+    }
+  });
   const haptics = tuning.mobileHaptics !== false;
+
+  onActionRef.current = onAction;
+  onDirectionChangeRef.current = onDirectionChange;
+  onAnyTouchRef.current = onAnyTouch;
+  tuningRef.current = tuning;
+  hudRef.current = hud;
+
+  const dismissHint = useCallback(() => {
+    setShowHint((prev) => {
+      if (!prev) return prev;
+      try {
+        localStorage.setItem(MOBILE_STICK_HINT_KEY, '1');
+      } catch {
+        // private mode
+      }
+      return false;
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!showHint) return;
+    const id = window.setTimeout(dismissHint, 7000);
+    return () => window.clearTimeout(id);
+  }, [showHint, dismissHint]);
+
+  const clearArmTimer = useCallback(() => {
+    if (armTimerRef.current != null) {
+      window.clearTimeout(armTimerRef.current);
+      armTimerRef.current = null;
+    }
+  }, []);
+
+  const setJumpHeld = useCallback((held: boolean) => {
+    if (jumpHeldStickRef.current === held) return;
+    jumpHeldStickRef.current = held;
+    onActionRef.current('jump', held);
+  }, []);
 
   const updateStick = useCallback(
     (clientX: number, clientY: number) => {
@@ -241,31 +310,90 @@ export function MobileControls({ hud, tuning, onDirectionChange, onAction, onAny
         dy = (dy / d) * r;
       }
       setKnob({ x: dx, y: dy });
-      // Crisp 8-way: walk left/right, down = crouch / drop-through, up = aim / climb.
+
+      const t = tuningRef.current;
+      const jumpFrac = Math.max(0.35, Math.min(0.85, t.mobileJumpThreshold || 0.55));
+      const jumpT = r * jumpFrac;
+      const downT = r * 0.42;
+      const dropT = r * Math.min(0.92, Math.max(jumpFrac + 0.12, 0.72));
+      const horizT = r * 0.28;
+      const slop = r * 0.18;
+
+      const stroke = strokeRef.current;
+      if (stroke) {
+        stroke.lastX = clientX;
+        stroke.lastY = clientY;
+        if (Math.hypot(clientX - stroke.startX, clientY - stroke.startY) > slop) {
+          stroke.moved = true;
+          if (!stroke.armed) {
+            stroke.armed = true;
+            clearArmTimer();
+          }
+        }
+      }
+
+      const upEnough = dy < -jumpT;
+      const mostlyUp = -dy >= Math.abs(dx) * 0.75;
+      const wantJump = upEnough && mostlyUp;
       const next: TouchDirectionalState = {
-        left: dx < -r * 0.28,
-        right: dx > r * 0.28,
-        up: dy < -r * 0.5,
-        down: dy > r * 0.42,
+        left: dx < -horizT,
+        right: dx > horizT,
+        // Held-up still aims / lifts for whip and upward attacks; jump itself is edge-triggered.
+        up: upEnough,
+        down: dy > downT,
       };
+
+      const armed = !stroke || stroke.armed;
+      if (wantJump && armed) {
+        if (!jumpHeldStickRef.current) vibrate(t.mobileHaptics !== false, 8);
+        setJumpHeld(true);
+      } else if (!wantJump) {
+        setJumpHeld(false);
+      }
+
+      // Deep downward press while already crouching drops through one-way platforms (down + jump).
+      if (armed && dy > dropT && stroke && !stroke.dropped) {
+        stroke.dropped = true;
+        onActionRef.current('jump', true);
+        onActionRef.current('jump', false);
+      }
+
       const prev = lastDirsRef.current;
       if (next.left !== prev.left || next.right !== prev.right || next.up !== prev.up || next.down !== prev.down) {
-        if ((next.down && !prev.down) || (next.up && !prev.up)) vibrate(haptics, 6);
+        if ((next.down && !prev.down) || (next.up && !prev.up)) vibrate(t.mobileHaptics !== false, 6);
         lastDirsRef.current = next;
         setDirs(next);
-        onDirectionChange(next);
+        onDirectionChangeRef.current(next);
       }
     },
-    [haptics, onDirectionChange]
+    [clearArmTimer, setJumpHeld]
   );
 
-  const resetStick = useCallback(() => {
-    stickPointerIdRef.current = null;
-    setKnob({ x: 0, y: 0 });
-    lastDirsRef.current = NO_DIRS;
-    setDirs(NO_DIRS);
-    onDirectionChange(NO_DIRS);
-  }, [onDirectionChange]);
+  const resetStick = useCallback(
+    (asCancel = false) => {
+      clearArmTimer();
+      const stroke = strokeRef.current;
+      const t = tuningRef.current;
+      const tapMs = Math.max(80, Math.min(400, t.mobileTapMs || 220));
+      if (!asCancel && stroke) {
+        const dt = performance.now() - stroke.startTime;
+        if (stroke.onStick && !stroke.moved && dt <= tapMs) {
+          onActionRef.current('interact', true);
+          vibrate(t.mobileHaptics !== false, hudRef.current.assassinationReady ? 22 : 10);
+        }
+      }
+      strokeRef.current = null;
+      setJumpHeld(false);
+      setKnob({ x: 0, y: 0 });
+      lastDirsRef.current = NO_DIRS;
+      setDirs(NO_DIRS);
+      onDirectionChangeRef.current(NO_DIRS);
+      dismissHint();
+    },
+    [clearArmTimer, dismissHint, setJumpHeld]
+  );
+
+  useEffect(() => () => clearArmTimer(), [clearArmTimer]);
 
   const tl = mobileActionAt(tuning.mobileBtnTopLeft);
   const tr = mobileActionAt(tuning.mobileBtnTopRight);
@@ -275,6 +403,9 @@ export function MobileControls({ hud, tuning, onDirectionChange, onAction, onAny
   const common = { hud, haptics, onAction, onAnyTouch };
 
   const arrow = (on: boolean) => (on ? '#ffd166' : '#4a5270');
+  const execute = hud.assassinationReady;
+  const near = hud.nearbyInteractableLabel;
+  const stickAccent = execute ? '#ff2d46' : near ? '#e5a93c' : '#e5a93c';
 
   return (
     <section
@@ -297,13 +428,40 @@ export function MobileControls({ hud, tuning, onDirectionChange, onAction, onAny
         style={{ background: 'linear-gradient(90deg, transparent, rgba(229,169,60,0.35), transparent)' }}
       />
 
+      {showHint && (
+        <button
+          type="button"
+          data-stick-hint
+          onPointerDown={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            dismissHint();
+          }}
+          className="absolute left-1/2 z-10 -translate-x-1/2 px-2.5 py-1 text-center"
+          style={{
+            top: 6,
+            maxWidth: '72%',
+            background: 'linear-gradient(180deg, rgba(24,18,28,0.94), rgba(12,10,16,0.94))',
+            border: '1px solid rgba(229,169,60,0.55)',
+            boxShadow: '0 4px 14px rgba(0,0,0,0.55), inset 0 1px 0 rgba(229,169,60,0.15)',
+            color: '#f3ece0',
+            fontFamily: 'var(--font-display)',
+            fontSize: 11,
+            letterSpacing: '0.04em',
+            lineHeight: 1.25,
+          }}
+        >
+          Push up to jump, tap stick to interact
+        </button>
+      )}
+
       <div className="absolute inset-0" style={{ bottom: 'env(safe-area-inset-bottom, 0px)' }}>
         <DeckButton action={tl} style={{ top: pad, left: pad }} {...common} />
         <DeckButton action={tr} style={{ top: pad, right: pad }} {...common} />
         <DeckButton action={bl} style={{ bottom: pad, left: pad }} big={bl === 'jump'} {...common} />
         <DeckButton action={br} style={{ bottom: pad, right: pad }} big {...common} />
 
-        {tuning.mobileMiniButtons !== false && (
+        {tuning.mobileMiniButtons === true && (
           <>
             <DeckButton action="item" mini style={{ top: '50%', left: pad + 16, marginTop: -23 }} {...common} />
             <DeckButton action="special" mini style={{ top: '50%', right: pad + 16, marginTop: -23 }} {...common} />
@@ -314,30 +472,56 @@ export function MobileControls({ hud, tuning, onDirectionChange, onAction, onAny
         <div
           ref={zoneRef}
           role="application"
-          aria-label="Movement joystick"
+          aria-label="Movement joystick. Push up to jump, tap to interact."
           data-mobile-stick
           className="absolute top-0 bottom-0 flex items-center justify-center touch-none"
           style={{ left: 104, right: 104 }}
           onPointerDown={(e) => {
             e.preventDefault();
-            onAnyTouch?.();
+            onAnyTouchRef.current?.();
             try {
               e.currentTarget.setPointerCapture(e.pointerId);
             } catch {
               // synthetic
             }
-            stickPointerIdRef.current = e.pointerId;
+            const base = baseRef.current?.getBoundingClientRect();
+            const cx = base ? base.left + base.width / 2 : e.clientX;
+            const cy = base ? base.top + base.height / 2 : e.clientY;
+            const radius = base ? base.width * 0.5 : 80;
+            const onStick = Math.hypot(e.clientX - cx, e.clientY - cy) <= radius * 1.15;
+            const tapMs = Math.max(80, Math.min(400, tuningRef.current.mobileTapMs || 220));
+            clearArmTimer();
+            strokeRef.current = {
+              id: e.pointerId,
+              startX: e.clientX,
+              startY: e.clientY,
+              lastX: e.clientX,
+              lastY: e.clientY,
+              startTime: performance.now(),
+              onStick,
+              moved: false,
+              armed: !onStick,
+              dropped: false,
+            };
+            if (onStick) {
+              armTimerRef.current = window.setTimeout(() => {
+                const s = strokeRef.current;
+                if (!s || s.id !== e.pointerId) return;
+                s.armed = true;
+                updateStick(s.lastX, s.lastY);
+              }, tapMs);
+            }
             updateStick(e.clientX, e.clientY);
           }}
           onPointerMove={(e) => {
-            if (stickPointerIdRef.current !== e.pointerId) return;
+            if (strokeRef.current?.id !== e.pointerId) return;
             updateStick(e.clientX, e.clientY);
           }}
           onPointerUp={(e) => {
-            if (stickPointerIdRef.current === e.pointerId) resetStick();
+            if (strokeRef.current?.id === e.pointerId) resetStick(false);
           }}
           onPointerCancel={(e) => {
-            if (stickPointerIdRef.current === e.pointerId) resetStick();
+            if (strokeRef.current?.id === e.pointerId) resetStick(true);
           }}
         >
           <div
@@ -346,16 +530,37 @@ export function MobileControls({ hud, tuning, onDirectionChange, onAction, onAny
             style={{
               width: 'min(150px, 100%, 21dvh)',
               aspectRatio: '1 / 1',
-              background: 'radial-gradient(circle at 50% 45%, #171b29 0%, #0b0d14 70%)',
-              border: '2px solid #3a3346',
-              boxShadow: 'inset 0 0 26px rgba(0,0,0,0.85), 0 0 0 5px rgba(20,16,26,0.9), 0 0 18px rgba(120,24,38,0.25)',
+              background: execute
+                ? 'radial-gradient(circle at 50% 45%, #3a1520 0%, #0b0d14 70%)'
+                : 'radial-gradient(circle at 50% 45%, #171b29 0%, #0b0d14 70%)',
+              border: `2px solid ${execute ? '#ff2d46' : '#3a3346'}`,
+              boxShadow: execute
+                ? 'inset 0 0 26px rgba(0,0,0,0.85), 0 0 0 5px rgba(20,16,26,0.9), 0 0 22px rgba(255,45,70,0.55)'
+                : 'inset 0 0 26px rgba(0,0,0,0.85), 0 0 0 5px rgba(20,16,26,0.9), 0 0 18px rgba(120,24,38,0.25)',
+              animation: execute ? 'nc-pulse 0.9s ease-in-out infinite' : undefined,
             }}
           >
             <div className="absolute inset-3 rounded-full border border-[#2a2536]" />
-            <span className="absolute top-1.5 text-[11px]" style={{ color: arrow(dirs.up) }}>▲</span>
-            <span className="absolute bottom-1.5 text-[11px]" style={{ color: arrow(dirs.down) }}>▼</span>
-            <span className="absolute left-2 text-[11px]" style={{ color: arrow(dirs.left) }}>◀</span>
-            <span className="absolute right-2 text-[11px]" style={{ color: arrow(dirs.right) }}>▶</span>
+            <span className="absolute top-1.5 text-[11px]" style={{ color: arrow(dirs.up) }}>
+              ▲
+            </span>
+            <span className="absolute bottom-1.5 text-[11px]" style={{ color: arrow(dirs.down) }}>
+              ▼
+            </span>
+            <span className="absolute left-2 text-[11px]" style={{ color: arrow(dirs.left) }}>
+              ◀
+            </span>
+            <span className="absolute right-2 text-[11px]" style={{ color: arrow(dirs.right) }}>
+              ▶
+            </span>
+            {(execute || near) && (
+              <span
+                className="absolute left-1/2 -translate-x-1/2 font-mono text-[8px] uppercase tracking-[0.14em] whitespace-nowrap"
+                style={{ bottom: 16, color: execute ? '#ff8a98' : '#e5a93c' }}
+              >
+                {execute ? 'Tap · Execute' : `Tap · ${near}`}
+              </span>
+            )}
             <div
               className="rounded-full flex items-center justify-center"
               style={{
@@ -363,7 +568,7 @@ export function MobileControls({ hud, tuning, onDirectionChange, onAction, onAny
                 aspectRatio: '1 / 1',
                 transform: `translate(${knob.x}px, ${knob.y}px)`,
                 background: 'radial-gradient(circle at 40% 35%, #3a3346, #15121d 75%)',
-                border: '2px solid rgba(229,169,60,0.8)',
+                border: `2px solid ${stickAccent}`,
                 boxShadow: '0 4px 14px rgba(0,0,0,0.7)',
               }}
             >

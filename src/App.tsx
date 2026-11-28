@@ -1082,9 +1082,13 @@ export default function App() {
               </div>
             )}
 
-            {hud.nearbyInteractableLabel && (hud.status === 'PLAYING' || hud.status === 'CAMP') ? (
+            {(hud.nearbyInteractableLabel || (isMobileLayout && hud.assassinationReady)) && (hud.status === 'PLAYING' || hud.status === 'CAMP') ? (
               <div className="pointer-events-none absolute bottom-2 left-1/2 -translate-x-1/2 px-2 py-1 text-[10px] bg-[#0b0d13]/85 border border-[#e5a93c]/60 text-[#fde68a] whitespace-nowrap">
-                Interact: {hud.nearbyInteractableLabel}
+                {isMobileLayout
+                  ? hud.assassinationReady
+                    ? 'Tap stick: Execute'
+                    : `Tap stick: ${hud.nearbyInteractableLabel}`
+                  : `Interact: ${hud.nearbyInteractableLabel}`}
               </div>
             ) : null}
 

@@ -351,6 +351,10 @@ export interface TuningConfig {
   mobileBtnBottomRight: number;
   /** Show the two small Item / Relic buttons beside the joystick. */
   mobileMiniButtons: boolean;
+  /** Stick travel (fraction of the knob radius) needed to trigger a jump. */
+  mobileJumpThreshold: number;
+  /** Max press duration (ms) for a stick tap to count as Interact / Execute. */
+  mobileTapMs: number;
 
   // ===== Tuning v2: General =====
   /** Global world time scale (1 = normal). */
