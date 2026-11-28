@@ -135,7 +135,7 @@ export function getRaidOrderScaling(tier: number): {
   };
 }
 
-export const CHARACTER_ORDER: CharacterId[] = ['hunter', 'brute', 'ronin', 'minstrel', 'monk', 'wizard'];
+export const CHARACTER_ORDER: CharacterId[] = ['hunter', 'brute', 'ronin', 'minstrel', 'monk', 'wizard', 'assassin'];
 
 export const CHARACTERS: Record<CharacterId, CharacterDef> = {
   hunter: {
@@ -270,6 +270,28 @@ export const CHARACTERS: Record<CharacterId, CharacterDef> = {
     bonusWeaponDamage: 0,
     accent: '#3b82f6',
   },
+  assassin: {
+    id: 'assassin',
+    name: 'The Hollow Assassin',
+    title: 'Hooded Blade of the Last Candle',
+    description:
+      'Masked killer in charcoal leather and dark crimson. The deadliest assassin in the castle: bigger stealth and execute bonuses, quieter to enemies, and he can execute from a distance. [1] twin daggers (crouch + [1] throws one). [3] Mark for Death brands a foe from very far — press [3] again to shadow-step and execute it; a marked boss takes extra damage. Jump again in the air to Shadow Blink. Starts with Venom Needles.',
+    traitSummary: 'Twin Daggers · Mark for Death · Shadow Blink · Starts w/ Venom Needles',
+    defaultWeapon: 'shadow_daggers',
+    defaultAbility: 'venom_needles',
+    baseHp: 9,
+    baseMp: 11,
+    baseW: 26,
+    baseH: 52,
+    crouchBaseH: 31,
+    speedMult: 1.08,
+    jumpMult: 1.0,
+    airJumps: 0,
+    canWallCling: false,
+    bonusBaseDamage: 0,
+    bonusWeaponDamage: 0,
+    accent: '#9f1239',
+  },
 };
 
 export const WEAPON_ORDER: WeaponId[] = [
@@ -283,6 +305,7 @@ export const WEAPON_ORDER: WeaponId[] = [
   'silk_whip',
   'ash_wraps',
   'spire_staff',
+  'shadow_daggers',
   'sword',
 ];
 
@@ -415,6 +438,20 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     skillCooldown: 2.0,
     accent: '#3b82f6',
     ownerChar: 'wizard',
+    isMainWeapon: true,
+  },
+  shadow_daggers: {
+    id: 'shadow_daggers',
+    name: 'Twin Nightfangs',
+    shortName: 'Twin Daggers',
+    description:
+      'Assassin exclusive. Two black-bladed daggers: a fast 3-hit chain (stab, slash, cross-slash). Short-to-medium reach. Crouch + [1] throws a dagger that executes unaware foes from range.',
+    skillName: 'Mark for Death',
+    skillDescription:
+      'Brands a foe from very far away. Press again to shadow-step behind the marked foe and execute it (non-bosses). A marked boss takes extra damage for a few seconds. Awakened: a longer mark and a ghost-dagger volley on execute. Mythic: the mark also lands on a second nearby foe. Transcendent: 35% faster cooldown and a shadow burst on execute.',
+    skillCooldown: 6,
+    accent: '#9f1239',
+    ownerChar: 'assassin',
     isMainWeapon: true,
   },
   sword: {
@@ -899,6 +936,7 @@ export const ABILITY_ORDER: AbilityId[] = [
   'fire_weapon',
   'cinder_palm',
   'chain_storm',
+  'venom_needles',
 ];
 
 export const ABILITIES: Record<AbilityId, AbilityDef> = {
@@ -964,6 +1002,15 @@ export const ABILITIES: Record<AbilityId, AbilityDef> = {
     cooldown: 2.2,
     description: 'Calls lightning that leaps between up to 3 nearby foes (more every 5 levels), stunning them. Takes your Affinity colour.',
     accent: '#60a5fa',
+  },
+  venom_needles: {
+    id: 'venom_needles',
+    name: 'Venom Needles',
+    shortName: 'Venom',
+    manaCost: 2,
+    cooldown: 1.5,
+    description: 'Flicks a fan of poisoned needles (3, more every 5 levels). Each hit poisons: slow damage over time and a shorter enemy reaction. Takes your Affinity as a dark tint.',
+    accent: '#4d7c0f',
   },
 };
 
@@ -1260,6 +1307,20 @@ const CHARACTER_SPECIAL_DEFAULTS = {
   wizardNovaCooldown: 2.0,
   wizardFloatDuration: 2.0,
   wizardFloatMoveSpeed: 1.0,
+  assassinVisionMult: 0.62,
+  assassinExecRange: 320,
+  assassinExecHpPct: 0.25,
+  assassinMarkRange: 1100,
+  assassinMarkDuration: 9,
+  assassinMarkCooldown: 6,
+  assassinBossMarkBonusPct: 50,
+  assassinBossMarkDuration: 8,
+  assassinDaggerRange: 460,
+  assassinDaggerDamage: 2,
+  assassinDaggerCooldown: 0.7,
+  assassinBlinkDistance: 190,
+  assassinBlinkIFrames: 0.28,
+  assassinComboBonus: 1,
 };
 
 export function buildDefaultCharacterTuning(): Record<CharacterId, CharacterTuning> {
@@ -1276,14 +1337,15 @@ export function buildDefaultCharacterTuning(): Record<CharacterId, CharacterTuni
       bonusBaseDamage: c.bonusBaseDamage,
       bonusWeaponDamage: c.bonusWeaponDamage,
       // Monk: very short reach, very fast fists. Wizard: bolt range lives in its own sliders.
-      attackTimeMult: id === 'monk' ? 0.7 : id === 'wizard' ? 1.1 : 1.0,
-      attackRangeMult: id === 'monk' ? 0.6 : 1.0,
+      attackTimeMult: id === 'monk' ? 0.7 : id === 'wizard' ? 1.1 : id === 'assassin' ? 0.62 : 1.0,
+      attackRangeMult: id === 'monk' ? 0.6 : id === 'assassin' ? 0.82 : 1.0,
       spellCostMult: 1.0,
       spellCooldownMult: 1.0,
-      assassinDamageMult: 1.0,
-      assassinMpReward: 2,
-      assassinIFramesSec: 0.42,
-      shadowChainSec: 2.8,
+      // The Assassin is the best at stealth kills: bigger execute damage, MP reward, i-frames and chain.
+      assassinDamageMult: id === 'assassin' ? 1.6 : 1.0,
+      assassinMpReward: id === 'assassin' ? 3 : 2,
+      assassinIFramesSec: id === 'assassin' ? 0.6 : 0.42,
+      shadowChainSec: id === 'assassin' ? 4.4 : 2.8,
       ...CHARACTER_SPECIAL_DEFAULTS,
     };
   }

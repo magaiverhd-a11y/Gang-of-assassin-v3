@@ -1,6 +1,6 @@
 export type Facing = 1 | -1;
 
-export type CharacterId = 'hunter' | 'brute' | 'ronin' | 'minstrel' | 'monk' | 'wizard';
+export type CharacterId = 'hunter' | 'brute' | 'ronin' | 'minstrel' | 'monk' | 'wizard' | 'assassin';
 
 export type RaidId =
   | 'nocturne_castle'
@@ -69,6 +69,7 @@ export type WeaponId =
   | 'silk_whip'
   | 'ash_wraps'
   | 'spire_staff'
+  | 'shadow_daggers'
   | 'sword';
 
 export type AbilityId =
@@ -78,7 +79,8 @@ export type AbilityId =
   | 'gas_bomb'
   | 'fire_weapon'
   | 'cinder_palm'
-  | 'chain_storm';
+  | 'chain_storm'
+  | 'venom_needles';
 
 export type ItemId =
   | 'health_potion'
@@ -485,6 +487,32 @@ export interface CharacterTuning {
   wizardFloatDuration: number;
   /** Move-speed multiplier while floating. */
   wizardFloatMoveSpeed: number;
+  // Assassin: Twin Daggers (key 1), Mark for Death (key 3), Shadow Blink, thrown dagger
+  /** Enemy sight range multiplier while this hero is the Assassin (lower = harder to spot). */
+  assassinVisionMult: number;
+  /** Distance of the Shadow-Step execute on an unaware / low-HP foe (Interact). */
+  assassinExecRange: number;
+  /** Non-boss foes at or below this fraction of max HP can be shadow-step executed too. */
+  assassinExecHpPct: number;
+  /** Max distance to place a Mark for Death (and to execute a marked foe). */
+  assassinMarkRange: number;
+  /** Seconds a mark lasts. */
+  assassinMarkDuration: number;
+  /** Cooldown of [3] after a mark is executed / a boss mark is placed. */
+  assassinMarkCooldown: number;
+  /** % extra damage a marked boss takes from every hit. */
+  assassinBossMarkBonusPct: number;
+  /** Seconds a boss stays marked. */
+  assassinBossMarkDuration: number;
+  /** Thrown dagger (crouch + [1]) range, damage and cooldown. */
+  assassinDaggerRange: number;
+  assassinDaggerDamage: number;
+  assassinDaggerCooldown: number;
+  /** Shadow Blink distance (air, jump again) and whether it passes through foes. */
+  assassinBlinkDistance: number;
+  assassinBlinkIFrames: number;
+  /** Damage of the third (cross-slash) dagger hit. */
+  assassinComboBonus: number;
 }
 
 export interface EnemyTuning {
@@ -571,6 +599,7 @@ export type InteractableKind =
   | 'camp_hero_minstrel'
   | 'camp_hero_monk'
   | 'camp_hero_wizard'
+  | 'camp_hero_assassin'
   | 'camp_weapon_rack'
   | 'camp_craft_bench'
   | 'camp_raid_gate';
@@ -691,7 +720,9 @@ export interface Projectile {
     | 'crimson_wave'
     | 'lava_orb'
     | 'storm_arc'
-    | 'arcane_bolt';
+    | 'arcane_bolt'
+    | 'thrown_dagger'
+    | 'venom_needle';
   /** Arcane bolt colours (element-tinted) and flags. */
   color?: string;
   color2?: string;
@@ -888,6 +919,15 @@ export interface Player {
   wizardFloatTimer: number;
   /** True once the air-float has been used this airtime. */
   wizardFloatUsed: boolean;
+  // Assassin: Shadow Step pose timer, Shadow Blink (once per airtime), thrown-dagger pose + cooldown
+  assassinStepTimer: number;
+  assassinBlinkTimer: number;
+  assassinBlinkUsed: boolean;
+  assassinThrowTimer: number;
+  assassinThrowCooldown: number;
+  assassinMarkCastTimer: number;
+  assassinComboStep: number;
+  assassinComboTimer: number;
 
   isHidden: boolean;
   ambushTimer: number;
@@ -981,6 +1021,12 @@ export interface Enemy {
   chillTimer?: number;
   witherTimer?: number;
   witherTickTimer?: number;
+  /** Assassin poison (Venom Needles): damage over time. */
+  poisonTimer?: number;
+  poisonTickTimer?: number;
+  /** Mark for Death: seconds left; boss marks add damage taken. */
+  markTimer?: number;
+  markMaxTimer?: number;
   animTime: number;
   dead: boolean;
   shieldActive?: boolean;
@@ -1140,6 +1186,10 @@ export interface BossHudBar {
 export interface HudSnapshot {
   /** Mobile: an unaware enemy is lined up for a stealth assassination (Interact button). */
   assassinationReady?: boolean;
+  /** Assassin: a foe is marked for death — [3] will shadow-step execute it. */
+  assassinMarkLive?: boolean;
+  /** Assassin: seconds left on the live mark (0 if none). */
+  assassinMarkTime?: number;
   characterId: CharacterId;
   activeRaidId: RaidId;
   activeRaidName: string;

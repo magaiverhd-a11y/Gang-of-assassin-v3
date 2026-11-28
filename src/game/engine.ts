@@ -591,6 +591,14 @@ export class GameEngine {
       wizardCastTimer: 0,
       wizardFloatTimer: 0,
       wizardFloatUsed: false,
+      assassinStepTimer: 0,
+      assassinBlinkTimer: 0,
+      assassinBlinkUsed: false,
+      assassinThrowTimer: 0,
+      assassinThrowCooldown: 0,
+      assassinMarkCastTimer: 0,
+      assassinComboStep: 0,
+      assassinComboTimer: 0,
 
       isHidden: false,
       ambushTimer: 0,
@@ -637,6 +645,7 @@ export class GameEngine {
         fire_weapon: 0,
         cinder_palm: 0,
         chain_storm: 0,
+        venom_needles: 0,
       },
 
       // Single Equipped Item Slot (Key 5) + Single Special Item Slot (Key 6)

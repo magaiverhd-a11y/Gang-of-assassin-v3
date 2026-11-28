@@ -387,7 +387,55 @@ const CHAR_TAB_LABEL: Record<CharacterId, string> = {
   minstrel: 'Minstrel',
   monk: 'Monk',
   wizard: 'Wizard',
+  assassin: 'Assassin',
 };
+
+function assassinGroups(P: (k: string) => string[]): GroupDef[] {
+  return [
+    {
+      id: 'assassin-mark',
+      title: 'Mark for Death [3]',
+      subtitle: 'Brand a foe from very far; press [3] again to shadow-step and execute it',
+      items: [
+        S(P('assassinMarkRange'), 'Mark Range', 'How far away a foe can be marked (and executed). Very long on purpose.', 300, 2000, 20, 'px'),
+        S(P('assassinMarkDuration'), 'Mark Duration', 'Seconds a regular foe stays marked. Press [3] again before it ends to execute it.', 2, 20, 0.5, 'sec'),
+        S(P('assassinMarkCooldown'), 'Mark Cooldown', 'Seconds before [3] is ready again after an execute or a boss mark (weapon evolutions shorten it).', 0.5, 20, 0.25, 'sec'),
+        S(P('assassinBossMarkBonusPct'), 'Boss Mark Bonus Damage', 'A marked boss takes this much extra damage from every hit (bosses cannot be executed).', 0, 200, 5, 'pct'),
+        S(P('assassinBossMarkDuration'), 'Boss Mark Duration', 'Seconds a boss stays marked.', 2, 20, 0.5, 'sec'),
+      ],
+    },
+    {
+      id: 'assassin-execute',
+      title: 'Execute From Distance',
+      subtitle: 'Interact (E / stick tap) shadow-steps to a foe and executes it',
+      items: [
+        S(P('assassinExecRange'), 'Execute Range', 'How far the Assassin can shadow-step to execute an unaware or low-HP foe with Interact.', 80, 900, 10, 'px'),
+        S(P('assassinExecHpPct'), 'Low-HP Execute Threshold', 'Alerted regular foes at or below this share of max HP can also be executed from range.', 0, 0.8, 0.05, 'frac'),
+        S(P('assassinVisionMult'), 'Enemy Detection ×', 'Multiplies how far foes can spot the Assassin (lower = quieter, harder to see).', 0.2, 1.5, 0.02, 'x'),
+      ],
+    },
+    {
+      id: 'assassin-blink',
+      title: 'Shadow Blink (Jump again in the air)',
+      subtitle: 'Once per airtime. On a phone, flick the stick up a second time in the air',
+      items: [
+        S(P('assassinBlinkDistance'), 'Blink Distance', 'How far the blink travels in the held direction. It passes through foes but stops at solid walls.', 60, 420, 5, 'px'),
+        S(P('assassinBlinkIFrames'), 'Blink I-Frames', 'Invulnerability after a blink.', 0, 1, 0.02, 'sec'),
+      ],
+    },
+    {
+      id: 'assassin-dagger',
+      title: 'Daggers',
+      subtitle: '[1] twin daggers · crouch + [1] throws one',
+      items: [
+        S(P('assassinComboBonus'), 'Cross-Slash (3rd Hit) Bonus', 'Extra damage on the cross-slash that ends the dagger chain.', 0, 6, 1, 'int'),
+        S(P('assassinDaggerRange'), 'Thrown Dagger Range', 'Flight range of the thrown dagger (crouch + [1]). It kills unaware regular foes.', 120, 900, 10, 'px'),
+        S(P('assassinDaggerDamage'), 'Thrown Dagger Damage', 'Base damage on an aware target (weapon level adds on top).', 1, 8, 1, 'int'),
+        S(P('assassinDaggerCooldown'), 'Thrown Dagger Cooldown', 'Seconds between throws.', 0.2, 4, 0.05, 'sec'),
+      ],
+    },
+  ];
+}
 
 function characterTab(id: CharacterId): TabDef {
   const c = CHARACTERS[id];
@@ -413,7 +461,9 @@ function characterTab(id: CharacterId): TabDef {
                 S(P('monkChargeJumpMult'), 'Charged Jump Height ×', 'Jump-force multiplier at full charge (1.65 is a very high leap). Scales smoothly with how long you held.', 1.1, 2.4, 0.05, 'x'),
                 T(P('monkDashDirections'), 'Directional Pyre Dash', 'On: Pyre Dash [3] follows the held direction, including diagonals and up. A downward dash in the air slams into the ground with an impact. Off: always dashes forward (the original dash).'),
               ]
-            : id === 'wizard'
+            : id === 'assassin'
+              ? []
+              : id === 'wizard'
               ? [
                   S(P('wizardBoltSpeed'), 'Bolt Speed', 'Flight speed of the elemental bolt [1].', 200, 1600, 10, 'pxs'),
                   S(P('wizardBoltRange'), 'Bolt Range', 'How far the bolt flies before fading. Mobile auto-attack fires at foes inside ~90% of this.', 120, 700, 10, 'px'),
@@ -483,7 +533,7 @@ function characterTab(id: CharacterId): TabDef {
           S(P('shadowChainSec'), 'Shadow Chain Duration', 'Base length of the speed + stealth burst after an assassination.', 0, 8, 0.1, 'sec'),
         ],
       },
-      { id: `${id}-special`, title: 'Signature Move', items: special },
+      ...(id === 'assassin' ? assassinGroups(P) : [{ id: `${id}-special`, title: 'Signature Move', items: special }]),
     ],
   };
 }
