@@ -122,7 +122,7 @@ export function extraPulses(weapon: WeaponId | string, tier: number): number {
   return 0;
 }
 
-export type EvoWaveKind = 'sword_wave' | 'katana_wave' | 'storm_arc' | 'player_quake' | 'shockwave';
+export type EvoWaveKind = 'sword_wave' | 'katana_wave' | 'storm_arc' | 'player_quake';
 
 export interface EvoWaveSpec {
   kind: EvoWaveKind;
@@ -143,7 +143,7 @@ export function swingWaves(weapon: WeaponId | string, tier: number, c: CombatTun
 
   switch (weapon) {
     case 'whip':
-      if (tier >= 3) add({ kind: 'shockwave', count: 1, speed: 420 * p, radius: 16 + 4 * p, life: 0.45, yOff: [0] });
+      if (tier >= 3) add({ kind: 'sword_wave', count: 1, speed: 420 * p, radius: 16 + 4 * p, life: 0.45, yOff: [0] });
       break;
     case 'hammer':
       if (tier >= 2) add({ kind: 'player_quake', count: 1, speed: 340 * p, radius: 14 + 3 * p, life: 0.7, yOff: [0] });
@@ -165,12 +165,12 @@ export function swingWaves(weapon: WeaponId | string, tier: number, c: CombatTun
       if (tier >= 2) add({ kind: 'player_quake', count: 1, speed: 280 * p, radius: 16 + 3 * p, life: 0.5, yOff: [0] });
       break;
     case 'ash_wraps':
-      if (tier >= 2) add({ kind: 'shockwave', count: 1, speed: 300 * p, radius: 14 + 3 * p, life: 0.35, yOff: [0] });
-      if (tier >= 3) add({ kind: 'shockwave', count: 1, speed: 360 * p, radius: 16 + 4 * p, life: 0.4, yOff: [0] });
+      if (tier >= 2) add({ kind: 'player_quake', count: 1, speed: 300 * p, radius: 14 + 3 * p, life: 0.35, yOff: [0] });
+      if (tier >= 3) add({ kind: 'player_quake', count: 1, speed: 360 * p, radius: 16 + 4 * p, life: 0.4, yOff: [0] });
       break;
     case 'ribbon_whip':
     case 'silk_whip':
-      if (tier >= 2) add({ kind: 'shockwave', count: 1, speed: 400 * p, radius: 14 + 3 * p, life: 0.4, yOff: [0] });
+      if (tier >= 2) add({ kind: 'sword_wave', count: 1, speed: 400 * p, radius: 14 + 3 * p, life: 0.4, yOff: [0] });
       if (tier >= 3) add({ kind: 'storm_arc', count: 1, speed: 440 * p, radius: 14 + 3 * p, life: 0.5, yOff: [0] });
       break;
     default:

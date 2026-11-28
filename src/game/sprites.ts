@@ -1,3 +1,5 @@
+import { getRenderFx, rgba, visualElement } from './affinityFx';
+import { mutedBoltColors } from './combatFeel';
 import { drawAffinitySwing } from './fxSwing';
 /**
  * Simple, modular Canvas 2D sprite & tile drawing functions.
@@ -1438,6 +1440,10 @@ export function drawWeaponAttack(
 
   // affinity-v1: element-styled swing + weapon-evolution tier layers (runes, serrated edge, fissure core)
   drawAffinitySwing(ctx, player, scale, range);
+  const renderFx = getRenderFx();
+  const feelOn = !!(renderFx && ((renderFx.affinityFx && renderFx.attackFx) || renderFx.weaponEvoFx));
+  const feelProf = feelOn ? visualElement(player, renderFx) : null;
+  const feelColor = feelProf?.pal.mid ?? null;
 
   // 0. KATANA KEY [3] — Charged Huge Wide Iaijutsu Mega Slash (renders even when attackState === 'idle'!)
   if (player.katanaMegaSlashTimer > 0) {
@@ -1603,7 +1609,7 @@ export function drawWeaponAttack(
   if (player.wizardNovaTimer > 0) {
     const h = player.baseH * scale;
     const prog = 1 - player.wizardNovaTimer / 0.34;
-    const col = activeEl ? activeEl.primaryColor : '#a5b4fc';
+    const col = feelOn ? mutedBoltColors(player).c1 : activeEl ? activeEl.primaryColor : '#a5b4fc';
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
     ctx.globalAlpha = 0.85 * (1 - prog);
@@ -1764,7 +1770,7 @@ export function drawWeaponAttack(
 
   // 0W. WIZARD SPIRE STAFF — gathering rune at the staff head, then a muzzle flare as the bolt leaves.
   if (weapon === 'spire_staff') {
-    const col = activeEl ? activeEl.primaryColor : '#a5b4fc';
+    const col = feelOn ? mutedBoltColors(player).c1 : activeEl ? activeEl.primaryColor : '#a5b4fc';
     const tipX = player.x + player.facing * 20 * scale;
     const tipY = player.y - h * 0.66;
     ctx.globalCompositeOperation = 'lighter';
@@ -1807,25 +1813,36 @@ export function drawWeaponAttack(
       const startA = player.facing === 1 ? -Math.PI * 0.68 : Math.PI * 0.32;
       const endA = player.facing === 1 ? Math.PI * 0.56 : Math.PI * 1.68;
 
-      ctx.fillStyle = isFlaming ? 'rgba(249, 115, 22, 0.24)' : 'rgba(244, 63, 94, 0.24)';
-      ctx.beginPath();
-      ctx.moveTo(cx, cy);
-      ctx.arc(cx, cy, slashRadius, startA, endA, false);
-      ctx.closePath();
-      ctx.fill();
+      if (!feelOn) {
+        ctx.fillStyle = isFlaming ? 'rgba(249, 115, 22, 0.24)' : 'rgba(244, 63, 94, 0.24)';
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.arc(cx, cy, slashRadius, startA, endA, false);
+        ctx.closePath();
+        ctx.fill();
 
-      ctx.strokeStyle = isFlaming ? '#fb923c' : '#f43f5e';
-      ctx.lineWidth = Math.max(6, 11 * scale);
-      ctx.lineCap = 'round';
-      ctx.beginPath();
-      ctx.arc(cx, cy, slashRadius * 0.89, startA, endA, false);
-      ctx.stroke();
+        ctx.strokeStyle = isFlaming ? '#fb923c' : '#f43f5e';
+        ctx.lineWidth = Math.max(6, 11 * scale);
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.arc(cx, cy, slashRadius * 0.89, startA, endA, false);
+        ctx.stroke();
 
-      ctx.strokeStyle = '#fff5f7';
-      ctx.lineWidth = Math.max(2.5, 4 * scale);
-      ctx.beginPath();
-      ctx.arc(cx, cy, slashRadius * 0.96, startA, endA, false);
-      ctx.stroke();
+        ctx.strokeStyle = '#fff5f7';
+        ctx.lineWidth = Math.max(2.5, 4 * scale);
+        ctx.beginPath();
+        ctx.arc(cx, cy, slashRadius * 0.96, startA, endA, false);
+        ctx.stroke();
+      } else {
+        ctx.strokeStyle = feelColor ?? '#9aa3ad';
+        ctx.lineWidth = Math.max(2, 3.2 * scale);
+        ctx.lineCap = 'round';
+        ctx.globalAlpha = 0.7;
+        ctx.beginPath();
+        ctx.arc(cx, cy, slashRadius * 0.96, startA, endA, false);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+      }
     } else if (player.attackState === 'recovery') {
       ctx.strokeStyle = 'rgba(244, 63, 94, 0.42)';
       ctx.lineWidth = Math.max(2, 3 * scale);
@@ -1856,25 +1873,36 @@ export function drawWeaponAttack(
       const startA = player.facing === 1 ? -Math.PI * 0.62 : Math.PI * 0.38;
       const endA = player.facing === 1 ? Math.PI * 0.52 : Math.PI * 1.62;
 
-      ctx.fillStyle = isFlaming ? 'rgba(249, 115, 22, 0.24)' : 'rgba(147, 197, 253, 0.22)';
-      ctx.beginPath();
-      ctx.moveTo(cx, cy);
-      ctx.arc(cx, cy, slashRadius, startA, endA, false);
-      ctx.closePath();
-      ctx.fill();
+      if (!feelOn) {
+        ctx.fillStyle = isFlaming ? 'rgba(249, 115, 22, 0.24)' : 'rgba(147, 197, 253, 0.22)';
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.arc(cx, cy, slashRadius, startA, endA, false);
+        ctx.closePath();
+        ctx.fill();
 
-      ctx.strokeStyle = isFlaming ? '#fb923c' : '#93c5fd';
-      ctx.lineWidth = Math.max(6, 12 * scale);
-      ctx.lineCap = 'round';
-      ctx.beginPath();
-      ctx.arc(cx, cy, slashRadius * 0.88, startA, endA, false);
-      ctx.stroke();
+        ctx.strokeStyle = isFlaming ? '#fb923c' : '#93c5fd';
+        ctx.lineWidth = Math.max(6, 12 * scale);
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.arc(cx, cy, slashRadius * 0.88, startA, endA, false);
+        ctx.stroke();
 
-      ctx.strokeStyle = isFlaming ? '#fef08a' : '#f8fafc';
-      ctx.lineWidth = Math.max(2.5, 4 * scale);
-      ctx.beginPath();
-      ctx.arc(cx, cy, slashRadius * 0.94, startA, endA, false);
-      ctx.stroke();
+        ctx.strokeStyle = isFlaming ? '#fef08a' : '#f8fafc';
+        ctx.lineWidth = Math.max(2.5, 4 * scale);
+        ctx.beginPath();
+        ctx.arc(cx, cy, slashRadius * 0.94, startA, endA, false);
+        ctx.stroke();
+      } else {
+        ctx.strokeStyle = feelColor ?? '#9aa3ad';
+        ctx.lineWidth = Math.max(2, 3.2 * scale);
+        ctx.lineCap = 'round';
+        ctx.globalAlpha = 0.7;
+        ctx.beginPath();
+        ctx.arc(cx, cy, slashRadius * 0.94, startA, endA, false);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+      }
     } else if (player.attackState === 'recovery') {
       ctx.strokeStyle = isFlaming ? 'rgba(249, 115, 22, 0.4)' : 'rgba(147, 197, 253, 0.38)';
       ctx.lineWidth = Math.max(2, 3 * scale);
@@ -1984,8 +2012,8 @@ export function drawWeaponAttack(
         const lenScale = i === 1 || needleOffsets.length === 1 ? 1 : 0.88;
         const endX = originX + player.facing * thrustReach * lenScale;
 
-        ctx.strokeStyle = isFlaming ? 'rgba(249, 115, 22, 0.5)' : 'rgba(244, 63, 94, 0.48)';
-        ctx.lineWidth = Math.max(5, 8 * scale);
+        ctx.strokeStyle = feelOn ? (feelColor ?? 'rgba(160,140,150,0.45)') : isFlaming ? 'rgba(249, 115, 22, 0.5)' : 'rgba(244, 63, 94, 0.48)';
+        ctx.lineWidth = Math.max(feelOn ? 2.5 : 5, (feelOn ? 3.5 : 8) * scale);
         ctx.lineCap = 'round';
         ctx.beginPath();
         ctx.moveTo(originX - player.facing * 8 * scale, ny);
@@ -2216,16 +2244,20 @@ export function drawWeaponAttack(
   } else if (player.attackState === 'active') {
     const endX = originX + player.facing * reach;
 
-    ctx.strokeStyle = isFlaming ? 'rgba(249, 115, 22, 0.55)' : 'rgba(229, 169, 60, 0.38)';
-    ctx.lineWidth = Math.max(6, (isFlaming ? 14 : 9) * scale);
+    ctx.strokeStyle = feelOn
+      ? (feelColor ? feelColor : 'rgba(160, 140, 110, 0.45)')
+      : isFlaming ? 'rgba(249, 115, 22, 0.55)' : 'rgba(229, 169, 60, 0.38)';
+    ctx.lineWidth = Math.max(3, ((feelOn ? 5 : isFlaming ? 14 : 9)) * scale);
     ctx.lineCap = 'round';
+    if (feelOn) ctx.globalAlpha = 0.55;
     ctx.beginPath();
     ctx.moveTo(originX, originY);
     ctx.lineTo(endX, originY);
     ctx.stroke();
+    ctx.globalAlpha = 1;
 
-    ctx.strokeStyle = isFlaming ? '#fef08a' : SPRITE_PALETTE.whipCore;
-    ctx.lineWidth = Math.max(2, (isFlaming ? 4.2 : 3.2) * scale);
+    ctx.strokeStyle = feelOn ? (feelProf?.pal.core ?? '#e8e0d0') : isFlaming ? '#fef08a' : SPRITE_PALETTE.whipCore;
+    ctx.lineWidth = Math.max(2, (feelOn ? 2.4 : isFlaming ? 4.2 : 3.2) * scale);
     ctx.beginPath();
     ctx.moveTo(originX, originY);
     ctx.lineTo(endX, originY);

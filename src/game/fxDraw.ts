@@ -1,7 +1,7 @@
 // Affinity FX drawing: decals, wake, aura, particles, rings, statuses, tier-up. (affinity-v1)
 import { BASE_FEEL, drawGlyph, FxPalette, rgba, visualElement } from './affinityFx';
 import type { AffinityFx } from './fxSystem';
-import type { Enemy, Player, TuningConfig } from './types';
+import type { AffinityZone, Enemy, Player, TuningConfig } from './types';
 
 export function drawFxBehind(ctx: CanvasRenderingContext2D, sys: AffinityFx, p: Player, scale: number, time: number): void {
   const fx = sys.fx;
@@ -490,4 +490,30 @@ function drawWither(ctx: CanvasRenderingContext2D, cx: number, footY: number, ew
     }
   }
   ctx.restore();
+}
+
+
+export function drawAffinityZones(ctx: CanvasRenderingContext2D, zones: AffinityZone[]): void {
+  for (const z of zones) {
+    const a = Math.max(0, z.life / z.maxLife);
+    const pal = BASE_FEEL[z.kind]?.pal;
+    if (!pal) continue;
+    ctx.save();
+    ctx.globalAlpha = a * 0.7;
+    const g = ctx.createRadialGradient(z.x, z.y, 2, z.x, z.y, z.r);
+    g.addColorStop(0, rgba(pal.core, 0.45));
+    g.addColorStop(0.55, rgba(pal.mid, 0.28));
+    g.addColorStop(1, rgba(pal.dark, 0));
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.ellipse(z.x, z.y, z.r, z.r * 0.45, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = a * 0.85;
+    ctx.strokeStyle = pal.mid;
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.ellipse(z.x, z.y, z.r * 0.86, z.r * 0.38, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
 }

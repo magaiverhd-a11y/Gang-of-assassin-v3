@@ -2,6 +2,22 @@ import { sound } from './audio';
 import { AffinityFx } from './fxSystem';
 import { tierLook, visualElement } from './affinityFx';
 import {
+  affFlags,
+  affinityHitMods,
+  attackHeightMul,
+  attackReachMul,
+  combatTune,
+  evoCombatTier,
+  extraPulses,
+  isSkill3Active,
+  mutedBoltColors,
+  skillZoneRadius,
+  startupMul,
+  swingWaves,
+  wizardBoltPierce,
+  wizardExtraBolts,
+} from './combatFeel';
+import {
   ABILITIES,
   ABILITY_ORDER,
   ARTIFACTS,
@@ -33,6 +49,7 @@ import {
   CharacterDef,
   BossTuning,
   AbilityId,
+  AffinityZone,
   Afterimage,
   ArtifactId,
   BaseElementId,
@@ -104,6 +121,11 @@ export class GameEngine {
   public projectiles: Projectile[] = [];
   public gasClouds: GasCloud[] = [];
   public groundHazards: GroundHazard[] = [];
+  /** attacks-v1: elemental patches left by attacks and ability [3]. */
+  public affinityZones: AffinityZone[] = [];
+  private attackPulseTimer = 0;
+  private attackPulsesLeft = 0;
+  private affinityTrailAcc = 0;
   public hangingBraziers: HangingBrazier[] = [];
   public secretWalls: SecretWall[] = [];
   public phantomAllies: PhantomAlly[] = [];
@@ -696,6 +718,8 @@ export class GameEngine {
       this.projectiles = [];
       this.gasClouds = [];
       this.groundHazards = [];
+      this.affinityZones = [];
+      this.attackPulsesLeft = 0;
       this.hangingBraziers = [];
       this.secretWalls = [];
       this.phantomAllies = [];
@@ -1181,6 +1205,8 @@ export class GameEngine {
     this.projectiles = [];
     this.gasClouds = [];
     this.groundHazards = [];
+    this.affinityZones = [];
+    this.attackPulsesLeft = 0;
     this.hangingBraziers = [];
     this.secretWalls = [];
     this.phantomAllies = [];
@@ -2299,14 +2325,212 @@ export class GameEngine {
     };
   }
 
+
+  private beginEvoAttackActive(tuning: TuningConfig, scale: number, h: number): void {
+    const p = this.player;
+    const c = combatTune(tuning);
+    const tier = evoCombatTier(p, tuning);
+    this.attackPulsesLeft = extraPulses(p.attackWeapon, tier);
+    this.attackPulseTimer = Math.max(0.08, (p.attackTimer || 0.16) * 0.45);
+    // Palm-only waves for the Monk finisher; other weapons fire on every swing at their tier.
+    const allowPalm = p.attackWeapon !== 'ash_wraps' || p.monkComboStep === 2;
+    if (!allowPalm) return;
+    const waves = swingWaves(p.attackWeapon, tier, c);
+    const ox = p.x + p.facing * 28 * scale;
+    const oy = p.y - h * 0.55;
+    const weaponLv = 1 + p.weaponDamageBonus;
+    // Hammer already launches a seismic aftershock at weaponLv >= 4; skip the Mythic duplicate.
+    for (const spec of waves) {
+      if (p.attackWeapon === 'hammer' && spec.kind === 'player_quake' && weaponLv >= 4 && tier < 3) continue;
+      if (p.attackWeapon === 'hammer' && spec.kind === 'player_quake' && weaponLv >= 4 && tier >= 3 && spec.speed >= 330) continue;
+      const n = Math.max(1, spec.count);
+      const offs = spec.yOff.length ? spec.yOff : [0];
+      for (let i = 0; i < n; i++) {
+        const yOff = offs[i % offs.length] * scale;
+        this.projectiles.push({
+          id: this.nextProjectileId++,
+          x: ox,
+          y: spec.kind === 'player_quake' ? p.y - 4 : oy + yOff,
+          vx: p.facing * spec.speed,
+          vy: 0,
+          radius: spec.radius * scale,
+          fromEnemy: false,
+          damage: 1,
+          life: spec.life,
+          rotation: 0,
+          kind: spec.kind,
+          slotLevel: weaponLv,
+        });
+      }
+    }
+    if (tier >= 1) {
+      const pal = affFlags(p, tuning).profile?.pal;
+      this.shockwaves.push({
+        x: ox,
+        y: oy,
+        radius: 6,
+        maxRadius: 36 + tier * 14,
+        color: pal?.mid ?? '#d6d3d1',
+        life: 0.16,
+        maxLife: 0.16,
+      });
+    }
+  }
+
+  private spawnAffinityZone(x: number, y: number, kind: BaseElementId, r: number, life: number): void {
+    this.affinityZones.push({ x, y, r, life, maxLife: life, kind, tick: 0.2, hitIds: new Set() });
+  }
+
+  private applySkill3Cast(tuning: TuningConfig): void {
+    const p = this.player;
+    const c = combatTune(tuning);
+    const flags = affFlags(p, tuning);
+    const scale = tuning.playerScale;
+    const h = (p.crouching ? p.crouchBaseH : p.baseH) * scale;
+    const cx = p.x;
+    const cy = p.y - h * 0.5;
+    const pow = c.affinityPower;
+    const pal = flags.profile?.pal;
+    const color = pal?.mid ?? '#d6d3d1';
+    if (flags.id) {
+      this.shockwaves.push({ x: cx, y: cy, radius: 8, maxRadius: 70 + pow * 20, color, life: 0.28, maxLife: 0.28 });
+      this.spawnSparkles(cx, cy, 10 + Math.round(pow * 6), color, pal?.core ?? '#fafafa', 0.9);
+    }
+    const zr = skillZoneRadius(flags, c);
+    if (zr > 0 && (flags.fire || flags.shadow || flags.light || flags.earth || flags.water)) {
+      const kind: BaseElementId = flags.fire ? 'fire' : flags.shadow ? 'shadow' : flags.light ? 'light' : flags.earth ? 'earth' : 'water';
+      this.spawnAffinityZone(cx, p.y - 2, kind, zr * scale, 1.4 + 0.4 * pow);
+    }
+    const R = (90 + 30 * pow) * scale;
+    for (const enemy of this.enemies) {
+      if (enemy.dead) continue;
+      const ey = enemy.y - (enemy.baseH * tuning.enemyScale) / 2;
+      const d = Math.hypot(enemy.x - cx, ey - cy);
+      if (d > R + enemy.baseW * tuning.enemyScale * 0.4) continue;
+      if (flags.water && !enemy.isBoss) {
+        enemy.vx = (enemy.x >= p.x ? 1 : -1) * (160 + 80 * pow);
+        enemy.hurtStunTimer = Math.max(enemy.hurtStunTimer, 0.12);
+      }
+      if (flags.air && !enemy.isBoss) {
+        // Gust pull: yank foes toward the skill so the follow-through connects.
+        const dir = Math.sign(p.x - enemy.x) || p.facing;
+        enemy.vx = dir * (140 + 70 * pow);
+        enemy.hurtStunTimer = Math.max(enemy.hurtStunTimer, 0.1);
+      }
+      if (flags.earth && !enemy.isBoss) {
+        enemy.hurtStunTimer = Math.max(enemy.hurtStunTimer, 0.2 * pow);
+        enemy.vx = (enemy.x >= p.x ? 1 : -1) * (200 + 80 * pow);
+      }
+      if (flags.shadow) {
+        enemy.witherTimer = Math.max(enemy.witherTimer ?? 0, 2.4 * pow);
+        enemy.witherTickTimer = enemy.witherTickTimer ?? 0.4;
+      }
+    }
+    if (flags.light) {
+      // A small holy burst around the caster — bonus damage is applied on the skill's actual hits vs bosses.
+      this.shockwaves.push({ x: cx, y: cy, radius: 10, maxRadius: 86 * scale * pow, color: pal?.core ?? '#cfae5c', life: 0.24, maxLife: 0.24 });
+    }
+  }
+
+  private applyAffinityAfterHit(
+    enemy: Enemy,
+    hitX: number,
+    hitY: number,
+    tuning: TuningConfig,
+    flags: ReturnType<typeof affFlags>,
+    mods: ReturnType<typeof affinityHitMods>
+  ): void {
+    if (mods.wither > 0 && enemy.hp > 0) {
+      enemy.witherTimer = Math.max(enemy.witherTimer ?? 0, mods.wither);
+      enemy.witherTickTimer = enemy.witherTickTimer ?? 0.5;
+    }
+    if (mods.lifestealChance > 0 && this.player.hp < this.player.maxHp && Math.random() < mods.lifestealChance) {
+      this.player.hp = Math.min(this.player.maxHp, this.player.hp + 1);
+      this.spawnDamageNumber(this.player.x, this.player.y - this.player.baseH * tuning.playerScale - 16, '+1 HP', '#7c6ea0', 0.85, 'WITHER');
+    }
+    if (mods.splashR > 0 && mods.splashDmg > 0 && isSkill3Active(this.player)) {
+      const eScale = tuning.enemyScale;
+      for (const other of this.enemies) {
+        if (other.dead || other === enemy) continue;
+        const oy = other.y - (other.baseH * eScale) * 0.5;
+        if (Math.hypot(other.x - hitX, oy - hitY) <= mods.splashR) {
+          other.hp = Math.max(0, other.hp - mods.splashDmg);
+          other.flashTimer = 0.12;
+          this.spawnDamageNumber(other.x, oy - 10, `${mods.splashDmg}`, flags.profile?.pal.mid ?? '#d6d3d1', 0.8);
+          if (other.hp <= 0) this.handleEnemyKilled(other, other.x, oy);
+        }
+      }
+    }
+    if (mods.pull && !enemy.isBoss && enemy.hp > 0) {
+      enemy.vx += Math.sign(this.player.x - enemy.x) * 40;
+    }
+    void flags;
+  }
+
+  private updateAffinityZones(dt: number, tuning: TuningConfig): void {
+    const p = this.player;
+    const flags = affFlags(p, tuning);
+    const c = combatTune(tuning);
+    // Leave a short elemental trail behind dashes / leaps / waltzes.
+    if (isSkill3Active(p) && flags.id && skillZoneRadius(flags, c) > 0) {
+      this.affinityTrailAcc += dt;
+      if (this.affinityTrailAcc >= 0.07) {
+        this.affinityTrailAcc = 0;
+        const kind: BaseElementId = flags.fire
+          ? 'fire'
+          : flags.shadow
+            ? 'shadow'
+            : flags.light
+              ? 'light'
+              : flags.earth
+                ? 'earth'
+                : flags.water
+                  ? 'water'
+                  : 'air';
+        this.spawnAffinityZone(p.x, p.y - 2, kind, skillZoneRadius(flags, c) * tuning.playerScale * 0.85, 0.7);
+      }
+    } else {
+      this.affinityTrailAcc = 0;
+    }
+
+    const eScale = tuning.enemyScale;
+    for (let i = this.affinityZones.length - 1; i >= 0; i--) {
+      const z = this.affinityZones[i];
+      z.life -= dt;
+      z.tick -= dt;
+      if (z.tick <= 0) {
+        z.tick = 0.28;
+        for (const enemy of this.enemies) {
+          if (enemy.dead || z.hitIds.has(enemy.id)) continue;
+          const ey = enemy.y - (enemy.baseH * eScale) / 2;
+          if (Math.hypot(enemy.x - z.x, ey - z.y) > z.r + enemy.baseW * eScale * 0.3) continue;
+          if (z.kind === 'fire') this.applyBurn(enemy, 2.0);
+          if (z.kind === 'water') enemy.chillTimer = Math.max(enemy.chillTimer ?? 0, 1.6);
+          if (z.kind === 'shadow') {
+            enemy.witherTimer = Math.max(enemy.witherTimer ?? 0, 1.8);
+            enemy.witherTickTimer = enemy.witherTickTimer ?? 0.5;
+          }
+          if (z.kind === 'earth') enemy.hurtStunTimer = Math.max(enemy.hurtStunTimer, 0.12);
+          if (z.kind === 'light' || z.kind === 'fire' || z.kind === 'earth') {
+            z.hitIds.add(enemy.id);
+            this.handlePlayerHitEnemy(enemy, tuning, 'weapon', 1 + p.weaponDamageBonus, { bonusDamage: 0, noAssassinate: true, stun: 0.08, kbX: 60 });
+          } else {
+            z.hitIds.add(enemy.id);
+          }
+        }
+      }
+      if (z.life <= 0) this.affinityZones.splice(i, 1);
+    }
+  }
+
   public getKatanaMegaHitbox(tuning: TuningConfig): Rect | null {
     const p = this.player;
     if (p.katanaMegaSlashTimer <= 0) return null;
     const scale = tuning.playerScale;
     const h = (p.crouching ? p.crouchBaseH : p.baseH) * scale;
-    const reach = tuning.attackRange * scale;
+    const reach = tuning.attackRange * scale * attackReachMul(p.weapon, evoCombatTier(p, tuning), affFlags(p, tuning), combatTune(tuning));
     const weaponLv = 1 + p.weaponDamageBonus;
-    const megaR = reach * (weaponLv >= 4 ? 2.15 : 1.9);
+    const megaR = reach * (weaponLv >= 4 ? 2.15 : 1.9) * (1 + 0.08 * evoCombatTier(p, tuning) * combatTune(tuning).evoReach);
     const cx = p.x + p.facing * 20 * scale;
     const cy = p.y - h * 0.56;
     return {
@@ -2323,7 +2547,11 @@ export class GameEngine {
 
     const scale = tuning.playerScale;
     const h = (p.attackWasCrouching ? p.crouchBaseH : p.baseH) * scale;
-    const reach = tuning.attackRange * scale;
+    const c = combatTune(tuning);
+    const evoT = evoCombatTier(p, tuning);
+    const flags = affFlags(p, tuning);
+    const reach = tuning.attackRange * scale * attackReachMul(p.attackWeapon, evoT, flags, c);
+    const heightMul = attackHeightMul(p.attackWeapon, evoT, flags, c);
     const weaponLv = 1 + p.weaponDamageBonus;
 
     if (p.attackWeapon === 'spire_staff') {
@@ -2335,7 +2563,7 @@ export class GameEngine {
       // Monk fists: very short, fast; the 3rd (palm) strike reaches a little further and taller.
       const palm = p.monkComboStep === 2;
       const fistReach = reach * (palm ? 1.25 : 1.0) * (weaponLv >= 4 ? 1.12 : 1.0);
-      const hitH = Math.max(24, h * (palm ? 0.78 : 0.52));
+      const hitH = Math.max(24, h * (palm ? 0.78 : 0.52) * heightMul);
       const originX = p.x + p.facing * (p.baseW * scale * 0.1);
       return {
         x: p.facing === 1 ? originX : originX - fistReach,
@@ -2348,7 +2576,7 @@ export class GameEngine {
     if (p.attackWeapon === 'katana') {
       // Wide sweeping iaijutsu slash — wider & faster than broadsword!
       const slashW = reach * (weaponLv >= 4 ? 1.5 : 1.28);
-      const slashH = h * (weaponLv >= 4 ? 2.0 : 1.8);
+      const slashH = h * (weaponLv >= 4 ? 2.0 : 1.8) * heightMul;
       const startX = p.facing === 1 ? p.x - 10 * scale : p.x + 10 * scale - slashW;
       return {
         x: startX,
@@ -2361,7 +2589,7 @@ export class GameEngine {
     if (p.attackWeapon === 'sword') {
       // Wide sweeping arc — Tier 4+ Grand Cleave extends reach by +25%!
       const slashW = reach * (weaponLv >= 4 ? 1.35 : 1.08);
-      const slashH = h * (weaponLv >= 4 ? 1.9 : 1.65);
+      const slashH = h * (weaponLv >= 4 ? 1.9 : 1.65) * heightMul;
       const startX = p.facing === 1 ? p.x - 8 * scale : p.x + 8 * scale - slashW;
       return {
         x: startX,
@@ -2387,7 +2615,7 @@ export class GameEngine {
     if (p.attackWeapon === 'rapier') {
       // Fast long piercing fencing thrust!
       const thrustReach = reach * (weaponLv >= 4 ? 1.26 : 1.14);
-      const hitH = Math.max(20, (weaponLv >= 4 ? 36 : 22) * scale);
+      const hitH = Math.max(20, (weaponLv >= 4 ? 36 : 22) * scale * heightMul);
       const originX = p.x + p.facing * (p.baseW * scale * 0.25);
       const centerY = p.y - h * 0.56;
       return {
@@ -2401,7 +2629,7 @@ export class GameEngine {
     if (p.attackWeapon === 'greataxe') {
       // Wide heavy overhead-to-floor Obsidian cleave!
       const axeW = reach * (weaponLv >= 4 ? 1.54 : 1.38);
-      const axeH = h * (weaponLv >= 4 ? 2.05 : 1.85);
+      const axeH = h * (weaponLv >= 4 ? 2.05 : 1.85) * heightMul;
       const startX = p.facing === 1 ? p.x - 14 * scale : p.x + 14 * scale - axeW;
       return {
         x: startX,
@@ -2414,7 +2642,7 @@ export class GameEngine {
     if (p.attackWeapon === 'naginata') {
       // Long sweeping polearm arc reaching far forward & high above!
       const poleW = reach * (weaponLv >= 4 ? 1.62 : 1.44);
-      const poleH = h * (weaponLv >= 4 ? 1.95 : 1.75);
+      const poleH = h * (weaponLv >= 4 ? 1.95 : 1.75) * heightMul;
       const startX = p.facing === 1 ? p.x - 8 * scale : p.x + 8 * scale - poleW;
       return {
         x: startX,
@@ -2427,7 +2655,7 @@ export class GameEngine {
     if (p.attackWeapon === 'ribbon_whip' || p.attackWeapon === 'silk_whip') {
       const isSilk = p.attackWeapon === 'silk_whip';
       const whipReach = reach * (isSilk ? 1.26 : 1.12);
-      const hitH = Math.max(26, 34 * scale);
+      const hitH = Math.max(26, 34 * scale * heightMul);
       const originX = p.x + p.facing * (p.baseW * scale * 0.2);
       const centerY = p.y - h * 0.56;
       return {
@@ -2440,7 +2668,7 @@ export class GameEngine {
 
     // Classic straight Whip hitbox (Tier 4+ slightly extended tip)
     const whipReach = reach * (weaponLv >= 4 ? 1.08 : 1.0);
-    const hitH = Math.max(18, 22 * scale);
+    const hitH = Math.max(18, 22 * scale * heightMul);
     const originX = p.x + p.facing * (p.baseW * scale * 0.25);
     const centerY = p.y - h * 0.56;
     return {
@@ -2730,6 +2958,7 @@ export class GameEngine {
       this.updateSecretWalls(safeDt);
       this.updatePhantomAllies(safeDt, tuning);
       this.updateBossDeathSequences(safeDt);
+      this.updateAffinityZones(safeDt, tuning);
       this.checkCombatCollisions(tuning);
 
       // Check ALL Room Bosses defeated -> Energy violently sprouts out of the slain boss & crystallizes into a Floating Relic!
@@ -3278,6 +3507,7 @@ export class GameEngine {
     // Trigger Weapon Skill (Key 3) — immediately responsive, grants Universal Parry Window & auto-triggers Tag Partner!
     if (input.backdashJustPressed && p.weaponSkillCooldown <= 0) {
       if (this.triggerWeaponSkill(tuning)) {
+        this.applySkill3Cast(tuning);
         p.parryWindowTimer = Math.max(p.parryWindowTimer, 0.24);
         if (p.tagPartner && p.tagPartnerCooldown <= 0 && !this.currentStage.isCamp) {
           this.summonPhantomAlly(p.tagPartner, tuning);
@@ -3434,6 +3664,9 @@ export class GameEngine {
         p.attackTimer = p.attackTotalStartup;
         sound.playWhip(wepEvoTier);
       }
+      const startM = startupMul(p.weapon, evoCombatTier(p, tuning), affFlags(p, tuning), combatTune(tuning));
+      p.attackTotalStartup *= startM;
+      p.attackTimer = p.attackTotalStartup;
     }
 
     // Crouch handling
@@ -3916,6 +4149,22 @@ export class GameEngine {
         fromEnemy: false,
         damage: 3 + flatBonus,
         life: 0.95,
+        rotation: 0,
+        kind: 'katana_wave',
+        slotLevel: weaponLv,
+      });
+    }
+    if (evoCombatTier(p, tuning) >= 3) {
+      this.projectiles.push({
+        id: this.nextProjectileId++,
+        x: p.x + p.facing * 36 * scale,
+        y: cy - 22 * scale,
+        vx: p.facing * 480,
+        vy: -40,
+        radius: 22 + flatBonus * 3,
+        fromEnemy: false,
+        damage: 2 + flatBonus,
+        life: 0.9,
         rotation: 0,
         kind: 'katana_wave',
         slotLevel: weaponLv,
@@ -4706,7 +4955,8 @@ export class GameEngine {
     }
 
     // Twin Seismic Shockwaves racing left & right across the floor (Evo I+ spawns extra high-speed echo waves!)
-    const speeds = evoTier >= 1 ? [380, 520] : [375];
+    const speeds =
+      evoCombatTier(p, tuning) >= 3 ? [380, 520, 300] : evoTier >= 1 ? [380, 520] : [375];
     for (const spd of speeds) {
       for (const dir of [-1, 1] as const) {
         this.projectiles.push({
@@ -5015,9 +5265,11 @@ export class GameEngine {
   private getWizardElement(): { id: string; name: string; c1: string; c2: string; root: BaseElementId | null } {
     const p = this.player;
     const def = getActiveElementDef(p.baseElements, p.combinedElement);
-    if (!def) return { id: 'arcane', name: 'Arcane', c1: '#a5b4fc', c2: '#312e81', root: null };
+    if (!def) return { id: 'arcane', name: 'Arcane', c1: '#8b90b0', c2: '#2a2c40', root: null };
     const root: BaseElementId | null = def.isCombined ? (def.parents?.[0] ?? null) : (def.id as BaseElementId);
-    return { id: def.id, name: def.name, c1: def.primaryColor, c2: def.secondaryColor, root };
+    const muted = combatTune(this.effectiveTuning ?? this.tuning).mutedBolts;
+    const cols = muted ? mutedBoltColors(p) : { c1: def.primaryColor, c2: def.secondaryColor };
+    return { id: def.id, name: def.name, c1: cols.c1, c2: cols.c2, root };
   }
 
 
@@ -5365,7 +5617,7 @@ export class GameEngine {
       if (p.monkDashSlam) {
         this.doMonkDashSlamImpact(tuning, weaponLv, evoTier);
       } else if (evoTier >= 1) {
-        const bursts = evoTier >= 2 ? 2 : 1;
+        const bursts = evoTier >= 3 ? 3 : evoTier >= 2 ? 2 : 1;
         for (let b = 0; b < bursts; b++) {
           const bx = p.x + p.facing * (20 + b * 40) * scale;
           const by = p.y - bodyH * 0.5;
@@ -5475,6 +5727,30 @@ export class GameEngine {
         this.projectiles.splice(i, 1);
       }
     }
+    if (evoCombatTier(p, tuning) >= 3) {
+      for (let i = 0; i < 4; i++) {
+        const a = (Math.PI / 2) * i + Math.PI / 4;
+        this.projectiles.push({
+          id: this.nextProjectileId++,
+          x: cx + Math.cos(a) * 16,
+          y: cy + Math.sin(a) * 16,
+          vx: Math.cos(a) * 420,
+          vy: Math.sin(a) * 420,
+          radius: 8,
+          fromEnemy: false,
+          damage: 0,
+          life: 0.55,
+          rotation: 0,
+          kind: 'arcane_bolt',
+          slotLevel: weaponLv,
+          color: el.c1,
+          color2: el.c2,
+          pierce: true,
+          hitIds: [],
+          startX: cx,
+        });
+      }
+    }
   }
 
   private spawnWizardBolt(tuning: TuningConfig): void {
@@ -5505,11 +5781,33 @@ export class GameEngine {
       slotLevel: 1 + p.weaponDamageBonus,
       color: el.c1,
       color2: el.c2,
-      pierce: overcharged || el.root === 'air',
+      pierce: overcharged || wizardBoltPierce(evoTier, affFlags(p, tuning)),
       overcharged,
       hitIds: [],
       startX: x,
     });
+    if (wizardExtraBolts(evoCombatTier(p, tuning)) > 0) {
+      this.projectiles.push({
+        id: this.nextProjectileId++,
+        x,
+        y: y + 14 * scale,
+        vx: p.facing * speed * 0.92,
+        vy: 30,
+        radius: 6 + evoTier,
+        fromEnemy: false,
+        damage: 0,
+        life: range / speed,
+        rotation: 0,
+        kind: 'arcane_bolt',
+        slotLevel: 1 + p.weaponDamageBonus,
+        color: el.c1,
+        color2: el.c2,
+        pierce: wizardBoltPierce(evoTier, affFlags(p, tuning)),
+        overcharged: false,
+        hitIds: [],
+        startX: x,
+      });
+    }
     p.wizardCastTimer = 0.18;
     sound.playWizardBolt(evoTier, overcharged);
     this.spawnSparkles(x, y, overcharged ? 10 : 5, el.c1, '#e0e7ff', overcharged ? 0.9 : 0.55);
@@ -5956,7 +6254,8 @@ export class GameEngine {
     }
     const longReach =
       p.weapon === 'whip' || p.weapon === 'naginata' || p.weapon === 'ribbon_whip' || p.weapon === 'silk_whip';
-    return tuning.attackRange * (longReach ? 1.18 : 1.05) * tuning.playerScale * (tuning.mobileAutoAttackRange ?? 1);
+    const reachM = attackReachMul(p.weapon, evoCombatTier(p, tuning), affFlags(p, tuning), combatTune(tuning));
+    return tuning.attackRange * (longReach ? 1.18 : 1.05) * tuning.playerScale * (tuning.mobileAutoAttackRange ?? 1) * reachM;
   }
 
   /** True when a hit on this enemy right now would count as a stealth assassination. */
@@ -6268,6 +6567,17 @@ export class GameEngine {
     const p = this.player;
     if (p.attackState === 'idle') return;
 
+    if (p.attackState === 'active' && this.attackPulsesLeft > 0) {
+      this.attackPulseTimer -= dt;
+      if (this.attackPulseTimer <= 0) {
+        this.attackPulsesLeft -= 1;
+        p.attackHitIds.clear();
+        this.attackPulseTimer = 0.1;
+        const hPulse = (p.attackWasCrouching ? p.crouchBaseH : p.baseH) * tuning.playerScale;
+        this.spawnSparkles(p.x + p.facing * 28 * tuning.playerScale, p.y - hPulse * 0.55, 8, '#e7e5e4', '#fafafa', 0.7);
+      }
+    }
+
     const scale = tuning.playerScale;
     const h = (p.attackWasCrouching ? p.crouchBaseH : p.baseH) * scale;
 
@@ -6447,6 +6757,7 @@ export class GameEngine {
             );
           }
         }
+        this.beginEvoAttackActive(tuning, scale, h);
       } else if (p.attackState === 'active') {
         p.attackState = 'recovery';
         p.attackTimer =
@@ -6669,6 +6980,24 @@ export class GameEngine {
           this.spawnDamageNumber(bx, by - 12, '1', '#fb923c', 0.88, 'BURN');
           if (enemy.hp <= 0) {
             this.handleEnemyKilled(enemy, bx, by);
+            continue;
+          }
+        }
+      }
+
+      if (enemy.witherTimer && enemy.witherTimer > 0) {
+        enemy.witherTimer = Math.max(0, enemy.witherTimer - dt);
+        enemy.witherTickTimer = (enemy.witherTickTimer ?? 0.9) - dt;
+        if (enemy.witherTickTimer <= 0) {
+          enemy.witherTickTimer = 0.9;
+          const wx = enemy.x;
+          const wy = enemy.y - enemy.baseH * eScale * 0.55;
+          enemy.hp = Math.max(0, enemy.hp - 1);
+          enemy.flashTimer = 0.1;
+          this.spawnSparkles(wx, wy, 5, '#583e82', '#160d22', 0.7);
+          this.spawnDamageNumber(wx, wy - 12, '1', '#7c6ea0', 0.85, 'WITHER');
+          if (enemy.hp <= 0) {
+            this.handleEnemyKilled(enemy, wx, wy);
             continue;
           }
         }
@@ -9806,6 +10135,12 @@ export class GameEngine {
       this.comboTimer = 3.2;
     }
 
+    const aFlags = affFlags(p, tuning);
+    const aMods =
+      source === 'gas' || !combatTune(tuning).affinityAttacks
+        ? affinityHitMods(aFlags, enemy, { ...combatTune(tuning), affinityPower: 0 }, false)
+        : affinityHitMods(aFlags, enemy, combatTune(tuning), isSkill3Active(p));
+
     const fireBonusActive =
       p.fireWeaponTimer > 0 &&
       (source === 'weapon' || source === 'dash' || source === 'hammer_meteor');
@@ -9866,7 +10201,7 @@ export class GameEngine {
     }
 
     const fireBonus = fireBonusActive ? 1 + this.getSpellFlatBonus(p.fireWeaponLevel) : 0;
-    let damage = baseDamage + fireBonus + Math.max(0, Math.round(opts?.bonusDamage ?? 0));
+    let damage = baseDamage + fireBonus + Math.max(0, Math.round((opts?.bonusDamage ?? 0) + aMods.bonusDamage));
 
     // Light / Solar / Prism / Eclipse Boss Damage bonus!
     if (enemy.isBoss && this.hasElement('light')) {
@@ -9898,11 +10233,11 @@ export class GameEngine {
       opts?.dirX !== undefined ? (opts.dirX >= 0 ? 1 : -1) : source === 'hammer_meteor' ? (enemy.x >= p.x ? 1 : -1) : p.facing;
     if (source !== 'gas') {
       const kbMult = tuning.knockbackMult ?? 1;
-      const kb = (opts?.kbX ?? (source === 'hammer_meteor' ? 280 : isHeavyHit ? 225 : 135)) * kbMult;
+      const kb = (opts?.kbX ?? (source === 'hammer_meteor' ? 280 : isHeavyHit ? 225 : 135)) * kbMult * aMods.kbMul;
       enemy.vx = pushDir * (enemy.isBoss ? (opts?.kbX ? Math.min(160, 48 + kb * 0.12) : 48) : kb);
       const flying = isFlyingEnemyType(enemy.type);
       if (!enemy.isBoss && enemy.hp > 0) {
-        if (opts?.stun) enemy.hurtStunTimer = Math.max(enemy.hurtStunTimer, opts.stun);
+        if (opts?.stun || aMods.stunAdd) enemy.hurtStunTimer = Math.max(enemy.hurtStunTimer, (opts?.stun ?? 0) + aMods.stunAdd);
         if (opts?.kbY && !flying) {
           enemy.vy = Math.min(enemy.vy, -opts.kbY * kbMult);
           enemy.onGround = false;
@@ -10187,6 +10522,7 @@ export class GameEngine {
 
     if (source !== 'gas') {
       this.applyElementalHitEffect(enemy, hitX, hitY, tuning, isCrit, isAssassination);
+      this.applyAffinityAfterHit(enemy, hitX, hitY, tuning, aFlags, aMods);
     }
 
     // Monk passive — Unbroken Flow: every fist strike shaves 0.2s off Pyre Dash.

@@ -725,6 +725,18 @@ export interface ShockwaveRing {
   maxLife: number;
 }
 
+/** attacks-v1: short-lived elemental patch left by attacks / ability [3]. */
+export interface AffinityZone {
+  x: number;
+  y: number;
+  r: number;
+  life: number;
+  maxLife: number;
+  kind: BaseElementId;
+  tick: number;
+  hitIds: Set<number>;
+}
+
 export interface GroundHazard {
   id: number;
   x: number;

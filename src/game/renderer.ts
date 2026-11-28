@@ -1,5 +1,5 @@
 import { setFxRenderContext } from './affinityFx';
-import { drawFxBehind, drawFxFront } from './fxDraw';
+import { drawAffinityZones, drawFxBehind, drawFxFront } from './fxDraw';
 import { GameEngine } from './engine';
 import { CAMP_FIRE_X } from './level';
 import {
@@ -244,6 +244,7 @@ export function renderGame(
   } else {
     drawElementalPlayerAura(ctx, engine.player, tuning.playerScale, engine.time);
   }
+  drawAffinityZones(ctx, engine.affinityZones);
   for (const ally of engine.phantomAllies) {
     drawPhantomAlly(ctx, ally, tuning.playerScale, engine.time);
   }
