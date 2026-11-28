@@ -30,6 +30,7 @@ interface TuningPanelProps {
   tuning: TuningConfig;
   onReplace: (next: TuningConfig) => void;
   onTestFreeze?: () => void;
+  onOpenCredits?: () => void;
   onClose?: () => void;
 }
 
@@ -238,7 +239,7 @@ function Group({
 const btn =
   'inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-[#b6bccf] hover:text-white bg-[#191d2b] hover:bg-[#23293b] border border-[#2a3145] rounded transition-colors whitespace-nowrap';
 
-export const TuningPanel: React.FC<TuningPanelProps> = ({ tuning, onReplace, onTestFreeze, onClose }) => {
+export const TuningPanel: React.FC<TuningPanelProps> = ({ tuning, onReplace, onTestFreeze, onOpenCredits, onClose }) => {
   const [hovered, setHovered] = useState<HoverInfo | null>(null);
   const [tabId, setTabId] = useState<string>(TUNING_TABS[0].id);
   const [query, setQuery] = useState('');
@@ -449,6 +450,19 @@ export const TuningPanel: React.FC<TuningPanelProps> = ({ tuning, onReplace, onT
                   data-action="test-freeze"
                 >
                   <Snowflake className="w-3 h-3" /> Test Freeze
+                </button>
+              )}
+              {tab.action === 'credits' && onOpenCredits && (
+                <button
+                  type="button"
+                  className={`${btn} !text-white !bg-[#2a3052] !border-[#7c8bd6]`}
+                  onClick={(e) => {
+                    onOpenCredits();
+                    (e.currentTarget as HTMLButtonElement).blur();
+                  }}
+                  data-action="open-credits"
+                >
+                  Credits
                 </button>
               )}
               <button type="button" className={btn} onClick={copyTab}>

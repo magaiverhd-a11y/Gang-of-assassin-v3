@@ -4,6 +4,7 @@ import {
   Flame,
   Gem,
   Hammer,
+  Info,
   Map as MapIcon,
   Pause,
   Play,
@@ -22,8 +23,10 @@ import { MobileAction, MobileControls, TouchDirectionalState, vibrate } from './
 import { RaidSelectModal } from './components/RaidSelectModal';
 import { LeftHud, RightHud } from './components/SideHuds';
 import { TuningPanel } from './components/TuningPanel';
+import { CreditsModal } from './components/CreditsModal';
 import { cloneTuning, loadStoredTuning, saveStoredTuning } from './game/tuningStore';
 import { sound } from './game/audio';
+import { soundDirector } from './game/soundDirector';
 import {
   BASE_ELEMENTS,
   CHARACTERS,
@@ -120,6 +123,7 @@ export default function App() {
   const [tuning, setTuning] = useState<TuningConfig>(() => loadStoredTuning());
   const [showTuning, setShowTuning] = useState<boolean>(false);
   const [muted, setMuted] = useState<boolean>(false);
+  const [showCredits, setShowCredits] = useState<boolean>(false);
   const [hud, setHud] = useState<HudSnapshot>({
     characterId: 'hunter',
     inCamp: true,
@@ -299,14 +303,14 @@ export default function App() {
 
   const handleCraftRecipe = useCallback((recipeId: string) => {
     if (engineRef.current) {
-      engineRef.current.craftRecipe(recipeId, tuningRef.current);
+      if (!engineRef.current.craftRecipe(recipeId, tuningRef.current)) sound.playUi('error');
       setHud(engineRef.current.getHudSnapshot());
     }
   }, []);
 
   const handleCraftArtifact = useCallback((artifactId: ArtifactId) => {
     if (engineRef.current) {
-      engineRef.current.craftArtifact(artifactId, tuningRef.current);
+      if (!engineRef.current.craftArtifact(artifactId, tuningRef.current)) sound.playUi('error');
       setHud(engineRef.current.getHudSnapshot());
     }
   }, []);
@@ -600,6 +604,52 @@ export default function App() {
     handleStartRaid,
   ]);
 
+  // sound-v1: unlock audio on the first gesture, and play menu / UI sounds for button presses.
+  useEffect(() => {
+    const unlock = () => {
+      sound.unlock();
+    };
+    const uiKind = (target: EventTarget | null): 'click' | 'chunky' | 'confirm' | 'back' | 'buy' | 'error' | null => {
+      const el = target instanceof Element ? target : null;
+      const btn = el?.closest('button, [role="button"]') as HTMLElement | null;
+      if (!btn || btn.closest('[data-snd-skip]')) return null;
+      const tag = btn.getAttribute('data-snd');
+      if (tag === 'none') return null;
+      if (btn.hasAttribute('disabled') || btn.getAttribute('aria-disabled') === 'true') return 'error';
+      if (tag === 'chunky' || tag === 'confirm' || tag === 'back' || tag === 'buy' || tag === 'click') return tag;
+      const label = `${btn.getAttribute('aria-label') ?? ''} ${btn.getAttribute('title') ?? ''} ${btn.textContent ?? ''}`.trim();
+      if (/^(close|back|cancel|dismiss|×|✕|x)\b/i.test(label) || /\bclose\b/i.test(btn.getAttribute('aria-label') ?? '')) return 'back';
+      return 'click';
+    };
+    const onDown = (e: PointerEvent) => {
+      unlock();
+      if (!tuningRef.current.sound.uiSounds) return;
+      const k = uiKind(e.target);
+      if (k) sound.playUi(k);
+    };
+    let lastHover: Element | null = null;
+    const onOver = (e: MouseEvent) => {
+      if (!tuningRef.current.sound.uiSounds || !window.matchMedia?.('(hover: hover)').matches) return;
+      const btn = e.target instanceof Element ? (e.target.closest('button, [role="button"]') as HTMLElement | null) : null;
+      if (!btn || btn === lastHover || btn.closest('[data-snd-skip]') || btn.hasAttribute('disabled')) {
+        if (!btn) lastHover = null;
+        return;
+      }
+      lastHover = btn;
+      if (btn.getAttribute('data-snd') !== 'none') sound.playUi('hover');
+    };
+    window.addEventListener('pointerdown', onDown, true);
+    window.addEventListener('keydown', unlock, true);
+    window.addEventListener('touchstart', unlock, true);
+    window.addEventListener('mouseover', onOver, true);
+    return () => {
+      window.removeEventListener('pointerdown', onDown, true);
+      window.removeEventListener('keydown', unlock, true);
+      window.removeEventListener('touchstart', unlock, true);
+      window.removeEventListener('mouseover', onOver, true);
+    };
+  }, []);
+
   // Core Canvas Resize & Animation Loop
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -614,6 +664,7 @@ export default function App() {
       // Debug hook for tuning / automated smoke tests: open the game with ?debug in the URL.
       if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('debug')) {
         (window as unknown as { __nocturneEngine?: GameEngine }).__nocturneEngine = engineRef.current;
+        (window as unknown as { __nocturneSound?: unknown }).__nocturneSound = { sound, director: soundDirector };
       }
     }
 
@@ -686,6 +737,7 @@ export default function App() {
       if (!pausedRef.current) {
         engine.update(dt, input, frameTuning, viewportW, viewportH);
       }
+      soundDirector.update(engine, dt, frameTuning);
       renderGame(ctx, engine, frameTuning, viewportW, viewportH);
 
       hudSyncAccum += dt;
@@ -776,6 +828,7 @@ export default function App() {
                       <button
                         key={opt.id}
                         type="button"
+                        data-snd="none"
                         onClick={() => handleSelectUpgrade(opt.id)}
                         className="text-left bg-[#161a28] hover:bg-[#1e2436] border border-[#2c334a] hover:border-[#e5a93c] p-4 flex flex-col justify-between gap-4 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#e5a93c]"
                         style={
@@ -1004,6 +1057,7 @@ export default function App() {
               active: paused,
             })}
             {iconBtn('mute', muted ? 'Muted' : 'Sound', muted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />, handleToggleMute)}
+            {iconBtn('credits', 'Credits', <Info className="w-4 h-4" />, () => setShowCredits(true), { active: showCredits })}
             {iconBtn('tune', 'Tune', <SlidersHorizontal className="w-4 h-4" />, () => setShowTuning((v) => !v), {
               active: showTuning,
               accent: '#c82333',
@@ -1132,10 +1186,12 @@ export default function App() {
                 tuning={tuning}
                 onReplace={handleTuningReplace}
                 onTestFreeze={handleTestFreeze}
+                onOpenCredits={() => setShowCredits(true)}
                 onClose={() => setShowTuning(false)}
               />
             </div>
           )}
+          {showCredits && <CreditsModal onClose={() => setShowCredits(false)} />}
         </main>
       </div>
     );
@@ -1363,6 +1419,20 @@ export default function App() {
           <button
             type="button"
             onClick={(e) => {
+              setShowCredits(true);
+              (e.currentTarget as HTMLButtonElement).blur();
+            }}
+            aria-label="Credits"
+            data-snd="click"
+            className="p-1.5 text-[#9aa2b8] hover:text-white rounded hover:bg-[#1b202e] transition-colors"
+            title="Credits"
+          >
+            <Info className="w-4 h-4" />
+          </button>
+
+          <button
+            type="button"
+            onClick={(e) => {
               handleReturnToCamp();
               (e.currentTarget as HTMLButtonElement).blur();
             }}
@@ -1465,10 +1535,12 @@ export default function App() {
               tuning={tuning}
               onReplace={handleTuningReplace}
               onTestFreeze={handleTestFreeze}
+              onOpenCredits={() => setShowCredits(true)}
               onClose={() => setShowTuning(false)}
             />
           </div>
         )}
+        {showCredits && <CreditsModal onClose={() => setShowCredits(false)} />}
       </main>
     </div>
   );

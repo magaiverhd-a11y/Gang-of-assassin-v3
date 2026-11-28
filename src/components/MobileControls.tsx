@@ -410,6 +410,7 @@ export function MobileControls({ hud, tuning, onDirectionChange, onAction, onAny
     <section
       aria-label="Touch controls"
       data-mobile-deck
+      data-snd-skip
       className="relative w-full shrink-0 select-none touch-none overflow-hidden"
       style={{
         height: `calc(${Math.max(20, Math.min(50, tuning.mobileDeckPct || 29))}dvh + env(safe-area-inset-bottom, 0px))`,

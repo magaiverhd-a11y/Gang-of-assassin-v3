@@ -407,9 +407,33 @@ export interface TuningConfig {
   fx: FxTuning;
   /** attacks-v1: weapon evo and affinity change the attack itself and ability [3]. */
   combat: CombatTuning;
+  /** sound-v1: mixer, music rules and footsteps. */
+  sound: SoundTuning;
   characters: Record<CharacterId, CharacterTuning>;
   enemies: Record<string, EnemyTuning>;
   bosses: Record<string, BossTuning>;
+}
+
+/** sound-v1 mixer / music / footstep settings (sliders are 0-100 like the sound picker). */
+export interface SoundTuning {
+  /** Music volume, % (default 60). */
+  musicVol: number;
+  /** Ambience volume, % (default 55). */
+  ambienceVol: number;
+  /** Sound effects volume, % (default 90). */
+  sfxVol: number;
+  /** Footstep loudness, % of normal (default 100). */
+  footstepVol: number;
+  musicOn: boolean;
+  ambienceOn: boolean;
+  footstepsOn: boolean;
+  uiSounds: boolean;
+  /** Seconds without combat before the music returns to stealth. */
+  combatCooldownSec: number;
+  /** Seconds for music crossfades. */
+  crossfadeSec: number;
+  /** Fights with this many alerted foes (or any elite) use the heavy-combat pool. */
+  heavyFoeCount: number;
 }
 
 export interface KillFreezeTuning {

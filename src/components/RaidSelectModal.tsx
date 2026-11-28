@@ -267,6 +267,7 @@ export function RaidSelectModal({
 
                 <button
                   type="button"
+                  data-snd="chunky"
                   onClick={() => onStartRaid(raid.id)}
                   className="w-full py-2.5 px-3 text-xs font-bold tracking-wide text-white border transition-colors flex items-center justify-center gap-2 hover:brightness-110"
                   style={{

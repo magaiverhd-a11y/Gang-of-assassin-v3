@@ -140,6 +140,7 @@ export function CraftingModal({
                       key={art.id}
                       type="button"
                       disabled={!canAfford}
+                      data-snd="none"
                       onClick={() => onCraftArtifact(art.id)}
                       className={`text-left p-3 border flex items-start gap-3 transition-colors ${
                         owned
@@ -228,6 +229,7 @@ export function CraftingModal({
                       key={recipe.id}
                       type="button"
                       disabled={!canAfford}
+                      data-snd="none"
                       onClick={() => onCraftRecipe(recipe.id)}
                       className={`text-left p-3 border flex items-start gap-3 transition-colors ${
                         alreadyOwnedWeapon || specialMaxed
@@ -388,6 +390,7 @@ export function CraftingModal({
                       <button
                         type="button"
                         disabled={!eligible}
+                        data-snd="none"
                         onClick={() =>
                           onSacrificeArtifact(
                             art.id,

@@ -51,7 +51,7 @@ export interface TabDef {
   roots: string[];
   groups: GroupDef[];
   /** Extra action rendered at the top of the tab. */
-  action?: 'testFreeze';
+  action?: 'testFreeze' | 'credits';
   note?: string;
 }
 
@@ -627,11 +627,50 @@ const combatTab: TabDef = {
   ],
 };
 
+// ---------------------------------------------------------------------------
+// SOUND (sound-v1)
+// ---------------------------------------------------------------------------
+const SND = (k: string) => ['sound', k];
+const soundTab: TabDef = {
+  id: 'sound',
+  label: 'Sound',
+  accent: '#7c8bd6',
+  roots: ['sound'],
+  action: 'credits',
+  note: 'Mixer, music rules and footsteps. Defaults match the sound picker mixer (ambience 55 / music 60 / sfx 90).',
+  groups: [
+    {
+      id: 'snd-mix',
+      title: 'Mixer',
+      items: [
+        S(SND('musicVol'), 'Music', 'Volume of the stealth / combat / boss music.', 0, 100, 1, 'pct'),
+        S(SND('ambienceVol'), 'Ambience', 'Volume of the always-on ambience bed.', 0, 100, 1, 'pct'),
+        S(SND('sfxVol'), 'Sound Effects', 'Volume of weapons, hits, enemies, UI and footsteps.', 0, 100, 1, 'pct'),
+        S(SND('footstepVol'), 'Footsteps', 'How loud footsteps are on top of the sound-effects volume.', 0, 200, 5, 'pct'),
+        T(SND('musicOn'), 'Music', 'Turn the soundtrack off or on.'),
+        T(SND('ambienceOn'), 'Ambience', 'Turn the ambience bed off or on.'),
+        T(SND('footstepsOn'), 'Footsteps', 'Terrain footsteps while walking and running.'),
+        T(SND('uiSounds'), 'Menu / UI sounds', 'Clicks, confirm, back, hover and error sounds in menus.'),
+      ],
+    },
+    {
+      id: 'snd-music',
+      title: 'Music rules',
+      items: [
+        S(SND('combatCooldownSec'), 'Back to stealth after', 'Seconds without combat before the music returns to the stealth track where it stopped.', 2, 30, 1, 'sec'),
+        S(SND('crossfadeSec'), 'Crossfade', 'Length of the smooth music crossfades.', 0.4, 5, 0.1, 'sec'),
+        S(SND('heavyFoeCount'), 'Heavy combat at', 'Number of alerted foes (or any elite) that switches fights to the heavy / boss music pool.', 2, 12, 1, 'int'),
+      ],
+    },
+  ],
+};
+
 export const TUNING_TABS: TabDef[] = [
   generalTab,
   killTab,
   fxTab,
   combatTab,
+  soundTab,
   ...CHARACTER_ORDER.map(characterTab),
   enemiesTab,
   bossesTab,

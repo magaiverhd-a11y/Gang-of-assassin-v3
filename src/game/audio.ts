@@ -1,4 +1,32 @@
 import { ElementId, EnemyType, WeaponId } from './types';
+import { audioUrl, FOOTSTEP_FILES, SFX_FILES } from './audioManifest';
+
+export interface AudioLogEntry {
+  t: number;
+  kind: 'sfx' | 'foot' | 'music' | 'amb' | 'state';
+  event: string;
+  clip?: string;
+  detail?: string;
+}
+
+export interface MixerSettings {
+  music: number;
+  ambience: number;
+  sfx: number;
+  footsteps: number;
+  musicOn: boolean;
+  ambienceOn: boolean;
+}
+
+export const DEFAULT_MIXER: MixerSettings = { music: 60, ambience: 55, sfx: 90, footsteps: 1, musicOn: true, ambienceOn: true };
+
+/** Per-event minimum gap (ms) so a burst of identical hits never stacks into a wall of noise. */
+const EVENT_GAP_MS: Record<string, number> = {
+  hit_light: 55, hit_heavy: 70, crit: 90, enemy_hurt: 110, enemy_attack: 160, alert: 900, goblin_alert: 700,
+  fireball: 90, evolution: 700, land: 110, ui_click: 35, ui_hover: 90, ui_confirm: 80, block: 90, coin: 60,
+  barrel: 120, collapse: 200, hammer_boom: 90, sword: 40, rapier: 40, dash: 60, whip: 40, buff: 120,
+};
+
 
 /**
  * Procedural Gothic Foley & Modal Audio Engine
@@ -15,7 +43,12 @@ class SoundBank {
   private saturator: WaveShaperNode | null = null;
   private whiteNoise: AudioBuffer | null = null;
   private customSamples = new Map<string, AudioBuffer>();
-  public muted = false;
+  private _muted = false;
+  public get muted(): boolean { return this._muted; }
+  public set muted(v: boolean) {
+    this._muted = v;
+    this.applyMixer();
+  }
 
   private ensure(): AudioContext | null {
     if (this.muted) return null;
@@ -84,6 +117,7 @@ class SoundBank {
       data[i] = Math.random() * 2 - 1;
     }
     this.whiteNoise = buf;
+    this.initSampleBuses(ctx);
   }
 
   private buildHallImpulse(ctx: AudioContext, durationSec: number, decay: number): AudioBuffer {
@@ -272,6 +306,7 @@ class SoundBank {
   // ===========================================================================
   public playJump(): void {
     const ctx = this.ensure();
+    if (ctx && this.sample('jump')) return;
     if (!ctx || this.tryPlayCustom('jump', 0.6)) return;
     const now = ctx.currentTime;
     // Grounded leather boot push + subtle cloak lift (no cartoon boing!)
@@ -281,6 +316,7 @@ class SoundBank {
 
   public playBackdash(evoTier = 0): void {
     const ctx = this.ensure();
+    if (ctx && this.sample('dash')) return;
     if (!ctx || this.tryPlayCustom('backdash', 0.65)) return;
     const now = ctx.currentTime;
     // Crisp dark cloak snap & swift air rush
@@ -312,6 +348,7 @@ class SoundBank {
   // ===========================================================================
   public playWhip(evoTier = 0): void {
     const ctx = this.ensure();
+    if (ctx && this.sample('whip')) return;
     if (!ctx || this.tryPlayCustom('whip', 0.8)) return;
     const now = ctx.currentTime;
     // 1. Leather/silk body sweep
@@ -324,6 +361,7 @@ class SoundBank {
 
   public playSwordSlash(evoTier = 0): void {
     const ctx = this.ensure();
+    if (ctx && this.sample('sword')) return;
     if (!ctx || this.tryPlayCustom('sword', 0.8)) return;
     const now = ctx.currentTime;
     // Clean steel blade wind cleave + subtle tempered steel ring
@@ -334,6 +372,7 @@ class SoundBank {
 
   public playKatanaSlash(evoTier = 0): void {
     const ctx = this.ensure();
+    if (ctx && this.sample('katana')) return;
     if (!ctx || this.tryPlayCustom('katana', 0.8)) return;
     const now = ctx.currentTime;
     // Razor-thin iaido air slice + cold crystalline katana ring
@@ -344,6 +383,7 @@ class SoundBank {
 
   public playRapierThrust(evoTier = 0): void {
     const ctx = this.ensure();
+    if (ctx && this.sample('rapier')) return;
     if (!ctx || this.tryPlayCustom('rapier', 0.75)) return;
     const now = ctx.currentTime;
     // Whip-fast needle pierce + tight fencing ping
@@ -354,6 +394,7 @@ class SoundBank {
 
   public playNaginataSlash(evoTier = 0): void {
     const ctx = this.ensure();
+    if (ctx && this.sample('naginata')) return;
     if (!ctx || this.tryPlayCustom('naginata', 0.8)) return;
     const now = ctx.currentTime;
     // Long sweeping polearm wind rush + electric edge whisper
@@ -364,6 +405,7 @@ class SoundBank {
 
   public playGreataxeSwing(evoTier = 0): void {
     const ctx = this.ensure();
+    if (ctx && this.sample('greataxe')) return;
     if (!ctx || this.tryPlayCustom('greataxe', 0.85)) return;
     const now = ctx.currentTime;
     // Massive heavy wind cleave + deep iron weight
@@ -383,6 +425,7 @@ class SoundBank {
 
   public playHammerBoom(evoTier = 0): void {
     const ctx = this.ensure();
+    if (ctx && this.sample('hammer_boom')) return;
     if (!ctx || this.tryPlayCustom('hammer_boom', 0.9)) return;
     const now = ctx.currentTime;
     // 1. Saturated seismic impact drop
@@ -402,6 +445,7 @@ class SoundBank {
   /** Monk fist: dull wrapped-knuckle thud; step 2 = heavy palm with a chest-deep punch. */
   public playMonkFist(step = 0, evoTier = 0): void {
     const ctx = this.ensure();
+    if (ctx && this.sample(step >= 2 ? 'hit_heavy' : 'hit_light', { gain: 0.7, key: 'monk_fist' })) return;
     if (!ctx || this.tryPlayCustom('monk_fist', 0.8)) return;
     const now = ctx.currentTime;
     const heavy = step >= 2;
@@ -413,6 +457,7 @@ class SoundBank {
   /** Monk Pyre Dash: rushing ash wind + low rolling rumble. */
   public playMonkDash(evoTier = 0): void {
     const ctx = this.ensure();
+    if (ctx && this.sample('dash', { rate: 0.82, key: 'monk_dash' })) return;
     if (!ctx || this.tryPlayCustom('monk_dash', 0.85)) return;
     const now = ctx.currentTime;
     this.playNoiseBurst(now, 0.32 + evoTier * 0.05, 'bandpass', 380, 1900, 0.9, 0.3, 0.34, 0.01, true);
@@ -424,6 +469,7 @@ class SoundBank {
   /** Wizard bolt: soft arcane hiss + glassy hum. */
   public playWizardBolt(evoTier = 0, overcharged = false): void {
     const ctx = this.ensure();
+    if (ctx && this.sample(overcharged ? 'buff' : 'fireball', { gain: overcharged ? 0.9 : 0.62, key: 'wizard_bolt' })) return;
     if (!ctx || this.tryPlayCustom('wizard_bolt', 0.7)) return;
     const now = ctx.currentTime;
     this.playNoiseBurst(now, 0.12, 'bandpass', 2600, 900, 2.4, overcharged ? 0.2 : 0.14, 0.4, 0.004);
@@ -435,6 +481,7 @@ class SoundBank {
   /** Wizard Repulsion Nova: imploding inhale then a heavy pressure boom. */
   public playWizardNova(evoTier = 0): void {
     const ctx = this.ensure();
+    if (ctx && this.sample('buff', { key: 'wizard_nova' }) && (this.sample('hammer_boom', { gain: 0.55, key: 'wizard_nova_boom' }) || true)) return;
     if (!ctx || this.tryPlayCustom('wizard_nova', 0.9)) return;
     const now = ctx.currentTime;
     this.playNoiseBurst(now, 0.1, 'bandpass', 600, 2400, 1.2, 0.12, 0.3, 0.05);
@@ -450,6 +497,7 @@ class SoundBank {
   /** Twin dagger: a thin dry steel whisper; the cross-slash (step 2) rings a little. */
   public playDaggerSlash(step = 0, evoTier = 0): void {
     const ctx = this.ensure();
+    if (ctx && this.sample(step >= 2 ? 'sword' : 'rapier', { gain: 0.72, key: 'dagger_slash' })) return;
     if (!ctx || this.tryPlayCustom('dagger_slash', 0.6)) return;
     const now = ctx.currentTime;
     const cross = step >= 2;
@@ -461,6 +509,7 @@ class SoundBank {
   /** Thrown dagger: a thin whip of air. */
   public playDaggerThrow(): void {
     const ctx = this.ensure();
+    if (ctx && this.sample('rapier', { gain: 0.55, rate: 1.35, key: 'dagger_throw' })) return;
     if (!ctx || this.tryPlayCustom('dagger_throw', 0.6)) return;
     const now = ctx.currentTime;
     this.playNoiseBurst(now, 0.14, 'bandpass', 5200, 1800, 1.8, 0.1, 0.3, 0.002, true);
@@ -469,6 +518,7 @@ class SoundBank {
   /** Shadow Blink: a soft cloth snap and a hollow pop. */
   public playShadowBlink(): void {
     const ctx = this.ensure();
+    if (ctx && this.sample('dash', { rate: 1.2, gain: 0.8, key: 'shadow_blink' })) return;
     if (!ctx || this.tryPlayCustom('shadow_blink', 0.6)) return;
     const now = ctx.currentTime;
     this.playNoiseBurst(now, 0.16, 'bandpass', 900, 3200, 1.2, 0.1, 0.35, 0.004, true);
@@ -478,6 +528,7 @@ class SoundBank {
   /** Mark for Death: a low funeral bell with a dry brand-sizzle. */
   public playDeathMark(): void {
     const ctx = this.ensure();
+    if (ctx && this.sample('sneak_ready', { key: 'death_mark' })) return;
     if (!ctx || this.tryPlayCustom('death_mark', 0.75)) return;
     const now = ctx.currentTime;
     this.playMetallicRing(now, 98, 0.9, 0.12, [1, 2.01, 2.76, 4.1], 0.85);
@@ -488,6 +539,7 @@ class SoundBank {
   /** Shadow Step execute: whoosh to the target, then the execution cut (on top of playAssassinate). */
   public playShadowStep(): void {
     const ctx = this.ensure();
+    if (ctx && this.sample('dash', { rate: 1.38, key: 'shadow_step' })) return;
     if (!ctx || this.tryPlayCustom('shadow_step', 0.8)) return;
     const now = ctx.currentTime;
     this.playNoiseBurst(now, 0.2, 'bandpass', 500, 4200, 1.1, 0.18, 0.4, 0.004, true);
@@ -497,6 +549,7 @@ class SoundBank {
   /** Venom Needles: a faint spitting hiss. */
   public playVenomNeedles(evoTier = 0): void {
     const ctx = this.ensure();
+    if (ctx && this.sample('rapier', { gain: 0.5, rate: 1.5, key: 'venom_needles' })) return;
     if (!ctx || this.tryPlayCustom('venom_needles', 0.65)) return;
     const now = ctx.currentTime;
     this.playNoiseBurst(now, 0.16, 'bandpass', 3800, 1500, 1.6, 0.12, 0.3, 0.002, true);
@@ -519,6 +572,7 @@ class SoundBank {
   // ===========================================================================
   public playUpgradePick(): void {
     const ctx = this.ensure();
+    if (ctx && this.sample('ui_confirm')) return;
     if (!ctx) return;
     const now = ctx.currentTime;
     const notes = [392.0, 493.88, 587.33, 783.99];
@@ -527,6 +581,7 @@ class SoundBank {
 
   public playLevelUp(): void {
     const ctx = this.ensure();
+    if (ctx && this.sample('levelup')) return;
     if (!ctx || this.tryPlayCustom('level_up', 0.85)) return;
     const now = ctx.currentTime;
     // Resonant cathedral bell + golden rising harp chord
@@ -560,6 +615,7 @@ class SoundBank {
 
   public playSlowMoPulse(): void {
     const ctx = this.ensure();
+    if (ctx && this.sample('slowmo')) return;
     if (!ctx) return;
     const now = ctx.currentTime;
     // Soft rose-gold time-dilation breath
@@ -578,6 +634,7 @@ class SoundBank {
 
   public playBrazierCrash(): void {
     const ctx = this.ensure();
+    if (ctx && this.sample('barrel')) return;
     if (!ctx) return;
     const now = ctx.currentTime;
     // Heavy iron cauldron crash + roaring flame explosion!
@@ -589,6 +646,7 @@ class SoundBank {
 
   public playCrumble(): void {
     const ctx = this.ensure();
+    if (ctx && this.sample('collapse')) return;
     if (!ctx) return;
     const now = ctx.currentTime;
     // Staggered stone masonry crack + gravel fall
@@ -600,6 +658,7 @@ class SoundBank {
 
   public playFireball(evoTier = 0): void {
     const ctx = this.ensure();
+    if (ctx && this.sample('fireball')) return;
     if (!ctx || this.tryPlayCustom('fireball', 0.8)) return;
     const now = ctx.currentTime;
     // Organic roaring flame whoosh + warm ignition thump
@@ -610,6 +669,7 @@ class SoundBank {
 
   public playGrapple(evoTier = 0): void {
     const ctx = this.ensure();
+    if (ctx && this.sample('grapple')) return;
     if (!ctx) return;
     const now = ctx.currentTime;
     // Crisp metallic latch clink + taut rope zip
@@ -620,6 +680,7 @@ class SoundBank {
 
   public playGasBreak(evoTier = 0): void {
     const ctx = this.ensure();
+    if (ctx && this.sample('gas')) return;
     if (!ctx) return;
     const now = ctx.currentTime;
     // Glass vial shatter (high tinkles) + pressurized toxic hiss
@@ -630,6 +691,7 @@ class SoundBank {
 
   public playBuff(evoTier = 0): void {
     const ctx = this.ensure();
+    if (ctx && this.sample('buff')) return;
     if (!ctx) return;
     const now = ctx.currentTime;
     this.playHarpNote(now, 440, 0.34 + evoTier * 0.08, 0.09 + evoTier * 0.015);
@@ -640,6 +702,7 @@ class SoundBank {
 
   public playWeaponEvolution(tier = 1): void {
     const ctx = this.ensure();
+    if (ctx && this.sample('evolution')) return;
     if (!ctx) return;
     const now = ctx.currentTime;
     // Grand cathedral forge strike + ascending mythic chord!
@@ -653,6 +716,7 @@ class SoundBank {
   /** affinity-v1: grim forge strike for a weapon evolving (minor, low bell, no bright arpeggio). */
   public playWeaponTierUp(tier = 1): void {
     const ctx = this.ensure();
+    if (ctx && this.sample('evolution', { key: 'tierup' })) return;
     if (!ctx) return;
     const now = ctx.currentTime;
     const t = Math.max(1, Math.min(3, tier));
@@ -743,6 +807,7 @@ class SoundBank {
 
   public playArmorBlock(): void {
     const ctx = this.ensure();
+    if (ctx && this.sample('block')) return;
     if (!ctx || this.tryPlayCustom('block', 0.8)) return;
     const now = ctx.currentTime;
     // Authentic heavy steel-on-steel shield deflection clang!
@@ -753,6 +818,7 @@ class SoundBank {
 
   public playInteract(): void {
     const ctx = this.ensure();
+    if (ctx && this.sample('ui_click', { key: 'interact' })) return;
     if (!ctx) return;
     const now = ctx.currentTime;
     this.playHarpNote(now, 523.25, 0.22, 0.085);
@@ -794,6 +860,7 @@ class SoundBank {
 
   public playHit(heavy = false, weapon?: WeaponId): void {
     const ctx = this.ensure();
+    if (ctx && (this.noteCombat(), this.sample(heavy ? 'hit_heavy' : 'hit_light'))) return;
     if (!ctx || this.tryPlayCustom(heavy ? 'hit_heavy' : 'hit', 0.85)) return;
     const now = ctx.currentTime;
 
@@ -812,6 +879,7 @@ class SoundBank {
 
   public playCrit(): void {
     const ctx = this.ensure();
+    if (ctx && (this.noteCombat(), this.sample('crit'))) return;
     if (!ctx || this.tryPlayCustom('crit', 0.9)) return;
     const now = ctx.currentTime;
 
@@ -826,6 +894,7 @@ class SoundBank {
 
   public playAssassinate(): void {
     const ctx = this.ensure();
+    if (ctx && this.sample('assassinate')) return;
     if (!ctx || this.tryPlayCustom('assassinate', 0.95)) return;
     const now = ctx.currentTime;
 
@@ -846,6 +915,9 @@ class SoundBank {
   ): void {
     const ctx = this.ensure();
     if (!ctx) return;
+    this.noteCombat();
+    const deathEvent = isBoss ? 'boss_death' : this.deathEventFor(enemyType);
+    if (this.sample(deathEvent, { gain: wasAssassination && !isBoss ? 0.85 : 1, key: 'death' })) return;
     const now = ctx.currentTime;
 
     // Crisp lethal finisher thud + blood burst
@@ -914,6 +986,7 @@ class SoundBank {
 
   public playBossEnergySprout(isBigBoss: boolean): void {
     const ctx = this.ensure();
+    if (ctx && this.sample('boss_sprout')) return;
     if (!ctx) return;
     const now = ctx.currentTime;
     const dur = isBigBoss ? 1.75 : 1.1;
@@ -948,6 +1021,7 @@ class SoundBank {
 
   public playRelicCrystallize(isBigBoss: boolean): void {
     const ctx = this.ensure();
+    if (ctx && this.sample('relic')) return;
     if (!ctx) return;
     const now = ctx.currentTime;
 
@@ -962,6 +1036,7 @@ class SoundBank {
 
   public playPlayerHurt(isBoss = false): void {
     const ctx = this.ensure();
+    if (ctx && (this.noteCombat(), this.sample('player_hurt'))) return;
     if (!ctx || this.tryPlayCustom('player_hurt', 0.85)) return;
     const now = ctx.currentTime;
     // Heavy dull impact thud + sharp breath cut (no buzzy sawtooth)
@@ -972,6 +1047,7 @@ class SoundBank {
 
   public playParry(isDeflect = false): void {
     const ctx = this.ensure();
+    if (ctx && this.sample('parry')) return;
     if (!ctx) return;
     const now = ctx.currentTime;
 
@@ -985,6 +1061,7 @@ class SoundBank {
 
   public playSecretReveal(): void {
     const ctx = this.ensure();
+    if (ctx && this.sample('secret')) return;
     if (!ctx) return;
     const now = ctx.currentTime;
 
@@ -1038,6 +1115,325 @@ class SoundBank {
     this.playHarpNote(now + 0.02, 587.33, 0.32, 0.09);
     this.playHarpNote(now + 0.07, 880, 0.4, 0.095);
     this.playHarpNote(now + 0.12, 1174.66, 0.46, 0.085);
+  }
+  // ===========================================================================
+  // SAMPLE ENGINE (sound-v1): Magaiver's picked clips, mixer buses, footsteps, UI + new game events
+  // ===========================================================================
+  private sfxBus: GainNode | null = null;
+  private musicBus: GainNode | null = null;
+  private ambBus: GainNode | null = null;
+  private mixer: MixerSettings = { ...DEFAULT_MIXER };
+  private buffers = new Map<string, AudioBuffer>();
+  private loading = new Map<string, Promise<AudioBuffer | null>>();
+  private lastPlayed = new Map<string, number>();
+  private lastVariant = new Map<string, number>();
+  private stepRR = new Map<string, number>();
+  private preloadStarted = false;
+  /** Every sample / state event, newest last (capped). Used by the audio log test and the debug hook. */
+  public log: AudioLogEntry[] = [];
+  public logEnabled = true;
+  /** Set by the music director: called whenever fighting happens (hits, hurt, deaths). */
+  public onCombat: (() => void) | null = null;
+
+  private pushLog(e: Omit<AudioLogEntry, 't'>): void {
+    if (!this.logEnabled) return;
+    this.log.push({ t: Math.round(performance.now()), ...e });
+    if (this.log.length > 3000) this.log.splice(0, 1000);
+  }
+
+  public noteCombat(): void {
+    this.onCombat?.();
+  }
+
+  /** Create the audio context (needs a user gesture to actually start) and begin loading clips. */
+  public unlock(): AudioContext | null {
+    const ctx = this.ensure();
+    if (ctx) this.startPreload();
+    return ctx;
+  }
+
+  public get context(): AudioContext | null {
+    return this.ctx;
+  }
+
+  public get music(): GainNode | null {
+    return this.musicBus;
+  }
+
+  public get ambience(): GainNode | null {
+    return this.ambBus;
+  }
+
+  public get isMixerReady(): boolean {
+    return Boolean(this.ctx && this.sfxBus);
+  }
+
+  public getMixer(): MixerSettings {
+    return this.mixer;
+  }
+
+  public setMixer(m: Partial<MixerSettings>): void {
+    let changed = false;
+    for (const k of Object.keys(m) as (keyof MixerSettings)[]) {
+      if (m[k] !== undefined && this.mixer[k] !== m[k]) {
+        (this.mixer as unknown as Record<string, number | boolean>)[k] = m[k] as number | boolean;
+        changed = true;
+      }
+    }
+    if (changed) this.applyMixer();
+  }
+
+  /** Same volume curves as the sound picker's mixer: music/ambience slider^1.6, sfx slider^1.4. */
+  private applyMixer(): void {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    const mute = this._muted ? 0 : 1;
+    const v = (x: number) => Math.max(0, Math.min(1.5, x / 100));
+    const sfx = Math.pow(v(this.mixer.sfx), 1.4) * mute;
+    if (this.sfxBus) this.sfxBus.gain.setTargetAtTime(sfx, t, 0.03);
+    if (this.musicBus) this.musicBus.gain.setTargetAtTime(this.mixer.musicOn ? Math.pow(v(this.mixer.music), 1.6) * mute : 0, t, 0.08);
+    if (this.ambBus) this.ambBus.gain.setTargetAtTime(this.mixer.ambienceOn ? Math.pow(v(this.mixer.ambience), 1.6) * mute : 0, t, 0.08);
+    // Procedural (original) sounds follow the SFX slider too.
+    if (this.dryBus) this.dryBus.gain.setTargetAtTime(0.92 * sfx / Math.pow(0.9, 1.4), t, 0.03);
+    if (this.reverbBus) this.reverbBus.gain.setTargetAtTime(0.28 * sfx / Math.pow(0.9, 1.4), t, 0.03);
+  }
+
+  private initSampleBuses(ctx: AudioContext): void {
+    // Picker-style mix path: per-category gains -> gentle compressor -> master (bypasses the Foley saturator).
+    const comp = ctx.createDynamicsCompressor();
+    comp.threshold.value = -6;
+    comp.ratio.value = 4;
+    const sfx = ctx.createGain();
+    const music = ctx.createGain();
+    const amb = ctx.createGain();
+    sfx.connect(comp);
+    music.connect(comp);
+    amb.connect(comp);
+    if (this.masterGain) comp.connect(this.masterGain);
+    else comp.connect(ctx.destination);
+    this.sfxBus = sfx;
+    this.musicBus = music;
+    this.ambBus = amb;
+    this.applyMixer();
+  }
+
+  /** Decode one packaged clip (cached). */
+  public loadBuffer(file: string): Promise<AudioBuffer | null> {
+    const have = this.buffers.get(file);
+    if (have) return Promise.resolve(have);
+    const pending = this.loading.get(file);
+    if (pending) return pending;
+    const ctx = this.ctx;
+    if (!ctx) return Promise.resolve(null);
+    const p = (async () => {
+      try {
+        const url = await audioUrl(file);
+        const res = await fetch(url);
+        const arr = await res.arrayBuffer();
+        const buf = await ctx.decodeAudioData(arr);
+        this.buffers.set(file, buf);
+        return buf;
+      } catch (err) {
+        this.loading.delete(file);
+        console.warn('[audio] failed to load', file, err);
+        return null;
+      }
+    })();
+    this.loading.set(file, p);
+    return p;
+  }
+
+  private startPreload(): void {
+    if (this.preloadStarted || !this.ctx) return;
+    this.preloadStarted = true;
+    const files = [...Object.values(SFX_FILES).flat(), ...Object.values(FOOTSTEP_FILES).flat()];
+    // Small clips only (music / ambience stream in on demand); decode in a few waves to keep startup smooth.
+    let i = 0;
+    const wave = () => {
+      const batch = files.slice(i, i + 12);
+      i += 12;
+      if (batch.length === 0) return;
+      Promise.all(batch.map((f) => this.loadBuffer(f))).then(() => setTimeout(wave, 0));
+    };
+    wave();
+  }
+
+  /** Number of SFX/footstep clips decoded so far, and in total. */
+  public preloadProgress(): { loaded: number; total: number } {
+    const total = Object.values(SFX_FILES).flat().length + Object.values(FOOTSTEP_FILES).flat().length;
+    let loaded = 0;
+    for (const f of [...Object.values(SFX_FILES).flat(), ...Object.values(FOOTSTEP_FILES).flat()]) if (this.buffers.has(f)) loaded++;
+    return { loaded, total };
+  }
+
+  /**
+   * Play one of Magaiver's picked clips for a game event (random variant for x3 clips, tiny rate jitter).
+   * Returns true when the event is handled by a clip (or deliberately throttled), false when the event
+   * has no clip (original procedural sound stays) or the clip is still decoding.
+   */
+  public sample(event: string, opts: { gain?: number; rate?: number; key?: string; jitter?: number } = {}): boolean {
+    const files = SFX_FILES[event];
+    const ctx = this.ctx;
+    if (!files || !ctx || !this.sfxBus) return false;
+    const key = opts.key ?? event;
+    const now = performance.now();
+    const gap = EVENT_GAP_MS[event] ?? 30;
+    const last = this.lastPlayed.get(key) ?? -1e9;
+    if (now - last < gap) return true;
+    let idx = 0;
+    if (files.length > 1) {
+      idx = Math.floor(Math.random() * files.length);
+      if (idx === this.lastVariant.get(key)) idx = (idx + 1) % files.length;
+      this.lastVariant.set(key, idx);
+    }
+    const file = files[idx];
+    const buf = this.buffers.get(file);
+    if (!buf) {
+      void this.loadBuffer(file);
+      return false;
+    }
+    this.lastPlayed.set(key, now);
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    const jitter = opts.jitter ?? (files.length > 1 ? 0.04 : 0);
+    src.playbackRate.value = (opts.rate ?? 1) * (1 + (Math.random() * 2 - 1) * jitter);
+    const g = ctx.createGain();
+    g.gain.value = opts.gain ?? 1;
+    src.connect(g).connect(this.sfxBus);
+    src.start();
+    this.pushLog({ kind: 'sfx', event, clip: file, detail: key !== event ? key : undefined });
+    return true;
+  }
+
+  /** Free decoded buffers that match (used to keep music memory small). */
+  public releaseBuffers(match: (file: string) => boolean): void {
+    for (const f of [...this.buffers.keys()]) {
+      if (match(f)) {
+        this.buffers.delete(f);
+        this.loading.delete(f);
+      }
+    }
+  }
+
+  /** True when an event is backed by a picked clip (false = the game's own procedural sound). */
+  public hasClip(event: string): boolean {
+    return Boolean(SFX_FILES[event]);
+  }
+
+  /** Footstep for a terrain (round robin through its 4 picked steps, +/-3% pitch). */
+  public playFootstep(terrain: string, crouching = false, speedMul = 1): void {
+    const ctx = this.ctx;
+    const files = FOOTSTEP_FILES[terrain];
+    if (!ctx || !files || !this.sfxBus || this._muted) return;
+    const i = ((this.stepRR.get(terrain) ?? -1) + 1) % files.length;
+    this.stepRR.set(terrain, i);
+    const file = files[i];
+    const buf = this.buffers.get(file);
+    if (!buf) {
+      void this.loadBuffer(file);
+      return;
+    }
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.playbackRate.value = (0.97 + Math.random() * 0.06) * speedMul;
+    const g = ctx.createGain();
+    g.gain.value = (crouching ? 0.45 : 1) * this.mixer.footsteps;
+    src.connect(g).connect(this.sfxBus);
+    src.start();
+    this.pushLog({ kind: 'foot', event: terrain, clip: file, detail: crouching ? 'crouch' : undefined });
+  }
+
+  private deathEventFor(t: EnemyType): string {
+    if (t === 'skeleton') return 'death_skeleton';
+    if (t === 'goblin_brute') return 'death_brute';
+    if (t.startsWith('goblin')) return 'death_goblin';
+    if (t === 'wraith' || t === 'acolyte') return 'death_wraith';
+    if (t === 'knight' || t === 'obsidian_guard') return 'death_knight';
+    if (t === 'bat' || t === 'gargoyle' || t === 'ember_imp') return 'death_bat';
+    if (t === 'grave_hound') return 'death_hound';
+    return 'death_ghoul';
+  }
+
+  // ---- new events (no procedural original) ----
+  /** Landing thud; `fallSpeed` in px/s scales the volume. */
+  public playLand(fallSpeed = 600): void {
+    if (!this.ensure()) return;
+    this.sample('land', { gain: Math.max(0.35, Math.min(1, fallSpeed / 900)) });
+  }
+
+  public playEnemyHurt(t: EnemyType): void {
+    if (!this.ensure()) return;
+    this.noteCombat();
+    this.sample('enemy_hurt', { gain: t === 'skeleton' ? 0.55 : 0.85 });
+  }
+
+  public playEnemyAlert(t: EnemyType): void {
+    if (!this.ensure()) return;
+    this.sample(t.startsWith('goblin') ? 'goblin_alert' : 'alert', { gain: 0.85 });
+  }
+
+  public playEnemyAttack(): void {
+    if (!this.ensure()) return;
+    this.sample('enemy_attack', { gain: 0.7 });
+  }
+
+  public playBossIntro(): void {
+    if (!this.ensure()) return;
+    this.sample('boss_intro');
+  }
+
+  public playBackstabReady(): void {
+    if (!this.ensure()) return;
+    this.sample('sneak_ready', { gain: 0.9, key: 'backstab_ready' });
+  }
+
+  public playExplosion(big = false): void {
+    if (!this.ensure()) return;
+    this.noteCombat();
+    if (!this.sample(big ? 'explosion_big' : 'explosion_small', { key: big ? 'explosion_big' : 'explosion_small' })) this.playHammerBoom();
+  }
+
+  public playChest(): void {
+    if (!this.ensure()) return;
+    this.sample('chest');
+  }
+
+  public playCoin(): void {
+    if (!this.ensure()) return;
+    this.sample('coin');
+  }
+
+  public playGem(): void {
+    if (!this.ensure()) return;
+    this.sample('gem');
+  }
+
+  public playCraft(): void {
+    if (!this.ensure()) return;
+    this.sample('craft');
+    this.sample('ui_buy', { gain: 0.8 });
+  }
+
+  public playVictory(): void {
+    if (!this.ensure()) return;
+    this.sample('victory');
+  }
+
+  public playRaidComplete(): void {
+    if (!this.ensure()) return;
+    this.sample('raid_complete');
+  }
+
+  public playDefeat(): void {
+    if (!this.ensure()) return;
+    this.sample('defeat');
+  }
+
+  /** UI sounds: 'click' | 'chunky' | 'confirm' | 'back' | 'hover' | 'error' | 'buy'. */
+  public playUi(kind: 'click' | 'chunky' | 'confirm' | 'back' | 'hover' | 'error' | 'buy'): void {
+    if (!this.ensure()) return;
+    this.sample('ui_' + kind, { gain: kind === 'hover' ? 0.6 : 1 });
   }
 }
 

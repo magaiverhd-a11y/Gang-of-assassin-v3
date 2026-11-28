@@ -1019,7 +1019,7 @@ export class GameEngine {
       return false;
     }
 
-    sound.playUpgradePick();
+    sound.playCraft();
     this.spawnSparkles(p.x, p.y - p.baseH * tuning.playerScale * 0.5, 14, recipe.accent, '#ffffff', 1.0);
     return true;
   }
@@ -1052,7 +1052,7 @@ export class GameEngine {
       p.itemCounts.armor_potion += 1;
     }
 
-    sound.playUpgradePick();
+    sound.playCraft();
     this.spawnSparkles(p.x, p.y - p.baseH * tuning.playerScale * 0.5, 22, art.accent, '#ffd166', 1.3);
     this.spawnDamageNumber(p.x, p.y - p.baseH * tuning.playerScale - 20, art.name.toUpperCase(), art.accent, 1.05, 'PERMANENT ARTIFACT');
     return true;
@@ -1146,7 +1146,7 @@ export class GameEngine {
       p.mp = p.maxMp;
     }
 
-    sound.playUpgradePick();
+    sound.playCraft();
     this.spawnSparkles(p.x, p.y - p.baseH * tuning.playerScale * 0.5, 26, art.accent, '#ffffff', 1.4);
     this.spawnDamageNumber(p.x, p.y - p.baseH * tuning.playerScale - 20, art.name.toUpperCase(), art.accent, 1.1, 'SACRIFICE COMPLETE');
     return true;
@@ -6887,6 +6887,7 @@ export class GameEngine {
     }
 
     const h = p.baseH * tuning.playerScale;
+    sound.playGem();
     sound.playBuff();
     if (itemId === 'health_potion') {
       const heal = Math.min(2, p.maxHp - p.hp);
@@ -7154,6 +7155,7 @@ export class GameEngine {
       }
       case 'secret_cache': {
         sound.playRelicCrystallize(Boolean(target.isBigBossRelic));
+        sound.playCoin();
         this.shards += 5;
         p.hp = Math.min(p.maxHp, p.hp + 1);
         p.mp = Math.min(p.maxMp, p.mp + 2);
@@ -7182,6 +7184,7 @@ export class GameEngine {
       }
       case 'chest': {
         const isHighRoadCache = target.y < this.currentStage.floorY - 220;
+        sound.playChest();
         this.shards += isHighRoadCache ? 3 : 2;
         const roll = Math.random();
         const droppedItem: ItemId =
@@ -7641,7 +7644,7 @@ export class GameEngine {
       if (canEnrage && !enemy.enraged && enemy.hp <= enemy.maxHp * (et.phase2At ?? 0.52)) {
         enemy.enraged = true;
         enemy.invulnTimer = Math.max(enemy.invulnTimer, 0.75);
-        sound.playHammerBoom();
+        sound.playExplosion(true);
         this.triggerShake(11, 0.35);
         this.triggerImpactFlash('#ff334b', 0.32, enemy.x, enemy.y - enemy.baseH * eScale * 0.55, 1.35, 0.3);
         this.shockwaves.push({
@@ -9981,7 +9984,7 @@ export class GameEngine {
           const hitPlayer = rectsOverlap(projRect, pRect);
           if (hitGround || hitPlayer) {
             const blastR = proj.kind === 'tombstone' ? 58 : 66;
-            sound.playHammerBoom();
+            sound.playExplosion(false);
             this.shockwaves.push({
               x: proj.x,
               y: proj.y,
@@ -10164,7 +10167,7 @@ export class GameEngine {
           const slotLv = proj.slotLevel ?? 1;
           const splashR = slotLv >= 4 ? 112 : slotLv >= 2 ? 64 : 52;
           if (slotLv >= 4) {
-            sound.playHammerBoom();
+            sound.playExplosion(false);
             this.triggerShake(Math.max(8, tuning.critShakeIntensity * 0.85), 0.22);
           }
           this.shockwaves.push({
@@ -10751,6 +10754,7 @@ export class GameEngine {
       const shardDrop = this.isCursedChamber ? 2 : 1;
       this.shards += shardDrop;
       this.spawnDamageNumber(hitX, hitY - 26, `+${shardDrop} SHARD${shardDrop > 1 ? 'S' : ''}`, '#e5a93c', 0.85);
+      sound.playCoin();
     }
 
     // Elemental Kill Passives (Nature heal every 5 kills; Light/Solar/Prism chance to heal)
@@ -11032,6 +11036,7 @@ export class GameEngine {
     }
 
     enemy.hp = Math.max(0, enemy.hp - damage);
+    if (enemy.hp > 0 && !enemy.isBoss && source !== 'gas') sound.playEnemyHurt(enemy.type);
     enemy.flashTimer = 0.18;
     enemy.hurtStunTimer = enemy.isBoss ? 0.04 : source === 'gas' ? 0.05 : 0.22;
     enemy.alerted = true;

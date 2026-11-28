@@ -12,6 +12,7 @@ import {
   KillFreezeTuning,
   CombatTuning,
   FxTuning,
+  SoundTuning,
   CharacterId,
   CombinedElementId,
   CraftRecipe,
@@ -1388,6 +1389,20 @@ export const DEFAULT_COMBAT_TUNING: CombatTuning = {
   mutedBolts: true,
 };
 
+export const DEFAULT_SOUND_TUNING: SoundTuning = {
+  musicVol: 60,
+  ambienceVol: 55,
+  sfxVol: 90,
+  footstepVol: 100,
+  musicOn: true,
+  ambienceOn: true,
+  footstepsOn: true,
+  uiSounds: true,
+  combatCooldownSec: 10,
+  crossfadeSec: 1.8,
+  heavyFoeCount: 4,
+};
+
 export const DEFAULT_FX_TUNING: FxTuning = {
   affinityFx: true,
   intensity: 1.0,
@@ -1497,6 +1512,7 @@ export const DEFAULT_TUNING: TuningConfig = {
   killFreeze: DEFAULT_KILL_FREEZE,
   fx: DEFAULT_FX_TUNING,
   combat: DEFAULT_COMBAT_TUNING,
+  sound: DEFAULT_SOUND_TUNING,
   characters: buildDefaultCharacterTuning(),
   enemies: buildDefaultEnemyTuning(false) as Record<string, EnemyTuning>,
   bosses: buildDefaultEnemyTuning(true) as Record<string, BossTuning>,
