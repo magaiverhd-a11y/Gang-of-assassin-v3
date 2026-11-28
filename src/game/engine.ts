@@ -5780,6 +5780,9 @@ export class GameEngine {
           }
         }
         this.afterimageAccum = 0;
+        if (weaponLv < 3 && evoTier < 1) {
+          this.chipNearby(tuning, p.x + p.facing * 22 * scale, p.y - h * 0.5, 78, 1);
+        }
         sound.playBackdash(evoTier);
         return true;
       }
@@ -6419,6 +6422,7 @@ export class GameEngine {
                 ? 'TWIN GLASS WALLS!'
                 : 'GLASS WALL!';
         this.spawnDamageNumber(cx, topY - 14, wallMsg, '#67e8f9', 1.15);
+        this.chipNearby(tuning, cx, topY + wallH * 0.5, 88, 1);
         return true;
       }
 
@@ -7204,6 +7208,7 @@ export class GameEngine {
           '#fb923c',
           0.95 + spellEvo * 0.15
         );
+        this.chipNearby(tuning, p.x, p.y - h * 0.5, 96 + spellEvo * 16, 1);
         return false;
       }
 
@@ -7851,6 +7856,11 @@ export class GameEngine {
     }
     if (flags.earth && !enemy.isBoss) enemy.hurtStunTimer = Math.max(enemy.hurtStunTimer, 0.35 * pow);
     if (flags.light) this.shockwaves.push({ x: enemy.x, y: ey, radius: 6, maxRadius: 80, color: '#fde68a', life: 0.3, maxLife: 0.3 });
+    this.handlePlayerHitEnemy(enemy, tuning, 'fireball', 1 + p.weaponDamageBonus, {
+      bonusDamage: 1,
+      kbX: 40,
+      dirX: enemy.x >= p.x ? 1 : -1,
+    });
     // Mythic: the brand also lands on a second nearby regular foe.
     if (evo >= 2 && !enemy.isBoss && fromBeam) {
       let second: Enemy | null = null;
@@ -8291,6 +8301,7 @@ export class GameEngine {
     p.crouching = false;
     p.invulnTimer = Math.max(p.invulnTimer, ct.assassinBlinkIFrames);
     this.shockwaves.push({ x: nx, y: ny - h * 0.5, radius: 6, maxRadius: 46, color: '#7f1d1d', life: 0.22, maxLife: 0.22 });
+    this.chipNearby(tuning, nx, ny - h * 0.45, 62, 1);
     sound.playShadowBlink();
     return true;
   }
@@ -8539,7 +8550,6 @@ export class GameEngine {
           bonusDamage: Math.max(0, ct.monkDashDamage - 1),
           stun: 0.6,
           guardBreak: true,
-          noAssassinate: true,
         });
       }
     }
@@ -8668,7 +8678,6 @@ export class GameEngine {
                 dirX: enemy.x >= p.x ? 1 : -1,
                 stun: 0.5,
                 guardBreak: true,
-                noAssassinate: true,
               });
             }
           }
@@ -8751,7 +8760,6 @@ export class GameEngine {
         bonusDamage: Math.max(0, ct.wizardNovaDamage - 1),
         stun: 0.6,
         guardBreak: true,
-        noAssassinate: true,
       });
     }
     for (let i = this.projectiles.length - 1; i >= 0; i--) {
@@ -8859,13 +8867,11 @@ export class GameEngine {
     if (root === 'light' && target.isBoss) bonus += 1;
     if (root === 'shadow' && !target.alerted) bonus += 1;
     const kb = (over ? 260 : 150) * (root === 'earth' ? 1.6 : 1);
-    const dist = Math.abs(target.x - p.x);
     this.handlePlayerHitEnemy(target, tuning, 'weapon', 1 + p.weaponDamageBonus, {
       kbX: kb,
       kbY: over || root === 'earth' ? 130 : 0,
       dirX: proj.vx >= 0 ? 1 : -1,
       bonusDamage: bonus,
-      noAssassinate: dist > 95 * tuning.playerScale,
       guardBreak: over || root === 'earth',
     });
     const c1 = proj.color ?? '#a5b4fc';
@@ -9150,6 +9156,7 @@ export class GameEngine {
 
     if (id === 'smoke_vial') {
       // SHADOW SMOKE VIAL: Obscuring smoke bomb — instant 3.5s Ambush Stealth + blinds & stuns nearby foes!
+      this.chipNearby(tuning, p.x, p.y - h * 0.5, 120, 1);
       p.ambushTimer = Math.max(p.ambushTimer, 3.5);
       p.shadowChainTimer = Math.max(p.shadowChainTimer, 3.5);
       p.invulnTimer = Math.max(p.invulnTimer, 0.55);
@@ -9242,6 +9249,7 @@ export class GameEngine {
       this.triggerShake(10, 0.28);
       this.triggerImpactFlash('#38bdf8', 0.45, p.x, p.y - h * 0.5, 1.5, 0.28);
       this.spawnDamageNumber(p.x, p.y - h - 22, 'PHANTOM TAG-TEAM!', '#38bdf8', 1.25, 'TWIN ECHOES · +1 HP/+2 MP');
+      this.chipNearby(tuning, p.x, p.y - h * 0.5, 110, 1);
       return;
     }
 
@@ -15195,13 +15203,20 @@ export class GameEngine {
       !p.onGround &&
       p.y < enemy.y - 22 &&
       Math.abs(p.x - enemy.x) < 145;
-    const canAssassinate = (source === 'weapon' || source === 'dash') && !opts?.noAssassinate;
+    const spellOrSpecial = source !== 'weapon';
+    const assassinFinish =
+      spellOrSpecial &&
+      p.characterId === 'assassin' &&
+      !enemy.isBoss &&
+      ((enemy.markTimer ?? 0) > 0 ||
+        enemy.hp <= Math.max(1, Math.floor(enemy.maxHp * this.charTune('assassin').assassinExecHpPct)));
+    const canAssassinate = !opts?.noAssassinate && tuning.assassinationEnabled && !enemy.isBoss;
     const isAssassination =
-      (Boolean(opts?.forceAssassinate) && !enemy.isBoss) ||
-      (canAssassinate &&
-        tuning.assassinationEnabled &&
-        ((!enemy.alerted && (isBehindEnemy || isDropAssassination)) ||
-          (p.ambushTimer > 0 && !enemy.isBoss)));
+      canAssassinate &&
+      (Boolean(opts?.forceAssassinate) ||
+        (!enemy.alerted && (isBehindEnemy || isDropAssassination)) ||
+        p.ambushTimer > 0 ||
+        assassinFinish);
 
     const isHeavyHit =
       source === 'hammer_meteor' ||
@@ -16874,6 +16889,99 @@ export class GameEngine {
     if (p.statusStunTimer > 0) p.statusStunTimer = Math.max(0, p.statusStunTimer - dt);
     if (p.statusBlindTimer > 0) p.statusBlindTimer = Math.max(0, p.statusBlindTimer - dt);
     if (p.voidEdgeMpCooldown > 0) p.voidEdgeMpCooldown = Math.max(0, p.voidEdgeMpCooldown - dt);
+  }
+
+  /** Small hit around a point so a utility skill still hurts, and can execute under the normal rules. */
+  private chipNearby(tuning: TuningConfig, x: number, y: number, radius: number, bonus: number): void {
+    const p = this.player;
+    for (const enemy of this.enemies) {
+      if (enemy.dead) continue;
+      const ey = enemy.y - (enemy.baseH * tuning.enemyScale) / 2;
+      if (Math.hypot(enemy.x - x, ey - y) > radius) continue;
+      this.handlePlayerHitEnemy(enemy, tuning, 'fireball', 1 + p.weaponDamageBonus, {
+        bonusDamage: bonus,
+        kbX: 90,
+        dirX: enemy.x >= p.x ? 1 : -1,
+      });
+    }
+  }
+
+  /** Camp-only starting element. A fused element is left alone. */
+  public chooseStartingElement(id: BaseElementId): boolean {
+    if (!this.currentStage.isCamp || this.player.combinedElement) return false;
+    const p = this.player;
+    p.baseElements = [id];
+    p.combinedElement = null;
+    p.affinityLevel = 1;
+    p.affinityLockedSingle = true;
+    const def = BASE_ELEMENTS[id];
+    sound.playElementalAwaken(false, id);
+    this.spawnSparkles(p.x, p.y - p.baseH * 0.5, 22, def.primaryColor, def.secondaryColor, 1.3);
+    this.spawnDamageNumber(p.x, p.y - p.baseH - 28, `${def.name.toUpperCase()} CHOSEN`, def.primaryColor, 1.15, 'CAMP ELEMENT');
+    return true;
+  }
+
+  /** Spell hit from behind an unaware foe, so the execute cinematic can be screenshotted. */
+  public previewSpellExecute(): void {
+    const tuning = { ...this.tuning, weaponCritChance: 0 };
+    this.activeRaidId = 'nocturne_castle';
+    this.loadStage(0, tuning, true, false, false);
+    this.status = 'PLAYING';
+    this.transitionPhase = 'none';
+    this.transitionAlpha = 0;
+    const foe = this.enemies.find((e) => !e.dead && !e.isBoss);
+    if (!foe) return;
+    const p = this.player;
+    p.characterId = 'hunter';
+    foe.alerted = false;
+    foe.facing = 1;
+    foe.hp = foe.maxHp;
+    p.x = foe.x - 48;
+    p.y = foe.y;
+    p.onGround = true;
+    p.facing = 1;
+    p.ambushTimer = 0;
+    this.handlePlayerHitEnemy(foe, tuning, 'fireball', 1);
+    for (const dn of this.damageNumbers) {
+      dn.life = 8;
+      dn.maxLife = 8;
+      dn.vy = -12;
+    }
+    this.camera.x = p.x;
+    this.camera.targetX = p.x + 20;
+    this.camera.y = p.y - 40;
+    this.camera.targetY = p.y - 40;
+  }
+
+  /** Fire Weapon used to be a pure buff. This shows the new nearby hit. */
+  public previewSpecialDamage(): void {
+    const tuning = { ...this.tuning, weaponCritChance: 0, assassinationEnabled: false };
+    this.activeRaidId = 'nocturne_castle';
+    this.loadStage(0, tuning, true, false, false);
+    this.status = 'PLAYING';
+    this.transitionPhase = 'none';
+    this.transitionAlpha = 0;
+    const foe = this.enemies.find((e) => !e.dead && !e.isBoss);
+    if (!foe) return;
+    const p = this.player;
+    foe.alerted = true;
+    foe.facing = -1;
+    foe.hp = foe.maxHp;
+    p.x = foe.x - 40;
+    p.y = foe.y;
+    p.onGround = true;
+    p.ambushTimer = 0;
+    this.chipNearby(tuning, p.x, p.y - 20, 120, 1);
+    this.spawnDamageNumber(p.x, p.y - 70, 'FIRE WEAPON', '#fb923c', 1.1, 'NEARBY HIT');
+    for (const dn of this.damageNumbers) {
+      dn.life = 8;
+      dn.maxLife = 8;
+      dn.vy = -12;
+    }
+    this.camera.x = p.x;
+    this.camera.targetX = p.x + 20;
+    this.camera.y = p.y - 40;
+    this.camera.targetY = p.y - 40;
   }
 
   /** Puts a weak hit, a resisted hit, and all five status effects on screen. Used by ?elementsPreview=1. */

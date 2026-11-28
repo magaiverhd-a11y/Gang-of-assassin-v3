@@ -796,7 +796,7 @@ export function RightHud({ hud, onOpenMap }: RightHudProps) {
                 </div>
               ) : (
                 <p className="text-[10px] text-[#7f88a3] leading-snug">
-                  1 XP/foe (+1 Assassinate). Choose an <strong className="text-[#c084fc]">Elemental Affinity</strong> at Lv 5!
+                  No element yet. Open Element in camp, or wait for the raid choice at level 5 (then every 5 levels).
                 </p>
               )}
             </section>
